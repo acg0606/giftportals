@@ -5,12 +5,14 @@ import io
 import json
 import os
 import re
+import tempfile
 import warnings
 from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 from tokenizers import Tokenizer
 from PIL import Image, ImageOps
+from cloud_vision_assets import read_pinned_model
 if ort.__version__ != '1.20.1':
     raise RuntimeError('RUNTIME_VERSION_INVALID')
 Image.MAX_IMAGE_PIXELS = 20_000_000
@@ -20,11 +22,15 @@ root = Path(os.environ.get("GIFTPORTALS_CLOUD_VISION_MODEL_DIR", str(Path(__file
 pins = json.loads((Path(__file__).resolve().parent.parent / 'api' / '_lib' / 'cloud-vision-weights.json').read_text(encoding='utf-8'))
 if len(pins.get('files', [])) != 9:
     raise RuntimeError('MODEL_MANIFEST_INVALID')
+_tokenizer_directory = None
+_tokenizer_path = root / 'Xenova/mobileclip_s0/tokenizer.json'
 for item in pins['files']:
-    path = root / item['model'] / item['file']
-    binary = path.read_bytes()
-    if len(binary) != item['bytes'] or hashlib.sha256(binary).hexdigest() != item['sha256']:
-        raise RuntimeError('MODEL_INTEGRITY')
+    binary, compressed = read_pinned_model(root, item)
+    if compressed:
+        # The tokenizer consumes the exact pinned original bytes via from_file.
+        _tokenizer_directory = tempfile.TemporaryDirectory(prefix='giftportals-vision-')
+        _tokenizer_path = Path(_tokenizer_directory.name) / 'tokenizer.json'
+        _tokenizer_path.write_bytes(binary)
     del binary
 clip = root / 'Xenova/mobileclip_s0'
 nsfw = root / 'onnx-community/nsfw-image-detector-ONNX'
@@ -67,7 +73,7 @@ def load(prompts):
         return sessions
     if not isinstance(prompts, list) or not 1 <= len(prompts) <= 64 or any(not isinstance(p, str) or not 1 <= len(p) <= 240 for p in prompts):
         raise ValueError('CLASSIFIER_LABEL_INVALID')
-    tokenizer = Tokenizer.from_file(str(clip / 'tokenizer.json'))
+    tokenizer = Tokenizer.from_file(str(_tokenizer_path))
     tokenizer.enable_truncation(max_length=77)
     tokenizer.enable_padding(length=77, pad_id=0, pad_token='!')
     text = session(clip / 'onnx/text_model_quantized.onnx')

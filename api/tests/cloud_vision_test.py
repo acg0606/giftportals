@@ -1,4 +1,5 @@
 import copy
+import gzip
 import hashlib
 import http.client
 import importlib.util
@@ -6,6 +7,7 @@ import json
 import os
 import sys
 import threading
+import tempfile
 import unittest
 from http.server import HTTPServer
 from pathlib import Path
@@ -19,11 +21,32 @@ binary=b'\x89PNG\r\n\x1a\nsynthetic-unit-test-only'
 item={'id':'world','mime':'image/png','bytes':len(binary),'sha256':hashlib.sha256(binary).hexdigest(),'imageUrl':os.environ['SUPABASE_URL']+'/storage/v1/object/sign/gp-instant-private/00000000-0000-4000-8000-000000000000/input/world-'+hashlib.sha256(binary).hexdigest()+'.png?token=synthetic-unit-only'}
 payload={'protocol':vision.PROTOCOL,'images':[item]}
 policy=json.loads(vision.POLICY_PATH.read_text(encoding='utf-8'))
+asset_spec=importlib.util.spec_from_file_location('cloud_vision_assets_test',app/'server/cloud_vision_assets.py')
+assets=importlib.util.module_from_spec(asset_spec);asset_spec.loader.exec_module(assets)
 def metrics(sexual=0,product=0):
     scores=[0.0]*len(policy['labels']);scores[0]=1-product;scores[next(i for i,label in enumerate(policy['labels']) if label[0]=='adult-product')]=product
     return {'sexual':sexual,'clipScores':scores}
 
 class CloudVisionTests(unittest.TestCase):
+    def test_lossless_tokenizer_packing_preserves_original_pinned_bytes(self):
+        value=b'{"tokenizer":"synthetic-integrity-fixture"}'
+        pin={'model':'Xenova/mobileclip_s0','file':'tokenizer.json','bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()}
+        with tempfile.TemporaryDirectory(prefix='giftportals-assets-test-') as temporary:
+            root=Path(temporary);path=root/pin['model']/pin['file'];path.parent.mkdir(parents=True)
+            Path(str(path)+'.gz').write_bytes(gzip.compress(value))
+            self.assertEqual(assets.read_pinned_model(root,pin),(value,True))
+            path.write_bytes(value)
+            self.assertEqual(assets.read_pinned_model(root,pin),(value,False))
+
+    def test_tampered_or_oversized_archive_fails_closed_before_model_use(self):
+        value=b'{"tokenizer":"synthetic-integrity-fixture"}'
+        pin={'model':'Xenova/mobileclip_s0','file':'tokenizer.json','bytes':len(value),'sha256':hashlib.sha256(value).hexdigest()}
+        with tempfile.TemporaryDirectory(prefix='giftportals-assets-test-') as temporary:
+            root=Path(temporary);path=root/pin['model']/pin['file'];path.parent.mkdir(parents=True)
+            for invalid in [value[:-1]+b'x',value+b'x',b'x'*100_000]:
+                Path(str(path)+'.gz').write_bytes(gzip.compress(invalid))
+                with self.assertRaisesRegex(RuntimeError,'MODEL_INTEGRITY'):assets.read_pinned_model(root,pin)
+
     def test_policy_thresholds_preserve_real_screening_decisions(self):
         for sexual,product,expected in [(0,0,'allow'),(.15,0,'review'),(.4,0,'block'),(0,.08,'review'),(0,.35,'block')]:
             self.assertEqual(vision.decision(metrics(sexual,product),policy)['decision'],expected)
@@ -64,7 +87,10 @@ def real_http(reference,runtime):
         if response.status!=200 or report.get('decision')!='allow' or report['results'][0]['sha256']!=entry['sha256']:
             print(json.dumps({'httpStatus':response.status,'error':report.get('error'),'decision':report.get('decision')}))
             raise RuntimeError('REAL_HTTP_MODERATION_FAILED')
-        print(json.dumps({'realInference':True,'httpStatus':response.status,'decision':report['decision'],'modelVersion':report['modelVersion'],'sha256':entry['sha256'],'scores':report['results'][0]['scores'],'providerRequests':0}))
+        tokenizer_pin=next(pin for pin in vision._engine.pins['files'] if pin['model']=='Xenova/mobileclip_s0' and pin['file']=='tokenizer.json')
+        self_path=vision._engine._tokenizer_path
+        if hashlib.sha256(self_path.read_bytes()).hexdigest()!=tokenizer_pin['sha256']:raise RuntimeError('TOKENIZER_INTEGRITY')
+        print(json.dumps({'realInference':True,'httpStatus':response.status,'decision':report['decision'],'modelVersion':report['modelVersion'],'sha256':entry['sha256'],'scores':report['results'][0]['scores'],'providerRequests':0,'tokenizerCompressed':vision._engine._tokenizer_directory is not None,'tokenizerSha256':tokenizer_pin['sha256']}))
     finally:server.shutdown();server.server_close();thread.join(timeout=5);vision.process_payload=original
 
 if __name__=='__main__':

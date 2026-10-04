@@ -24,7 +24,15 @@ Inference never downloads models. Local build preparation can reuse installed
 weights by setting `GIFTPORTALS_VISION_SOURCE_DIR` to their directory.
 
 `api/_vision_models` is excluded from Git and deploy-upload input. Vercel's build
-recreates it, and only the Python function includes those179MB of model bytes.
+recreates it, and only the Python function includes the model bytes. The nine
+original pins total177,917,995 bytes. The build packs only tokenizer.json as gzip,
+reducing stored model bytes to176,253,470 without changing any original pin.
+Cold start reads the bounded archive, verifies the original length and SHA-256,
+then writes the exact original tokenizer bytes to a private temporary directory.
+Tokenizer.from_file and all ONNX preprocessing remain unchanged. Preparing a
+second time with `node tools/prepare-cloud-vision.mjs --offline` reuses the packed
+cache and prevents all downloads. Function-specific exclusions also remove
+TypeScript, SQL, frontend source, documentation and build configuration files.
 The Python function excludes frontend assets and uses pinned Python3.12,
 ONNX Runtime1.20.1, tokenizers0.22.2, NumPy2.2.6 and Pillow11.2.1.
 The policy bank and thresholds are generated from the same policy-3 module used
@@ -36,7 +44,7 @@ allow proof. Retention removes input, moderation and generated prefixes before
 releasing a gift's storage reservation.
 
 Verification completed locally:29 cloud/HTTP tests,8 moderator/retention tests,
-four Python protocol/policy tests and strict cloud TypeScript. The production
+six Python protocol/policy/integrity tests and strict cloud TypeScript. The production
 Python HTTP handler also ran real ONNX inference against the studio reference
 through an offline test storage transport: HTTP200, allow, policy-3 and exact
 SHA-256, with zero provider calls. Deployment remains a separate verification.
