@@ -55,6 +55,56 @@ test('GET exposes pending uploads without work and finalization changes only the
 test('partial upload recovery signs only absent files and verifies existing files before signing anything',async()=>{const f=fixture(),source=input({images:{original:image(png),object:image(png2),world:image(png2)}}),out=await f.prepared(source);const objectPlan=out.uploads.find(value=>value.id==='object'),originalPath=out.uploads.find(value=>value.id==='original').url.replace('https://storage.invalid/upload/','');f.bytes.delete(objectPlan.url.replace('https://storage.invalid/upload/',''));const pending=await f.service().get({id:out.id,token});assert.deepEqual(pending.uploads.map(value=>value.id),['object']);assert.equal(pending.uploads[0].sha256,hash(png2));assert.deepEqual((await f.service().prepare(source,'c'.repeat(64))).uploads.map(value=>value.id),['object']);f.bytes.set(originalPath,png2);let signatures=0;f.repository.signUpload=async()=>{signatures++;return 'must-not-sign-invalid-recovery';};await rejectCode(f.service().get({id:out.id,token}),'IMAGE_CONTENT_INVALID');await rejectCode(f.service().prepare(source,'c'.repeat(64)),'IMAGE_CONTENT_INVALID');assert.equal(signatures,0);assert.equal(f.jobs.size,1);assert.equal(f.journal.some(([kind])=>kind==='submit'),false);});
 test('capability cannot read or advance another gift; advance leases only its validated gift',async()=>{const f=fixture(),first=await f.queued(),second=await f.queued(input({requestToken:otherToken,dedupeKey:'second-request-01'}));await rejectCode(f.service().advance(second.id,token),'JOB_UNAVAILABLE');assert.equal(f.journal.filter(([kind])=>kind==='claim').length,0);await f.service().advance(first.id,token);assert.deepEqual(f.journal.filter(([kind])=>kind==='claim').map(([,id])=>id),[first.id]);assert.equal(f.jobs.get(second.id).document.photoSafety,undefined);await rejectCode(f.service().get({id:first.id,token:otherToken}),'JOB_UNAVAILABLE');});
 test('all-input moderation blocks or holds review before any provider upload or paid submit',async()=>{for(const decision of['block','review']){const f=fixture({decision}),out=await f.queued(input({images:{original:image(png),object:image(png2),world:image(png2)}}));await f.service().tick('worker');assert.deepEqual(f.journal.find(([kind])=>kind==='moderate')[1],['original','object','world']);assert.equal(f.jobs.get(out.id).state,'failed');assert.equal(f.journal.some(([kind])=>['providerUpload','submit','credit','signRead'].includes(kind)),false);assert.equal((await f.service().get({id:out.id,token})).assets.photoUrl,'');}});
+test('pre-stage photo denials and invalid bytes persist their exact failure for both products across restarts without paid work',async()=>{
+  for(const photoIntent of['place','object'])for(const scenario of[
+    {decision:'block',code:'PHOTO_SAFETY_BLOCKED'},
+    {decision:'review',code:'PHOTO_SAFETY_REVIEW_REQUIRED'},
+    {decision:'allow',code:'IMAGE_CONTENT_INVALID',invalidBytes:true},
+  ]){
+    const f=fixture({decision:scenario.decision}),out=await f.queued(input({photoIntent}));
+    const original=f.jobs.get(out.id).assets.original;
+    if(scenario.invalidBytes)f.bytes.set(original.path,png2);
+    const reply=await f.service().tick('first-worker',out.id),stored=f.jobs.get(out.id);
+    assert.deepEqual(reply,{processed:true,state:'failed',errorCode:scenario.code});
+    assert.equal(stored.state,'failed');assert.equal(stored.lease_id,null);assert.deepEqual(stored.stages,{},'No provider submission intent was invented');
+    assert.deepEqual(stored.document.stageFailures,{tripo:scenario.code,worldlabs:scenario.code,...(photoIntent==='place'?{'tripo-reference':scenario.code}:{})});
+    if(scenario.invalidBytes)assert.equal(stored.document.photoSafety,undefined,'Invalid bytes cannot acquire a moderation proof');
+    else{
+      assert.equal(stored.document.photoSafety.decision,scenario.decision);
+      assert.equal(stored.document.photoSafety.results[0].id,'original');
+      assert.equal(stored.document.photoSafety.results[0].sha256,hash(png));
+    }
+    const before=f.journal.length,dto=await f.service().advance(out.id,token);
+    assert.equal(dto.state,'failed');assert.equal(dto.story,'My exact story');assert.equal(dto.title,'A real memory');
+    for(const stage of['tripo','worldlabs',...(photoIntent==='place'?['tripoReference']:[])]){
+      assert.equal(dto[stage].state,'failed');assert.equal(dto[stage].errorCode,scenario.code);assert.equal(dto[stage].taskId,undefined);
+    }
+    assert.deepEqual(dto.assets,{photoUrl:'',modelUrl:undefined,worldUrl:undefined,panoramaUrl:undefined,tripoInputUrl:undefined,colliderUrl:undefined});
+    assert.equal(f.journal.some(([kind])=>['begin','providerUpload','submit','credit','signRead'].includes(kind)),false);
+    assert.equal(f.journal.slice(before).some(([kind])=>['claim','moderate','download'].includes(kind)),false,'Advancing a rejected gift never retries its photo check or any provider');
+    await rejectCode(f.service().get({id:out.id,token:otherToken}),'JOB_UNAVAILABLE');
+  }
+});
+test('individual photo denials override an inconsistent aggregate allow without signing inputs or starting providers',async()=>{
+  for(const scenario of[
+    {decision:'block',category:'sexual',code:'PHOTO_SAFETY_BLOCKED',effectiveDecision:'block'},
+    {decision:'review',category:'uncertain',code:'PHOTO_SAFETY_REVIEW_REQUIRED',effectiveDecision:'review'},
+    {decision:'allow',category:'uncertain',code:'PHOTO_SAFETY_REVIEW_REQUIRED',effectiveDecision:'review'},
+  ]){
+    const moderationReport=images=>({...report(images),results:report(images).results.map(result=>({...result,decision:scenario.decision,category:scenario.category}))});
+    const f=fixture({moderationReport}),out=await f.queued();await f.service().tick('worker',out.id);
+    const stored=f.jobs.get(out.id);assert.equal(stored.document.photoSafety.decision,scenario.effectiveDecision);
+    assert.equal(stored.document.photoSafety.results[0].decision,scenario.decision);assert.equal(stored.document.photoSafety.results[0].category,scenario.category);
+    const dto=await f.service().get({id:out.id,token});assert.equal(dto.assets.photoUrl,'');
+    for(const provider of['tripo','worldlabs']){assert.equal(dto[provider].state,'failed');assert.equal(dto[provider].errorCode,scenario.code);}
+    assert.equal(f.journal.some(([kind])=>['begin','credit','providerUpload','submit','signRead'].includes(kind)),false);
+    // Even a legacy contradictory receipt, regardless of terminal state, cannot
+    // authorize signed URLs merely through its aggregate decision.
+    stored.document.photoSafety.decision='allow';stored.state='processing';
+    assert.equal((await f.service().get({id:out.id,token})).assets.photoUrl,'');
+    assert.equal(f.journal.some(([kind])=>kind==='signRead'),false);
+  }
+});
 test('moderation proofs require every exact hash and the same named model; malformed proof cannot authorize paid calls',async()=>{const images=[{id:'original',sha256:hash(png),mime:'image/png',bytes:png}];for(const bad of[{...report(images),protocol:'other'},{...report(images),modelVersion:''},{...report(images),results:[]},{...report(images),results:[{...report(images).results[0],sha256:hash(png2)}]},{...report(images),results:[{...report(images).results[0],modelVersion:'other'}]}])assert.throws(()=>verifyCloudSafety(bad,images),error=>error.code==='PHOTO_SAFETY_UNAVAILABLE');const f=fixture({moderationReport:images=>({...report(images),results:[]})}),out=await f.queued();await f.service().tick('worker');assert.equal(f.journal.some(([kind])=>kind==='submit'),false);assert.equal(f.jobs.get(out.id).document.photoSafety,undefined);});
 test('full object flow survives a fresh service for every tick, submits each provider once and keeps inputworld separate from generatedworld',async()=>{const f=fixture(),out=await f.queued(input({images:{original:image(png),world:image(png2)}}));for(let i=0;i<6;i++)await f.service().tick(`worker-${i}`);const dto=await f.service().get({id:out.id,token});assert.equal(dto.state,'completed');assert.equal(dto.story,'My exact story');assert.deepEqual(f.journal.filter(([kind])=>kind==='submit').map(([,stage])=>stage),['worldlabs','tripo']);assert.deepEqual(f.journal.filter(([kind])=>kind==='poll').map(([,stage,id])=>[stage,id]),[['tripo','task-tripo'],['worldlabs','task-worldlabs']]);assert.match(dto.assets.worldUrl,/generated\//);assert.match(f.jobs.get(out.id).assets.world.path,/input\/world-/);assert.notEqual(f.jobs.get(out.id).assets.world.path,f.jobs.get(out.id).assets['generated-world'].path);assert.deepEqual(dto.generation.worldlabs.worldSemantics,{metricScaleFactor:2.9049978,groundPlaneOffset:1.6893421});assert.equal('lease_id'in dto,false);assert.equal('document'in dto,false);assert.equal('expires_at'in dto,false);const before=f.journal.length;await f.service().get({id:out.id,token});assert.equal(f.journal.slice(before).some(([kind])=>['submit','poll','claim'].includes(kind)),false);});
 test('place flow separately moderates its generated miniature before the model POST',async()=>{const f=fixture(),out=await f.queued(input({photoIntent:'place'}));for(let i=0;i<9;i++)await f.service().tick(`worker-${i}`);const submissions=f.journal.filter(([kind])=>kind==='submit').map(([,stage])=>stage);assert.deepEqual(submissions,['tripo-reference','worldlabs','tripo']);const derived=f.journal.findIndex(([kind,ids])=>kind==='moderate'&&ids.length===1&&ids[0]==='object'),model=f.journal.findIndex(([kind,stage])=>kind==='submit'&&stage==='tripo');assert.ok(derived>=0&&derived<model);assert.equal((await f.service().get({id:out.id,token})).state,'completed');assert.equal(f.journal.filter(([kind])=>kind==='moderate').length,2);});

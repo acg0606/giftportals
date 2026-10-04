@@ -7,7 +7,7 @@ const compilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.
 const catalog = ts.transpileModule(await readFile(new URL('../shared/instant-examples.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText;
 const catalogUrl = `data:text/javascript;base64,${Buffer.from(catalog).toString('base64')}`;
 const compiled = ts.transpileModule(await readFile(new URL('../src/instant-creator-state.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText.replaceAll("'../shared/instant-examples'", JSON.stringify(catalogUrl));
-const { validateInstantPhoto, instantGiftReady, instantJobFinished, instantModelReady, instantProviderLabel, readInstantJobReference, readInstantPendingReference, instantImagePlan, instantIntentExamples, instantPostcardLayout, addInstantSpark, INSTANT_EXAMPLES } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { validateInstantPhoto, instantFailureMessage, instantGiftReady, instantJobFinished, instantModelReady, instantProviderLabel, readInstantJobReference, readInstantPendingReference, instantImagePlan, instantIntentExamples, instantPostcardLayout, addInstantSpark, INSTANT_EXAMPLES } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const complete = { state: 'completed', tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb', worldUrl: '/place.spz' } };
 
 test('a photo and a panorama cannot substitute for either real provider output', () => {
@@ -30,6 +30,20 @@ test('partial and failed jobs stop polling without becoming complete gifts', () 
   assert.equal(instantJobFinished({ ...complete, state: 'processing' }), false);
   assert.match(instantProviderLabel('worldlabs', 'failed'), /could not/);
   assert.match(instantProviderLabel('tripo', 'processing'), /Sculpting/);
+});
+
+test('terminal photo failures offer an honest next action while an uncertain submission stays uncertain', () => {
+  const failed = code => ({ ...complete, state: 'failed', tripo: { state: 'failed', errorCode: code }, worldlabs: { state: 'failed', errorCode: code } });
+  for (const code of ['PHOTO_SAFETY_BLOCKED', 'PHOTO_SAFETY_REVIEW_REQUIRED']) {
+    const message = instantFailureMessage(failed(code));
+    assert.match(message, /photo check .*approve this photo/i);assert.match(message, /Choose a different photo/);
+    assert.doesNotMatch(message, /sexual|adult|still being created|PHOTO_SAFETY|retry automatically/i);
+  }
+  assert.match(instantFailureMessage(failed('IMAGE_CONTENT_INVALID')), /could not be verified.*original photo/);
+  assert.match(instantFailureMessage(failed('PROVIDER_INSUFFICIENT_CREDITS')), /not have enough credits.*words are kept/);
+  assert.match(instantFailureMessage(failed('SUBMISSION_AMBIGUOUS')), /could not confirm.*recovery details are kept/);
+  assert.match(instantFailureMessage({ ...complete, state: 'failed', tripo: { state: 'pending' }, worldlabs: { state: 'pending' } }), /could not be created/);
+  assert.equal(instantFailureMessage(complete), undefined);assert.equal(instantFailureMessage({ ...complete, state: 'processing' }), undefined);
 });
 
 test('invalid photo data and provider upload limits fail before submission', () => {

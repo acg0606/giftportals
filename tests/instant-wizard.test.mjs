@@ -430,6 +430,39 @@ test('closing an uploading recovery aborts it and ignores a late completed reply
   });
 });
 
+test('a terminal photo failure explains the cause, stops both products and preserves the draft without retrying creation', async () => {
+  for (const code of ['PHOTO_SAFETY_BLOCKED', 'PHOTO_SAFETY_REVIEW_REQUIRED', 'IMAGE_CONTENT_INVALID']) await fixture(async state => {
+    state.upload(new File(['pixels'], 'my-place.jpg', { type: 'image/jpeg' }));
+    const story = 'My original memory.\nSource: https://pt.wikipedia.org/?curid=123';state.edit('story', story);
+    state.next();state.next();state.next();state.consent();const photo = state.find('[data-instant-photo]').src;
+    state.job = { ...state.job, state: 'failed', assets: { photoUrl: '' }, tripoReference: { state: 'failed', errorCode: code }, tripo: { state: 'failed', errorCode: code }, worldlabs: { state: 'failed', errorCode: code } };
+    state.submit();await flush();
+    assert.equal(state.creates.length, 1);assert.equal(state.jobs.length, 0);assert.deepEqual(state.scheduled, []);
+    assert.equal(state.find('[data-instant-progress]').dataset.jobState, 'failed');
+    assert.equal(state.find('[data-instant-provider="tripo"]').dataset.state, 'failed');assert.equal(state.find('[data-instant-provider="worldlabs"]').dataset.state, 'failed');
+    const status = state.find('[data-instant-job-status]').textContent;
+    assert.match(status, code === 'IMAGE_CONTENT_INVALID' ? /could not be verified.*original photo/ : /photo check .*approve this photo.*different photo/);
+    assert.doesNotMatch(status, /still being created|PHOTO_SAFETY|IMAGE_CONTENT|sexual|adult|request could not/i);
+    assert.equal(state.find('[data-instant-open]').hidden, true);assert.equal(state.find('[data-instant-edit]').hidden, false);assert.equal(state.find('[data-instant-recheck]').hidden, true);
+    assert.equal(state.completed.length, 0);assert.equal(state.opened.length, 0);assert.equal(state.field('story').value, story);assert.equal(state.find('[data-instant-photo]').src, photo);
+    state.submit();await flush();assert.equal(state.creates.length, 1,'Failed jobs never resubmit automatically');
+    state.find('[data-instant-edit]').click();assert.equal(state.stage(), 'photo');assert.equal(state.field('story').value, story);assert.equal(state.find('[data-instant-photo]').src, photo);assert.equal(state.creates.length, 1);
+  });
+});
+
+test('restoring an older pre-stage failed job never claims its unstarted world is still being created', async () => {
+  const reference = { id: 'restored-failed-job', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.match(state.find('[data-instant-job-status]').textContent, /This gift could not be created/);
+    assert.equal(state.find('[data-instant-provider="tripo"]').dataset.state, 'failed');assert.equal(state.find('[data-instant-provider="worldlabs"]').dataset.state, 'failed');
+    assert.match(state.find('[data-instant-worldlabs-label]').textContent, /could not be built/);
+    assert.equal(state.find('[data-instant-edit]').hidden, false);assert.equal(state.find('[data-instant-open]').hidden, true);assert.deepEqual(state.scheduled, []);assert.equal(state.creates.length, 0);
+  }, {
+    storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
+    jobHandler: (restored, state) => ({ ...state.job, ...restored, state: 'failed', assets: { photoUrl: '' }, tripo: { state: 'pending' }, worldlabs: { state: 'pending' } }),
+  });
+});
+
 test('restoring an ambiguous souvenir preserves interruption while only the backend world is still processing', async () => {
   const reference = { id: 'restored-interrupted-job', token: 'x'.repeat(43) };
   await fixture(async state => {

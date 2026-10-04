@@ -1,4 +1,4 @@
-import { INSTANT_EXAMPLES, instantGiftReady, instantImagePlan, instantIntentExamples, instantJobFinished, instantModelReady, instantProviderLabel, readInstantJobReference, readInstantPendingReference, validateInstantPhoto, type InstantCreateInput, type InstantExample, type InstantJob, type InstantPhotoIntent, type InstantStatus } from './instant-creator-state';
+import { INSTANT_EXAMPLES, instantFailureMessage, instantGiftReady, instantImagePlan, instantIntentExamples, instantJobFinished, instantModelReady, instantProviderLabel, readInstantJobReference, readInstantPendingReference, validateInstantPhoto, type InstantCreateInput, type InstantExample, type InstantJob, type InstantPhotoIntent, type InstantStatus } from './instant-creator-state';
 import { mountGiftTransformation } from './gift-transformation';
 import { giftTransformationState } from './gift-transformation-state';
 import { mountGiftContext } from './gift-context';
@@ -647,7 +647,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
       host.querySelector<HTMLElement>(`[data-instant-resume-field="${id}"]`)!.hidden = !uploadPending || !job.uploads?.some(upload => upload.id === id);
       if (!uploadPending) host.querySelector<HTMLInputElement>(`[data-instant-resume-file="${id}"]`)!.value = '';
     }
-    text('#instant-progress-heading', uploadPending ? 'Finish uploading your photos.' : 'A little world, just for them.');
+    text('#instant-progress-heading', uploadPending ? 'Finish uploading your photos.' : job.state === 'failed' ? 'This gift needs attention.' : 'A little world, just for them.');
     host.querySelector<HTMLButtonElement>('[data-instant-resume-upload]')!.disabled = recoveringUpload || !service.resumeUpload;
     const modelReady = instantModelReady(job), visual = giftTransformationState(job);
     progress.dataset.jobState = job.state;
@@ -655,15 +655,18 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     host.querySelector<HTMLElement>('[data-instant-model-preview]')!.hidden = !modelReady;
     if (!modelReady && previewOpen) closeModelPreview();
     for (const provider of ['tripo', 'worldlabs'] as const) {
-      host.querySelector<HTMLElement>(`[data-instant-provider="${provider}"]`)!.dataset.state = job[provider].state;
-      text(`[data-instant-${provider}-label]`, instantProviderLabel(provider, job[provider].state, provider === 'tripo' ? job.tripoReference?.state : undefined, job[provider].errorCode || (provider === 'tripo' ? job.tripoReference?.errorCode : undefined)));
+      // Older failed jobs may lack stage failures. An unstarted provider cannot
+      // still be waiting when the gift has already reached its terminal state.
+      const providerState = job.state === 'failed' && job[provider].state === 'pending' && !job[provider].taskId ? 'failed' : job[provider].state;
+      host.querySelector<HTMLElement>(`[data-instant-provider="${provider}"]`)!.dataset.state = providerState;
+      text(`[data-instant-${provider}-label]`, instantProviderLabel(provider, providerState, provider === 'tripo' ? job.tripoReference?.state : undefined, job[provider].errorCode || (provider === 'tripo' ? job.tripoReference?.errorCode : undefined)));
     }
     const ready = !uploadPending && instantGiftReady(job), finished = !uploadPending && instantJobFinished(job);
     host.querySelector<HTMLButtonElement>('[data-instant-open]')!.hidden = !ready;
     host.querySelector<HTMLButtonElement>('[data-instant-edit]')!.hidden = !finished;
     host.querySelector<HTMLButtonElement>('[data-instant-recheck]')!.hidden = true;
-    const worldStillCreating = job.worldlabs.state === 'pending' || job.worldlabs.state === 'processing';
-    text('[data-instant-job-status]', uploadPending ? 'Generation will start after your photos finish uploading.' : ready ? 'Your photo became a keepsake. Your story has a world to live in.' : visual.phase === 'interrupted' ? worldStillCreating ? 'The keepsake needs attention. Your little world is still being created.' : 'This gift is unfinished. Your photo is safe; one or more parts need attention.' : 'Both parts are being made from your photo and your place.');
+    const worldStillCreating = !finished && (job.worldlabs.state === 'pending' || job.worldlabs.state === 'processing');
+    text('[data-instant-job-status]', uploadPending ? 'Generation will start after your photos finish uploading.' : ready ? 'Your photo became a keepsake. Your story has a world to live in.' : instantFailureMessage(job) || (visual.phase === 'interrupted' ? worldStillCreating ? 'The keepsake needs attention. Your little world is still being created.' : 'This gift is unfinished. Your photo is safe; one or more parts need attention.' : 'Both parts are being made from your photo and your place.'));
     text('[data-instant-job-note]', uploadPending ? 'Your photos are never saved in browser storage. This browser keeps only the reference to your gift.' : ready ? 'Open it, turn the keepsake, then step into the place inside.' : finished ? 'No automatic retry is started. You can keep these details and choose a different gift.' : 'Creating a world can take a few minutes. Returning to this creator in this browser restores the job.');
     if (finished || uploadPending) { clearTimeout(pollTimer); pollTimer = undefined; }
     const modelKey = `${job.id}:${job.assets.modelUrl}`;

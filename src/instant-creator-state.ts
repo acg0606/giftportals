@@ -112,6 +112,17 @@ export function instantJobFinished(job: InstantJob): boolean {
   return ['completed', 'partial', 'failed'].includes(job.state);
 }
 
+export function instantFailureMessage(job: InstantJob): string | undefined {
+  if (job.state !== 'failed') return undefined;
+  const codes = [job.tripo.errorCode, job.tripoReference?.errorCode, job.worldlabs.errorCode];
+  if (codes.includes('PHOTO_SAFETY_BLOCKED')) return 'The photo check did not approve this photo for creation. Choose a different photo to start another gift.';
+  if (codes.includes('PHOTO_SAFETY_REVIEW_REQUIRED')) return 'The photo check could not approve this photo. Choose a different photo to start another gift.';
+  if (codes.includes('IMAGE_CONTENT_INVALID')) return 'The uploaded photo could not be verified. Start another gift with the original photo.';
+  if (codes.includes('PROVIDER_INSUFFICIENT_CREDITS')) return 'The generation service does not have enough credits for this creation. Your original photo and words are kept.';
+  if (codes.includes('SUBMISSION_AMBIGUOUS')) return 'We could not confirm this creation. Your recovery details are kept; no automatic retry is started.';
+  return 'This gift could not be created. Your original photo and words are kept; you can start a different gift.';
+}
+
 export function instantProviderLabel(provider: 'tripo' | 'worldlabs', state: InstantProviderState, referenceState?: InstantProviderState, errorCode?: string): string {
   const object = provider === 'tripo';
   if (errorCode === 'SUBMISSION_AMBIGUOUS') return object ? 'We couldn’t confirm your souvenir.' : 'We couldn’t confirm the world creation.';

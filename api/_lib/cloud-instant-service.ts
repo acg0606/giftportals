@@ -77,7 +77,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
   };
   async function dto(job:CloudJob,token:string):Promise<CloudInstantJobDTO> {
     const document=job.document,read=async(key:string)=>job.assets[key]?repo.signRead(job.assets[key]):undefined;
-    const approved=document.photoSafety?.decision==='allow';
+    const approved=document.photoSafety?.decision==='allow'&&document.photoSafety.results.length>0&&document.photoSafety.results.every(result=>result.decision==='allow'&&result.category==='ordinary');
     const stage=(name:CloudStageName)=>{const value=job.stages[name];return {state:!value?(document.stageFailures?.[name]?'failed' as const:'pending' as const):value.state==='completed'?'completed' as const:['failed','submission_uncertain'].includes(value.state)?'failed' as const:'processing' as const,progress:value?.progress||0,taskId:value?.taskId,errorCode:value?.state==='submission_uncertain'?'SUBMISSION_AMBIGUOUS':value?.errorCode||document.stageFailures?.[name]};};
     const semantics=document.worldSemantics,validSemantics=semantics&&Number.isFinite(semantics.metricScaleFactor)&&semantics.metricScaleFactor>=.05&&semantics.metricScaleFactor<=100&&Number.isFinite(semantics.groundPlaneOffset)&&Math.abs(semantics.groundPlaneOffset)<=500?{metricScaleFactor:semantics.metricScaleFactor,groundPlaneOffset:semantics.groundPlaneOffset}:undefined;
     const [photoUrl,modelUrl,worldUrl,panoramaUrl,tripoInputUrl,colliderUrl]=approved?await Promise.all(['original','model','generated-world','panorama',job.assets.reference?'reference':'object','collider'].map(read)):[];
@@ -112,7 +112,17 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     const config=deps.settings();if(!config.enabled||!deps.moderator.configured)return {processed:false,reason:'paused'};
     let job=await repo.claim(workerId,id);if(!job)return {processed:false};let selected:CloudStageName|undefined;
     try {
-      if(!job.document.photoSafety){const images=await approvedInputs(job),report=await deps.moderator.screen(images);verifyCloudSafety(report,images);job.document={...job.document,photoSafety:report};await save(job);return {processed:true,state:'moderated'};}
+      if(!job.document.photoSafety){
+        const images=await approvedInputs(job),report=await deps.moderator.screen(images);
+        try{verifyCloudSafety(report,images);}
+        catch(error){
+          // Only a structurally valid, hash-bound denial is kept for diagnosis.
+          // Its decision still prevents both provider work and signed read URLs.
+          if(error instanceof AppError&&['PHOTO_SAFETY_BLOCKED','PHOTO_SAFETY_REVIEW_REQUIRED'].includes(error.code))job.document={...job.document,photoSafety:{...report,decision:error.code==='PHOTO_SAFETY_BLOCKED'?'block':'review'}};
+          throw error;
+        }
+        job.document={...job.document,photoSafety:report};await save(job);return {processed:true,state:'moderated'};
+      }
       const referenceFailure=job.stages['tripo-reference']?.state==='failed'?job.stages['tripo-reference']!.errorCode||'PROVIDER_GENERATION_FAILED':job.document.stageFailures?.['tripo-reference'];
       if(job.document.needsReference&&referenceFailure){job.document={...job.document,stageFailures:{...job.document.stageFailures,tripo:referenceFailure}};}
       if(job.state==='submission_uncertain')selected=Object.entries(job.stages).find(([,stage])=>stage?.state==='processing')?.[0] as CloudStageName|undefined;
@@ -152,7 +162,20 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       const code=error instanceof AppError?error.code:'CLOUD_WORKER_FAILED';
       if(selected&&job.stages[selected]?.state==='submitting'&&!job.stages[selected]?.taskId){const allowed=['SUBMISSION_AMBIGUOUS','PROVIDER_REQUEST_REJECTED','PROVIDER_ID_INVALID','PROVIDER_RESPONSE_INVALID','PROVIDER_RESPONSE_LIMIT','CLOUD_TIME_SLICE_ENDED'];console.error(JSON.stringify({event:'cloud_submission_uncertain',stage:selected,errorCode:allowed.includes(code)?code:'CLOUD_WORKER_FAILED'}));job.stages[selected]={...job.stages[selected]!,state:'submission_uncertain',errorCode:'SUBMISSION_AMBIGUOUS'};await save(job,'submission_uncertain');return {processed:true,state:'submission_uncertain'};}
       const terminal=['PHOTO_SAFETY_BLOCKED','PHOTO_SAFETY_REVIEW_REQUIRED','IMAGE_CONTENT_INVALID','PROVIDER_INSUFFICIENT_CREDITS','PROVIDER_GENERATION_FAILED','PROVIDER_ASSET_INVALID','GENERATED_ASSET_SIZE_LIMIT','JOB_EXPIRED','SUBMISSION_AMBIGUOUS'].includes(code);
-      if(terminal){if(selected&&job.stages[selected])job.stages[selected]={...job.stages[selected]!,state:'failed',errorCode:code};else if(selected)job.document={...job.document,stageFailures:{...job.document.stageFailures,[selected]:code}};if(selected==='tripo-reference'&&job.document.needsReference)job.document={...job.document,stageFailures:{...job.document.stageFailures,tripo:code}};await save(job,selected?outcome(job):'failed');}
+      if(terminal){
+        if(selected&&job.stages[selected])job.stages[selected]={...job.stages[selected]!,state:'failed',errorCode:code};
+        else if(selected)job.document={...job.document,stageFailures:{...job.document.stageFailures,[selected]:code}};
+        else {
+          // Input verification or moderation can stop the whole gift before a paid
+          // stage exists. Persist the cause without inventing a submission intent.
+          const stageFailures={...job.document.stageFailures};
+          const blockedStages:CloudStageName[]=['tripo','worldlabs',...(job.document.needsReference?['tripo-reference' as const]:[])];
+          for(const name of blockedStages)if(!job.stages[name]&&!stageFailures[name])stageFailures[name]=code;
+          job.document={...job.document,stageFailures};
+        }
+        if(selected==='tripo-reference'&&job.document.needsReference)job.document={...job.document,stageFailures:{...job.document.stageFailures,tripo:code}};
+        await save(job,selected?outcome(job):'failed');
+      }
       else await save(job); // GET/download/moderation retry retains existing tasks and reservations.
       return {processed:true,state:terminal?'failed':'processing',errorCode:code};
     }

@@ -1,0 +1,292 @@
+{
+  "checkedAt": "2026-10-04T18:03:18.436Z",
+  "mode": "production metadata-only SELECT; no mutation or provider calls",
+  "sourceRef": "c1282",
+  "flags": {
+    "exactFiveBodies": true,
+    "mutatorPrivileges": true,
+    "ceilingsRemoved": true,
+    "nonnegativeValidated": true,
+    "rlsEnabled": true,
+    "threeTriggersEnabled": true,
+    "browserSchemaCreateDenied": true
+  },
+  "functions": [
+    {
+      "signature": "public.gp_enqueue_job(uuid,uuid,text,text)",
+      "exists": true,
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "body_matches_c1282": true,
+      "acl_md5": "db23e67d6fad77fdfa003856d807d6af",
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "service_execute": true
+    },
+    {
+      "signature": "public.gp_instant_prepare(uuid,text,text,text,text,jsonb,bigint)",
+      "exists": true,
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "body_matches_c1282": true,
+      "acl_md5": "db23e67d6fad77fdfa003856d807d6af",
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "service_execute": true
+    },
+    {
+      "signature": "public.gp_media_limit()",
+      "exists": true,
+      "owner": "postgres",
+      "security_definer": false,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "body_matches_c1282": true,
+      "acl_md5": "791d2b1e22edbb03f97770724fbb588b",
+      "anon_execute": null,
+      "authenticated_execute": null,
+      "service_execute": null
+    },
+    {
+      "signature": "public.gp_memory_limit()",
+      "exists": true,
+      "owner": "postgres",
+      "security_definer": false,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "body_matches_c1282": true,
+      "acl_md5": "791d2b1e22edbb03f97770724fbb588b",
+      "anon_execute": null,
+      "authenticated_execute": null,
+      "service_execute": null
+    },
+    {
+      "signature": "public.gp_retry_job(uuid,uuid)",
+      "exists": true,
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "body_matches_c1282": true,
+      "acl_md5": "db23e67d6fad77fdfa003856d807d6af",
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "service_execute": true
+    }
+  ],
+  "constraints": [
+    {
+      "retired_credit_checks": 0,
+      "retired_storage_checks": 0,
+      "credit_nonnegative_validated": true,
+      "storage_nonnegative_validated": true
+    }
+  ],
+  "relations": [
+    {
+      "relname": "gp_discoveries",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "0382c9d760805ac4a3cfd8d6ca8a6951",
+      "policy_count": 1
+    },
+    {
+      "relname": "gp_generation_budget",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "e4425b6978962d6aa486d041d6e0fa5c",
+      "policy_count": 0
+    },
+    {
+      "relname": "gp_gifts",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "0382c9d760805ac4a3cfd8d6ca8a6951",
+      "policy_count": 1
+    },
+    {
+      "relname": "gp_instant_budgets",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "ba13bc985f79b0cb8f353b1f57875f15",
+      "policy_count": 0
+    },
+    {
+      "relname": "gp_instant_jobs",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "ba13bc985f79b0cb8f353b1f57875f15",
+      "policy_count": 0
+    },
+    {
+      "relname": "gp_instant_limits",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "ba13bc985f79b0cb8f353b1f57875f15",
+      "policy_count": 0
+    },
+    {
+      "relname": "gp_instant_request_quotas",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "ba13bc985f79b0cb8f353b1f57875f15",
+      "policy_count": 0
+    },
+    {
+      "relname": "gp_instant_reservations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "ba13bc985f79b0cb8f353b1f57875f15",
+      "policy_count": 0
+    },
+    {
+      "relname": "gp_jobs",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "0382c9d760805ac4a3cfd8d6ca8a6951",
+      "policy_count": 1
+    },
+    {
+      "relname": "gp_media",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "e4882b8fcdb3c48c6bf94de244a7bc84",
+      "policy_count": 1
+    },
+    {
+      "relname": "gp_memories",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "e4882b8fcdb3c48c6bf94de244a7bc84",
+      "policy_count": 1
+    },
+    {
+      "relname": "gp_places",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "46875263bd6598c4534e2df7d1847a5e",
+      "policy_count": 1
+    },
+    {
+      "relname": "gp_private_locations",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "0382c9d760805ac4a3cfd8d6ca8a6951",
+      "policy_count": 1
+    },
+    {
+      "relname": "gp_profiles",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "0382c9d760805ac4a3cfd8d6ca8a6951",
+      "policy_count": 1
+    },
+    {
+      "relname": "gp_seed_receipts",
+      "relrowsecurity": true,
+      "relforcerowsecurity": false,
+      "acl_md5": "e4425b6978962d6aa486d041d6e0fa5c",
+      "policy_count": 0
+    }
+  ],
+  "triggers": [
+    {
+      "relname": "gp_media",
+      "tgname": "gp_media_quota",
+      "tgenabled": "O",
+      "function_name": "gp_media_limit",
+      "trigger_md5": "c0b73a8146b0886dad42df51051daadf"
+    },
+    {
+      "relname": "gp_memories",
+      "tgname": "gp_memory_quota",
+      "tgenabled": "O",
+      "function_name": "gp_memory_limit",
+      "trigger_md5": "388829e7d20339bbbec91687938451ed"
+    },
+    {
+      "relname": "users",
+      "tgname": "gp_auth_profile",
+      "tgenabled": "O",
+      "function_name": "gp_new_profile",
+      "trigger_md5": "1398605b8b921f605b668148cb423bbd"
+    }
+  ],
+  "schemaPrivileges": [
+    {
+      "role_name": "anon",
+      "public_schema_create": false
+    },
+    {
+      "role_name": "authenticated",
+      "public_schema_create": false
+    }
+  ],
+  "aggregateAudit": [
+    {
+      "kind": "instant_jobs",
+      "rows": 4,
+      "reserved_storage": "444596224",
+      "reserved_credits": null,
+      "actual_credits": null
+    },
+    {
+      "kind": "instant_reservations",
+      "rows": 8,
+      "reserved_storage": null,
+      "reserved_credits": "6720",
+      "actual_credits": null
+    },
+    {
+      "kind": "instant_quota_audit",
+      "rows": 2,
+      "reserved_storage": null,
+      "reserved_credits": null,
+      "actual_credits": null
+    },
+    {
+      "kind": "instant_budgets",
+      "rows": 2,
+      "reserved_storage": null,
+      "reserved_credits": "6720",
+      "actual_credits": null
+    },
+    {
+      "kind": "studio_memories",
+      "rows": 0,
+      "reserved_storage": null,
+      "reserved_credits": null,
+      "actual_credits": null
+    },
+    {
+      "kind": "studio_media",
+      "rows": 0,
+      "reserved_storage": "0",
+      "reserved_credits": null,
+      "actual_credits": null
+    },
+    {
+      "kind": "studio_jobs",
+      "rows": 0,
+      "reserved_storage": "0",
+      "reserved_credits": "0",
+      "actual_credits": "0"
+    },
+    {
+      "kind": "studio_budgets",
+      "rows": 2,
+      "reserved_storage": null,
+      "reserved_credits": "0",
+      "actual_credits": null
+    }
+  ]
+}
