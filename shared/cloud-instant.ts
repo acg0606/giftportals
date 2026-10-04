@@ -12,6 +12,8 @@ export interface CloudPreparedJob { id: string; token: string; uploads: CloudUpl
 export interface CloudStageDTO { state: 'pending' | 'processing' | 'completed' | 'failed'; progress: number; taskId?: string; errorCode?: string }
 export interface CloudInstantJobDTO {
   storage:'cloud';
+  uploadState: 'pending' | 'finalized';
+  uploads?: CloudUploadPlan[];
   id: string; token: string; state: 'processing' | 'completed' | 'partial' | 'failed';
   title: string; worldPrompt: string; story: string; dedication: string; senderName: string; recipientName: string;
   photoIntent: 'object' | 'place'; objectRepresentation: 'original-object' | 'derived-object' | 'souvenir-miniature';

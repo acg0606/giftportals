@@ -15,11 +15,21 @@ export function createCloudProviderHTTP(deadline:number){
   async function json(provider:Provider,path:string,method:'GET'|'POST'='GET',body?:Record<string,any>,maximum=15000):Promise<Record<string,any>>{
     const key=provider==='tripo'?process.env.TRIPO_API_KEY:process.env.WORLD_LABS_API_KEY;ensure(key,'PROVIDER_UNAVAILABLE',503);
     const paid=method==='POST'&&(path.startsWith('/generation/')||path==='/worlds:generate');
-    let response:Response;try{response=await fetch(BASE[provider]+path,{method,headers:{...(provider==='tripo'?{Authorization:`Bearer ${key}`}:{'WLT-Api-Key':key}),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(cloudRemaining(deadline,maximum,20000)),redirect:'error'});}catch(error){if(error instanceof AppError)throw error;throw new AppError(paid?'SUBMISSION_AMBIGUOUS':'PROVIDER_NETWORK',502);}
+    let response:Response|undefined,providerCode:number|null=null;const started=Date.now();
+    try {
+    try{response=await fetch(BASE[provider]+path,{method,headers:{...(provider==='tripo'?{Authorization:`Bearer ${key}`}:{'WLT-Api-Key':key}),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(cloudRemaining(deadline,maximum,20000)),redirect:'error'});}catch(error){if(error instanceof AppError)throw error;throw new AppError(paid?'SUBMISSION_AMBIGUOUS':'PROVIDER_NETWORK',502);}
+    if(!response.ok&&paid&&provider==='tripo'){
+      // Capture only the numeric provider code. Never log messages, inputs or URLs.
+      try{const value=JSON.parse(await cloudReadText(response,65536));if(Number.isInteger(value?.code)&&value.code>=0&&value.code<=999999)providerCode=value.code;}catch{/* The rejection remains closed even if its body is unavailable. */}
+    }
     ensure(response.ok,'PROVIDER_REQUEST_REJECTED',502);let raw:string;try{raw=await cloudReadText(response,1024*1024);}catch(error){if(error instanceof AppError)throw error;throw new AppError(paid?'SUBMISSION_AMBIGUOUS':'PROVIDER_NETWORK',502);}
     let value:any;try{value=JSON.parse(raw);}catch{throw new AppError(paid?'SUBMISSION_AMBIGUOUS':'PROVIDER_RESPONSE_INVALID',502);}
     ensure(value&&typeof value==='object'&&!Array.isArray(value),'PROVIDER_RESPONSE_INVALID',502);
-    if(provider==='tripo'){ensure(value.code===0,'PROVIDER_REQUEST_REJECTED',502);ensure(value.data&&typeof value.data==='object'&&!Array.isArray(value.data),'PROVIDER_RESPONSE_INVALID',502);return value.data;}return value;
+    if(provider==='tripo'){if(Number.isInteger(value.code)&&value.code>=0&&value.code<=999999)providerCode=value.code;ensure(value.code===0,'PROVIDER_REQUEST_REJECTED',502);ensure(value.data&&typeof value.data==='object'&&!Array.isArray(value.data),'PROVIDER_RESPONSE_INVALID',502);return value.data;}return value;
+    } catch(error) {
+      if(paid){const stage=path==='/generation/image-to-image'?'tripo-reference':path==='/generation/image-to-model'?'tripo':path==='/worlds:generate'?'worldlabs':'other';const allowed=['SUBMISSION_AMBIGUOUS','PROVIDER_REQUEST_REJECTED','PROVIDER_RESPONSE_INVALID','PROVIDER_RESPONSE_LIMIT','CLOUD_TIME_SLICE_ENDED'];const errorCode=error instanceof AppError&&allowed.includes(error.code)?error.code:'PROVIDER_NETWORK';const trace=response?.headers.get('x-tripo-trace-id');console.error(JSON.stringify({event:'cloud_provider_submission_error',provider,stage,httpStatus:response?.status??null,providerCode,errorCode,durationMs:Math.max(0,Date.now()-started),traceId:trace&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(trace)?trace:null}));}
+      throw error;
+    }
   }
   async function credit(provider:Provider,reservation:number){const value=await json(provider,provider==='tripo'?'/account/balance':'/credits'),available=provider==='tripo'?Number(value.balance)-Number(value.frozen||0):Number(value.remaining_credits);ensure(Number.isFinite(available)&&available>=reservation+(provider==='worldlabs'?1000:0),'PROVIDER_CREDIT_FLOOR',403);}
   async function download(url:unknown,provider:Provider,suffix:string,mime:string,maxBytes=25*1024*1024,maxSplats=600000){

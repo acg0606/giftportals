@@ -2,7 +2,7 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { AppError, ensure, text, giftHash, hasMagic, uuid } from './rules.js';
 import { INSTANT_EXAMPLES } from '../../shared/instant-examples.js';
 import { selectedCuriosities } from '../../shared/gift-curiosities.js';
-import type { CloudPrepareInput, CloudInstantJobDTO, CloudPreparedJob } from '../../shared/cloud-instant.js';
+import type { CloudPrepareInput, CloudInstantJobDTO, CloudPreparedJob, CloudUploadPlan } from '../../shared/cloud-instant.js';
 import type { CloudInstantRepository, CloudJob, CloudStoredAsset, CloudSafetyImage, CloudSafetyReport, CloudStageName } from './cloud-instant-types.js';
 import { cloudSouvenirPrompt, cloudWorldPrompt, WORLD_ART_PROMPT_VERSION, SOUVENIR_ART_PROMPT_VERSION } from './cloud-instant-recipes.js';
 
@@ -71,6 +71,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
   const assertEnabled=()=>{const value=deps.settings();ensure(value.enabled&&value.providers.tripo&&value.providers.worldlabs&&deps.moderator.configured,'GENERATION_PAUSED',503);return value;};
   const inputAssets=(job:CloudJob)=>Object.fromEntries(job.document.images.map(image=>[image.id,{...image,path:`${job.id}/input/${image.id}-${image.sha256}.${extension(image.mime)}`}])) as Record<string,CloudStoredAsset>;
   const verifiedBytes=async(asset:CloudStoredAsset)=>{const bytes=await repo.download(asset);ensure(bytes.length===asset.bytes&&hash(bytes)===asset.sha256&&hasMagic(bytes,asset.mime),'IMAGE_CONTENT_INVALID');return bytes;};
+  const missingUploads=async(job:CloudJob):Promise<CloudUploadPlan[]>=>{const missing:CloudStoredAsset[]=[];for(const asset of Object.values(inputAssets(job))){if(await repo.inputExists(asset))await verifiedBytes(asset);else missing.push(asset);}const uploads:CloudUploadPlan[]=[];for(const asset of missing)uploads.push({...job.document.images.find(image=>image.id===asset.id)!,id:asset.id as 'original'|'object'|'world',url:await repo.signUpload(asset),method:'PUT',headers:{'Content-Type':asset.mime}});return uploads;};
   const approvedInputs=async(job:CloudJob)=>{
     const images:CloudSafetyImage[]=[];for(const input of job.document.images){const asset=job.assets[input.id];ensure(asset,'IMAGE_CONTENT_INVALID');images.push({id:input.id,mime:asset.mime,sha256:asset.sha256,bytes:await verifiedBytes(asset),source:asset});}return images;
   };
@@ -80,7 +81,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     const stage=(name:CloudStageName)=>{const value=job.stages[name];return {state:!value?(document.stageFailures?.[name]?'failed' as const:'pending' as const):value.state==='completed'?'completed' as const:['failed','submission_uncertain'].includes(value.state)?'failed' as const:'processing' as const,progress:value?.progress||0,taskId:value?.taskId,errorCode:value?.state==='submission_uncertain'?'SUBMISSION_AMBIGUOUS':value?.errorCode||document.stageFailures?.[name]};};
     const semantics=document.worldSemantics,validSemantics=semantics&&Number.isFinite(semantics.metricScaleFactor)&&semantics.metricScaleFactor>=.05&&semantics.metricScaleFactor<=100&&Number.isFinite(semantics.groundPlaneOffset)&&Math.abs(semantics.groundPlaneOffset)<=500?{metricScaleFactor:semantics.metricScaleFactor,groundPlaneOffset:semantics.groundPlaneOffset}:undefined;
     const [photoUrl,modelUrl,worldUrl,panoramaUrl,tripoInputUrl,colliderUrl]=approved?await Promise.all(['original','model','generated-world','panorama',job.assets.reference?'reference':'object','collider'].map(read)):[];
-    return {storage:'cloud',id:job.id,token,state:['completed','partial','failed'].includes(job.state)?job.state as 'completed'|'partial'|'failed':['submission_uncertain','expired'].includes(job.state)?'failed':'processing',
+    return {storage:'cloud',uploadState:job.state==='awaiting_upload'?'pending':'finalized',...(job.state==='awaiting_upload'?{uploads:await missingUploads(job)}:{}),id:job.id,token,state:['completed','partial','failed'].includes(job.state)?job.state as 'completed'|'partial'|'failed':['submission_uncertain','expired'].includes(job.state)?'failed':'processing',
       title:document.title,worldPrompt:document.worldPrompt,story:document.story,dedication:document.dedication,senderName:document.senderName,recipientName:document.recipientName,photoIntent:document.photoIntent,objectRepresentation:document.objectRepresentation,
       createdAt:job.created_at,updatedAt:job.updated_at,...(job.expires_at && Number.isFinite(Date.parse(job.expires_at)) ? {mediaExpiresAt:Date.parse(job.expires_at)/1000} : {}),tripo:stage('tripo'),worldlabs:stage('worldlabs'),...(document.needsReference?{tripoReference:stage('tripo-reference')}:{ }),assets:{photoUrl:photoUrl||'',modelUrl,worldUrl,panoramaUrl,tripoInputUrl,colliderUrl},
       generation:{...document.generation,worldlabs:{...document.generation.worldlabs,worldSemantics:validSemantics,splatQuality:document.splatQuality,colliderStatus:document.colliderStatus}},curiosities:selectedCuriosities(document.curiosityIds),};
@@ -92,7 +93,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
   const prepare=async(input:CloudPrepareInput,ownerHash:string):Promise<CloudPreparedJob>=>{
     const config=assertEnabled(),token=input.requestToken,tokenHash=giftHash(token),document=cloudInputDocument(input);
     const result=await repo.prepare({id:randomUUID(),tokenHash,requestKeyHash:cloudRequestHash(token,input.dedupeKey,config.dedupeSecret),inputHash:hash(JSON.stringify(document)),ownerHash,document,storageBytes:document.images.reduce((n,image)=>n+image.bytes,0)});
-    const uploads=[];if(result.job.state==='awaiting_upload')for(const asset of Object.values(inputAssets(result.job)))uploads.push({...document.images.find(image=>image.id===asset.id)!,id:asset.id as 'original'|'object'|'world',url:await repo.signUpload(asset),method:'PUT' as const,headers:{'Content-Type':asset.mime}});
+    const uploads=result.job.state==='awaiting_upload'?await missingUploads(result.job):[];
     return {id:result.job.id,token,uploads,deduplicated:result.deduplicated};
   };
   const finalize=async(id:string,token:string)=>{
@@ -148,7 +149,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       await save(job);return {processed:true,state:outcome(job)};
     } catch(error) {
       const code=error instanceof AppError?error.code:'CLOUD_WORKER_FAILED';
-      if(selected&&job.stages[selected]?.state==='submitting'&&!job.stages[selected]?.taskId){job.stages[selected]={...job.stages[selected]!,state:'submission_uncertain',errorCode:'SUBMISSION_AMBIGUOUS'};await save(job,'submission_uncertain');return {processed:true,state:'submission_uncertain'};}
+      if(selected&&job.stages[selected]?.state==='submitting'&&!job.stages[selected]?.taskId){const allowed=['SUBMISSION_AMBIGUOUS','PROVIDER_REQUEST_REJECTED','PROVIDER_ID_INVALID','PROVIDER_RESPONSE_INVALID','PROVIDER_RESPONSE_LIMIT','CLOUD_TIME_SLICE_ENDED'];console.error(JSON.stringify({event:'cloud_submission_uncertain',stage:selected,errorCode:allowed.includes(code)?code:'CLOUD_WORKER_FAILED'}));job.stages[selected]={...job.stages[selected]!,state:'submission_uncertain',errorCode:'SUBMISSION_AMBIGUOUS'};await save(job,'submission_uncertain');return {processed:true,state:'submission_uncertain'};}
       const terminal=['PHOTO_SAFETY_BLOCKED','PHOTO_SAFETY_REVIEW_REQUIRED','IMAGE_CONTENT_INVALID','PROVIDER_GENERATION_FAILED','PROVIDER_ASSET_INVALID','GENERATED_ASSET_SIZE_LIMIT','JOB_EXPIRED','SUBMISSION_AMBIGUOUS'].includes(code);
       if(terminal){if(selected&&job.stages[selected])job.stages[selected]={...job.stages[selected]!,state:'failed',errorCode:code};else if(selected)job.document={...job.document,stageFailures:{...job.document.stageFailures,[selected]:code}};await save(job,selected?outcome(job):'failed');}
       else await save(job); // GET/download/moderation retry retains existing tasks and reservations.

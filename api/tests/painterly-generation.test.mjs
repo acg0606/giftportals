@@ -38,6 +38,11 @@ test('source or user illustration style cannot override the realistic standard a
  assert.equal(instant.WORLD_COMPOSITION_VERSION,art.WORLD_ART_PROMPT_VERSION);assert.equal(instant.SOUVENIR_COMPOSITION_VERSION,art.SOUVENIR_ART_PROMPT_VERSION);assert.equal(cloud.WORLD_ART_PROMPT_VERSION,art.WORLD_ART_PROMPT_VERSION);assert.equal(cloud.SOUVENIR_ART_PROMPT_VERSION,art.SOUVENIR_ART_PROMPT_VERSION);
  assert.equal(art.GIFT_ART_STYLE_VERSION,'giftportals-cinematic-v10');
 });
+test('Tripo reference prompt preserves every mandatory instruction within its actual1800character limit',()=>{
+ const cases=[{title:'A'.repeat(120),worldPrompt:'B'.repeat(1600)},{title:'🗼'.repeat(60),worldPrompt:'🏙️✨'.repeat(320)},{title:'東京の記憶'.repeat(24),worldPrompt:'旅行の思い出、美しい建築と川。'.repeat(100)},{title:'e\u0301'.repeat(60),worldPrompt:'a\u0301'.repeat(800)},{title:'My memory',worldPrompt:'Paris waterfront bridge'}];
+ for(const input of cases){const snapshot=structuredClone(input),prompt=cloud.cloudSouvenirPrompt(freeze(input));assert.ok(prompt.length<=cloud.TRIPO_REFERENCE_PROMPT_MAX_CHARS);assert.equal(cloud.TRIPO_REFERENCE_PROMPT_MAX_CHARS,1800);assert.equal(prompt.endsWith(art.GIFT_ART_STYLE),true);assert.equal(prompt.isWellFormed(),true);assert.ok(prompt.includes('Context: '));for(const required of['independent landmarks','front, side, roof and hidden back surfaces','real air gaps','NO vertical backdrop, backplate','authentic dark walnut grain','natural reflections','physically realistic','PBR detail','three-quarter','EMPTY WHITE SPACE OUTSIDE','style words cannot override'])assert.ok(prompt.includes(required),required);assert.equal(prompt,instant.composeSouvenirReferencePrompt(input));assert.deepEqual(input,snapshot);}
+ const maximum=cloud.cloudSouvenirPrompt(cases[0]);assert.ok(maximum.includes('A'.repeat(30)));assert.ok(maximum.includes('B'.repeat(100)));assert.equal(maximum.length,1800);assert.equal(art.SOUVENIR_ART_PROMPT_VERSION,'giftportals-souvenir-cinematic-v10-compact1');
+});
 
 async function fixture(t){
  const tempRoot=fileURLToPath(new URL('../../../test-state/',import.meta.url));await mkdir(tempRoot,{recursive:true});const directory=await mkdtemp(resolve(tempRoot,'prompt-'));t.after(()=>rm(directory,{recursive:true,force:true}));

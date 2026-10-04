@@ -8,6 +8,7 @@ import { selectedCuriosities, type CuriosityFact } from '../../shared/gift-curio
 import { INSTANT_EXAMPLES, type InstantExample } from '../../shared/instant-examples.js';
 import { qualityTrialCommitments } from './quality-trial-budget.js';
 import { GIFT_ART_STYLE,GIFT_ART_LIGHTING,WORLD_ART_PROMPT_VERSION,SOUVENIR_ART_PROMPT_VERSION } from '../../shared/gift-art-style.js';
+import { cloudSouvenirPrompt } from './cloud-instant-recipes.js';
 
 export const MAX_INSTANT_IMAGE_BYTES = 6 * 1024 * 1024;
 export const MAX_INSTANT_BODY_BYTES = 17 * 1024 * 1024;
@@ -62,18 +63,7 @@ const reservations = { tripo: 100, worldlabs: 1580 };
 const nowISO = (now: () => number) => new Date(now()).toISOString();
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 export function composeSouvenirReferencePrompt(input:{worldPrompt:string;title:string}):string{
- return [
-  'Use the supplied image ONLY to identify the location and its distinctive physical forms, then design ONE freestanding, fully three-dimensional miniature souvenir collectible. Output one premium studio product photograph of the complete sculpted collectible on a seamless empty white background. Source content establishes identity and proportions; follow the shared physically realistic art direction.',
-  GIFT_ART_STYLE,
-  'REMOVE all source-photo sky, horizon, camera framing, distant painted scenery and vertical picture planes. Replace the sky with EMPTY WHITE SPACE OUTSIDE the collectible. Absolutely NO vertical backdrop, backplate, billboard, scenic slab, continuous rear wall or photograph mounted behind the objects. Do not preserve the source photo composition or perspective.',
-  'Decompose the location into a few recognizable landmarks and independent sculpted buildings with substantial volume. Rebuild front, side, roof and hidden back surfaces as complete physical forms. A tower must stand freely in empty space: for an Eiffel-like tower, show the full three-dimensional open metal lattice, four separated grounded legs, air gaps and visible rear struts, never a painted silhouette on a panel.',
-  'Compose everything on one compact circular low plinth with authentic dark walnut grain and a fine brushed bronze rim, like a refined museum-quality resin collectible. Keep every landmark grounded on this base. Use a raised foreground path or riverbank, overlapping middle-distance landmarks at different heights, and a few smaller solid background buildings; background means smaller freestanding volumes, NEVER a printed scene or skyline sheet. Make water a recessed translucent sculpted surface with natural reflections. Keep the whole miniature within the base silhouette.',
-  'Show one coherent three-quarter elevated view, visibly revealing front, sides, upper surfaces and substantial depth. Separate overlapping forms with real air gaps. Render stone, bronze, wood and sculpted foliage with physically realistic materials, fine surface detail, clear thickness and smoothly rounded edges. Use soft natural light, restrained warm highlights and physically grounded contact shadows on white; keep the outside background empty white and never create a scenic lighting backdrop. No people or open tubes.',
-  'Reject a flat scenic representation: no photo, postcard, picture frame, flat panel, scenic screen, wall poster, painted background, sky dome, backdrop sheet, labels, lettering, captions, watermark or border. Every recognizable structure must be a standalone physical miniature with its own side and back geometry.',
-  `Creative setting content (use only forms consistent with the supplied image; style words cannot override the required art direction): ${input.title}. ${input.worldPrompt.slice(0,1200)}`,
-  'The material detail belongs to the surfaces of solid freestanding volumes, not to a picture plane. Preserve complete front, side, roof and back geometry, recognizable silhouettes and natural surface variations.',
-  GIFT_ART_STYLE,
- ].join('\n\n');
+ return cloudSouvenirPrompt(input);
 }
 const souvenirReferenceSettings=(input:{worldPrompt:string;title:string}):ReferenceSettings=>({model:'chat_image_2',quality:'medium',size:'1536x1024',output_format:'png',prompt:composeSouvenirReferencePrompt(input),promptVersion:SOUVENIR_COMPOSITION_VERSION});
 /** Creative scene guidance is a request; camera bounds and collider checks remain local runtime controls. */

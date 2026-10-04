@@ -26,6 +26,7 @@ export interface CloudInstantRepository {
   begin(job: CloudJob, stage: CloudStageName): Promise<CloudJob>;
   update(job: CloudJob, changes: { state: CloudJob['state']; document: CloudJobDocument; stages: CloudJob['stages']; assets: CloudJob['assets']; releaseLease?: boolean }): Promise<CloudJob>;
   signUpload(asset: CloudStoredAsset): Promise<string>; signRead(asset: CloudStoredAsset): Promise<string>;
+  inputExists(asset: CloudStoredAsset): Promise<boolean>;
   signModerationRead(image: CloudSafetyImage): Promise<string>;
   download(asset: CloudStoredAsset): Promise<Buffer>; upload(asset: CloudStoredAsset, bytes: Buffer): Promise<void>;
   status(): Promise<{ canCreate: boolean; budget: Record<string, unknown> }>;

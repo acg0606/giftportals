@@ -55,7 +55,7 @@ const missing = () => Object.assign(new Error('No previous job'), { code: 'JOB_U
 async function fixture(action, settings = {}) {
   const names = ['window', 'document', 'HTMLInputElement', 'HTMLTextAreaElement', 'sessionStorage', 'URL', 'FileReader', 'fetch', 'createImageBitmap', 'matchMedia', '__instantWizard'];
   const previous = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const state = { current: true, creates: [], jobs: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
+  const state = { current: true, creates: [], jobs: [], resumes: [], opened: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
   class Element extends EventTarget {
     constructor(tag = 'div', attrs = {}) {
       super(); this.tagName = tag; this.attrs = attrs; this.children = []; this.dataset = {}; this.value = attrs.value || ''; this.name = attrs.name || ''; this.type = attrs.type || ''; this.hidden = 'hidden' in attrs; this.disabled = 'disabled' in attrs; this.checked = 'checked' in attrs; this.open = false; this.isConnected = true; this.scrollLeft = 0; this.scrollWidth = 720; this.clientWidth = 350; this.scrollTop = 0; this.validityMessage = ''; this.style = {};
@@ -128,8 +128,9 @@ async function fixture(action, settings = {}) {
   } };
   for (const [name, value] of Object.entries(values)) Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
   const service = { status: async () => ({ available: true, localOnly: true, generationEnabled: true, providers: { tripo: true, worldlabs: true }, maxImageBytes: 6291456, examples: [] }), create: async input => { state.creates.push(input); if (settings.createError) throw settings.createError; return state.job; }, job: async reference => { state.jobs.push(reference); if (settings.jobHandler) return settings.jobHandler(reference, state); throw missing(); } };
+  if (settings.resumeHandler) service.resumeUpload = async (reference, images, signal) => { state.resumes.push({ reference, images, signal }); return settings.resumeHandler(reference, images, signal, state); };
   state.job = { id: 'actual-job', token: 'capability', state: 'completed', assets: { photoUrl: '/photo', modelUrl: '/model', worldUrl: '/world' }, tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, title: 'Gift', story: '', worldPrompt: 'A quiet world', senderName: '', recipientName: '' };
-  state.host = new Element(); state.handle = mountInstantCreator(state.host, { isCurrent: () => state.current, onHome() {}, onGiftReady() {}, service });
+  state.host = new Element(); state.handle = mountInstantCreator(state.host, { isCurrent: () => state.current, onHome() {}, onGiftReady(job) { state.opened.push(job); }, service });
   state.find = selector => { const element = state.host.querySelector(selector); assert.ok(element, `Missing fixture element ${selector}`); return element; };
   state.field = name => state.find('[data-instant-form]').elements.namedItem(name);
   state.edit = (name, value) => { const input = state.field(name); input.value = value; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
@@ -235,6 +236,72 @@ test('refresh holds unresolved pending creation; confirmed missing job restores 
     assert.equal(state.stage(), 'review'); assert.equal(state.find('[data-instant-inputs]').disabled, true); assert.match(state.find('#instant-review-heading').textContent, /last gift/); assert.equal(state.find('[data-instant-review-photo]').parents()[0].hidden, true);
     state.missingConfirmed = true; state.find('[data-instant-recover]').click(); await flush(); assert.equal(state.stage(), 'photo'); assert.equal(state.find('[data-instant-inputs]').disabled, false); assert.equal(state.creates.length, 0); assert.equal(state.storage.has('giftportals.instant.pending.v1'), false);
   }, { storage: [['giftportals.instant.pending.v1', pending]], jobHandler: (reference, state) => Promise.reject(state.missingConfirmed ? missing() : new TypeError('Network unavailable')) });
+});
+
+test('reload of an interrupted cloud PUT exposes only missing photo inputs and stops generation polling', async () => {
+  const reference = { id: 'saved-upload-job', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.equal(state.creates.length, 0); assert.equal(state.jobs.length, 1);
+    assert.equal(state.find('[data-instant-form]').hidden, true);
+    assert.equal(state.find('[data-instant-upload-recovery]').hidden, false);
+    assert.equal(state.find('[data-instant-resume-field="original"]').hidden, true);
+    assert.equal(state.find('[data-instant-resume-field="object"]').hidden, true);
+    assert.equal(state.find('[data-instant-resume-field="world"]').hidden, false);
+    assert.equal(state.find('[data-instant-provider-progress]').hidden, true);
+    assert.equal(state.find('[data-instant-open]').hidden, true); assert.equal(state.find('[data-instant-edit]').hidden, true);
+    assert.match(state.find('#instant-progress-heading').textContent, /Finish uploading/);
+    assert.deepEqual(state.scheduled, [], 'No provider poll runs while photos are missing');
+    const file = new File(['the exact place photo'], 'place.png', { type: 'image/png' });
+    state.find('[data-instant-resume-file="world"]').files = [file];
+    state.find('[data-instant-resume-upload]').click(); state.find('[data-instant-resume-upload]').click(); await flush();
+    assert.equal(state.resumes.length, 1); assert.deepEqual(state.resumes[0].reference, reference);
+    assert.deepEqual(state.resumes[0].images, { world: 'data:image/png;base64,' + Buffer.from('the exact place photo').toString('base64') });
+    assert.equal(state.creates.length, 0); assert.equal(state.find('[data-instant-upload-recovery]').hidden, true);
+    assert.equal(state.find('[data-instant-open]').hidden, false);
+    state.find('[data-instant-open]').click(); assert.equal(state.opened.length, 1); assert.equal(state.opened[0].id, reference.id); assert.equal(state.opened[0].token, reference.token);
+    assert.deepEqual(JSON.parse(state.storage.get('giftportals.instant.job.v1')), reference);
+    assert.ok([...state.storage.values()].every(value => !value.includes('base64') && !value.includes('the exact place photo')), 'Photos never enter browser storage');
+  }, {
+    storage: [['giftportals.instant.job.v1', JSON.stringify(reference)]],
+    jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: 'processing', uploadState: 'pending', tripo: { state: 'pending' }, worldlabs: { state: 'pending' }, assets: { photoUrl: '' }, uploads: [{ id: 'world', mime: 'image/png' }] }),
+    resumeHandler: (_reference, _images, _signal, state) => ({ ...state.job, ...reference, uploadState: 'finalized' }),
+  });
+});
+
+test('resume failure keeps the existing draft locked and retries the same reference without new creation', async () => {
+  const reference = { id: 'saved-upload-job', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    state.find('[data-instant-resume-upload]').click(); await flush();
+    assert.equal(state.find('[data-instant-upload-error]').hidden, false); assert.match(state.find('[data-instant-upload-error]').textContent, /same photo/);
+    assert.equal(state.find('[data-instant-resume-upload]').disabled, false);
+    assert.equal(state.find('[data-instant-edit]').hidden, true); assert.equal(state.creates.length, 0); assert.deepEqual(state.scheduled, []);
+    state.reselected = true; state.find('[data-instant-resume-file="original"]').files = [new File(['source'], 'source.webp', { type: 'image/webp' })];
+    state.find('[data-instant-resume-upload]').click(); await flush();
+    assert.equal(state.resumes.length, 2); assert.deepEqual(state.resumes[1].reference, reference);
+    const candidates = state.resumes[1].images.original;
+    assert.deepEqual(candidates, ['data:image/webp;base64,c291cmNl', 'data:image/jpeg;base64,cHJlcGFyZWQgb3JpZ2luYWw=']);
+    assert.equal(state.find('[data-instant-upload-recovery]').hidden, true); assert.equal(state.scheduled.length, 1);
+  }, {
+    storage: [['giftportals.instant.job.v1', JSON.stringify(reference)]],
+    jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: 'processing', uploadState: 'pending', tripo: { state: 'pending' }, worldlabs: { state: 'pending' }, assets: { photoUrl: '' }, uploads: [{ id: 'original', mime: 'image/jpeg' }] }),
+    resumeHandler: (_reference, _images, _signal, state) => state.reselected ? { ...state.job, ...reference, state: 'processing', uploadState: 'finalized', tripo: { state: 'pending' }, worldlabs: { state: 'pending' }, assets: { photoUrl: '' } } : Promise.reject(new Error('Choose the same photo used for this gift.')),
+  });
+});
+
+test('closing an uploading recovery aborts it and ignores a late completed reply', async () => {
+  let resolve;
+  const reference = { id: 'saved-upload-job', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    state.find('[data-instant-resume-upload]').click(); await flush(); assert.equal(state.resumes.length, 1);
+    state.handle.destroy(); assert.equal(state.resumes[0].signal.aborted, true);
+    resolve({ ...state.job, ...reference, uploadState: 'finalized' }); await flush();
+    assert.equal(state.host.children.length, 0); assert.equal(state.opened.length, 0); assert.deepEqual(state.scheduled, []);
+    assert.equal(state.creates.length, 0); assert.deepEqual(JSON.parse(state.storage.get('giftportals.instant.job.v1')), reference);
+  }, {
+    storage: [['giftportals.instant.job.v1', JSON.stringify(reference)]],
+    jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: 'processing', uploadState: 'pending', assets: { photoUrl: '' }, tripo: { state: 'pending' }, worldlabs: { state: 'pending' }, uploads: [{ id: 'original', mime: 'image/png' }] }),
+    resumeHandler: () => new Promise(done => { resolve = done; }),
+  });
 });
 
 test('restoring an ambiguous souvenir preserves interruption while only the backend world is still processing', async () => {

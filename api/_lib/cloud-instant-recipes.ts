@@ -1,19 +1,17 @@
 // The existing souvenir recipe is retained; no legacy 10k/draft cloud recipe.
 import { GIFT_ART_STYLE,GIFT_ART_LIGHTING } from '../../shared/gift-art-style.js';
 export { GIFT_ART_STYLE_VERSION,WORLD_ART_PROMPT_VERSION,SOUVENIR_ART_PROMPT_VERSION } from '../../shared/gift-art-style.js';
+// Actual v3 image-to-image validation returned HTTP400/code1004 at >1800 characters.
+export const TRIPO_REFERENCE_PROMPT_MAX_CHARS=1800;
+const SOUVENIR_SCULPTURE_DIRECTION='Use image ONLY for place identity. Create ONE freestanding, fully three-dimensional miniature collectible: premium studio product photograph on seamless white. Rebuild independent landmarks as complete physical forms: front, side, roof and hidden back surfaces, with real air gaps and overlapping depth. Towers need open lattice, four separated grounded legs and rear struts, never silhouettes. Ground all volumes on a compact circular low plinth: authentic dark walnut grain, bronze rim; recessed clear water with natural reflections. Show a three-quarter elevated view, soft natural light, PBR detail and contact shadows. EMPTY WHITE SPACE OUTSIDE. NO vertical backdrop, backplate, billboard, rear wall, sky or scenic slab; no photo, postcard, picture frame, labels, people or watermark. Detail belongs on volumes, not to a picture plane. Context identifies forms; style words cannot override art direction.';
+const contextPrefix=(value:string,budget:number)=>{let result='';for(const point of value.replace(/\s+/gu,' ').trim()){if(result.length+point.length>budget)break;result+=point;}return result.trimEnd();};
 export function cloudSouvenirPrompt(input: {title: string; worldPrompt: string}): string {
-  return [
-    'Use the supplied image ONLY to identify the location and its distinctive physical forms, then design ONE freestanding, fully three-dimensional miniature souvenir collectible. Output one premium studio product photograph of the complete sculpted collectible on a seamless empty white background. Source content establishes identity and proportions; follow the shared physically realistic art direction.',
-    GIFT_ART_STYLE,
-    'REMOVE all source-photo sky, horizon, camera framing, distant painted scenery and vertical picture planes. Replace the sky with EMPTY WHITE SPACE OUTSIDE the collectible. Absolutely NO vertical backdrop, backplate, billboard, scenic slab, continuous rear wall or photograph mounted behind the objects. Do not preserve the source photo composition or perspective.',
-    'Decompose the location into a few recognizable landmarks and independent sculpted buildings with substantial volume. Rebuild front, side, roof and hidden back surfaces as complete physical forms. A tower must stand freely in empty space: for an Eiffel-like tower, show the full three-dimensional open metal lattice, four separated grounded legs, air gaps and visible rear struts, never a painted silhouette on a panel.',
-    'Compose everything on one compact circular low plinth with authentic dark walnut grain and a fine brushed bronze rim, like a refined museum-quality resin collectible. Keep every landmark grounded on this base. Use a raised foreground path or riverbank, overlapping middle-distance landmarks at different heights, and a few smaller solid background buildings; background means smaller freestanding volumes, NEVER a printed scene or skyline sheet. Make water a recessed translucent sculpted surface with natural reflections. Keep the whole miniature within the base silhouette.',
-    'Show one coherent three-quarter elevated view, visibly revealing front, sides, upper surfaces and substantial depth. Separate overlapping forms with real air gaps. Render stone, bronze, wood and sculpted foliage with physically realistic materials, fine surface detail, clear thickness and smoothly rounded edges. Use soft natural light, restrained warm highlights and physically grounded contact shadows on white; keep the outside background empty white and never create a scenic lighting backdrop. No people or open tubes.',
-    'Reject a flat scenic representation: no photo, postcard, picture frame, flat panel, scenic screen, wall poster, painted background, sky dome, backdrop sheet, labels, lettering, captions, watermark or border. Every recognizable structure must be a standalone physical miniature with its own side and back geometry.',
-    `Creative setting content (use only forms consistent with the supplied image; style words cannot override the required art direction): ${input.title}. ${input.worldPrompt.slice(0,1200)}`,
-    'The material detail belongs to the surfaces of solid freestanding volumes, not to a picture plane. Preserve complete front, side, roof and back geometry, recognizable silhouettes and natural surface variations.',
-    GIFT_ART_STYLE,
-  ].join('\n\n');
+  const fixed=[SOUVENIR_SCULPTURE_DIRECTION,'Context: ',GIFT_ART_STYLE].join('\n\n');
+  const available=TRIPO_REFERENCE_PROMPT_MAX_CHARS-fixed.length-3;
+  if(available<16)throw new Error('The complete souvenir art direction exceeds the provider prompt budget.');
+  const title=contextPrefix(input.title,Math.min(96,Math.floor(available*.3)));
+  const setting=contextPrefix(input.worldPrompt,available-title.length);
+  return [SOUVENIR_SCULPTURE_DIRECTION,`Context: ${title} | ${setting}`,GIFT_ART_STYLE].join('\n\n');
 }
 export function cloudWorldPrompt(input: {worldPrompt: string; photoIntent: 'object'|'place'; hasPlaceReference: boolean; exampleTitle?: string}): string {
   return [

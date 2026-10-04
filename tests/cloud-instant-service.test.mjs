@@ -41,8 +41,8 @@ function harness(options = {}) {
       return options.prepareResponse?.() || success(result);
     }
     if (action === 'upload') return options.uploadResponse?.(call, calls) || new Response('', { status: 200 });
-    if (action === 'finalize') return success(job(options.finalState || 'processing'));
-    if (action === 'job') return options.jobResponse?.() || success(options.job || job('completed'));
+    if (action === 'finalize') return options.finalizeResponse?.(call, calls) || success(options.finalized || job(options.finalState || 'processing'));
+    if (action === 'job') return options.jobResponse?.(call, calls) || success(options.job || job('completed'));
     if (action === 'advance') return success(options.advanced || job('completed'));
     throw new Error(`Unexpected action ${action}`);
   };
@@ -172,6 +172,64 @@ test('interrupted upload never finalizes or advances a partially uploaded draft'
   const transport = harness({ uploadResponse: () => new Response('', { status: 403 }) });
   await assert.rejects(transport.service.create(input({ worldImageDataUrl: image }), new AbortController().signal), /interrupted/);
   assert.deepEqual(transport.actions(), ['status', 'prepare', 'upload']);
+});
+
+test('partial multi-photo upload resumes the same draft from memory and never rewrites confirmed inputs', async () => {
+  const declaration = (await cloudImageBytes(image)).declaration;
+  let interrupted = false;
+  const transport = harness({
+    uploadResponse(call) { if (!interrupted && call.url.includes('/world-')) { interrupted = true; return new Response('', { status: 403 }); } },
+    job: { ...job(), uploadState: 'pending', uploads: plans({ images: { world: declaration } }) },
+    finalized: { ...job(), uploadState: 'finalized' },
+  });
+  await assert.rejects(transport.service.create(input({ objectImageDataUrl: image, worldImageDataUrl: image }), new AbortController().signal), /interrupted/);
+  const current = await transport.service.job({ id, token }, new AbortController().signal);
+  assert.equal(current.uploadState, 'pending'); assert.equal(transport.actions().includes('advance'), false);
+  const recovered = await transport.service.resumeUpload({ id, token }, {}, new AbortController().signal);
+  assert.equal(recovered.uploadState, 'finalized');
+  assert.deepEqual(transport.actions(), ['status', 'prepare', 'upload', 'upload', 'upload', 'job', 'job', 'upload', 'finalize']);
+  const uploadedRoles = transport.calls.filter(call => call.action === 'upload').map(call => /\/input\/(\w+)-/.exec(call.url)[1]);
+  assert.deepEqual(uploadedRoles, ['original', 'object', 'world', 'world']);
+  assert.deepEqual(transport.calls.at(-1).json, { id });
+});
+
+test('reload after every PUT succeeded finalizes the existing draft without uploading or preparing again', async () => {
+  const transport = harness({ job: { ...job(), uploadState: 'pending', uploads: [] }, finalized: { ...job('completed'), uploadState: 'finalized' } });
+  const result = await transport.service.job({ dedupeKey: input().dedupeKey, token }, new AbortController().signal);
+  assert.equal(result.state, 'completed'); assert.deepEqual(transport.actions(), ['job', 'finalize']);
+  assert.equal(transport.calls.at(-1).headers['X-Instant-Token'], token); assert.deepEqual(transport.calls.at(-1).json, { id });
+});
+
+test('a lost finalize response recovers a completed gift with the same capability and no replacement paid submission', async () => {
+  const completed = { ...job('completed'), uploadState: 'finalized', tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, assets: { modelUrl: 'https://project.supabase.co/model', worldUrl: 'https://project.supabase.co/world', photoUrl: 'https://project.supabase.co/photo' } };
+  const transport = harness({ finalizeResponse: () => { throw new TypeError('Reply lost after server finalization'); }, job: completed });
+  await assert.rejects(transport.service.create(input(), new AbortController().signal), /Reply lost/);
+  const result = await transport.service.resumeUpload({ dedupeKey: input().dedupeKey, token }, {}, new AbortController().signal);
+  assert.deepEqual(result, completed); assert.equal(result.id, id); assert.equal(result.token, token);
+  assert.deepEqual(transport.actions(), ['status', 'prepare', 'upload', 'finalize', 'job']);
+});
+
+test('reloaded draft validates all reselected photos before PUT and accepts only exact original or prepared bytes', async () => {
+  const declaration = (await cloudImageBytes(image)).declaration;
+  const pendingJob = { ...job(), uploadState: 'pending', uploads: plans({ images: { original: declaration, world: declaration } }) };
+  const transport = harness({ job: pendingJob, finalized: { ...job(), uploadState: 'finalized' } });
+  const other = 'data:image/png;base64,' + Buffer.from('wrong photo').toString('base64');
+  await assert.rejects(transport.service.resumeUpload({ id, token }, { original: image, world: other }, new AbortController().signal), /same photo/);
+  assert.deepEqual(transport.actions(), ['job'], 'A wrong second photo cannot write the first');
+  await transport.service.resumeUpload({ id, token }, { original: [other, image], world: image }, new AbortController().signal);
+  assert.deepEqual(transport.actions(), ['job', 'job', 'upload', 'upload', 'finalize']);
+});
+
+test('invalid pending upload plans and late aborted GET replies never upload, finalize, or advance', async () => {
+  const declaration = (await cloudImageBytes(image)).declaration;
+  const invalid = harness({ job: { ...job(), uploadState: 'pending', uploads: plans({ images: { original: declaration } }).map(upload => ({ ...upload, url: upload.url.replace(id, 'different-job-id') })) } });
+  await assert.rejects(invalid.service.resumeUpload({ id, token }, { original: image }, new AbortController().signal), /verified/);
+  assert.deepEqual(invalid.actions(), ['job']);
+  let release;
+  const late = harness({ jobResponse: () => new Promise(resolve => { release = resolve; }) });
+  const owner = new AbortController(), task = late.service.resumeUpload({ id, token }, {}, owner.signal);
+  owner.abort(); release(success({ ...job(), uploadState: 'pending', uploads: [] }));
+  await assert.rejects(task, { name: 'AbortError' }); assert.deepEqual(late.actions(), ['job']);
 });
 
 test('job polling is a pure GET for every terminal state and capabilities stay out of URLs', async () => {

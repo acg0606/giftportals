@@ -17,6 +17,9 @@ export interface InstantPhotoReport {
  results:{id:'original'|'object'|'world';decision:'allow'|'block'|'review';category:'ordinary'|'sexual'|'adult-product'|'uncertain';objectHint?:string;objectConfidence?:number}[];
 }
 export interface InstantJob {
+  uploadState?: 'pending' | 'finalized';
+  /** Pending cloud drafts expose only missing private inputs, never photo bytes. */
+  uploads?: import('../shared/cloud-instant').CloudUploadPlan[];
   id: string;
   token: string;
   state: 'processing' | 'completed' | 'partial' | 'failed';

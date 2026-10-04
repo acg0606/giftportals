@@ -10,13 +10,16 @@ import { selectedCuriosities } from '../shared/gift-curiosities';
 import { INSTANT_WIZARD_STEPS, appendInstantTranscript, instantDefaultWorldPrompt, instantJobConfirmedMissing, instantWizardCanCreate, instantWizardDestination, type InstantWizardStep } from './instant-wizard';
 import { mountStoryAudio } from './story-audio';
 import { giftIcon } from './gift-icon';
+import type { CloudImageId } from '../shared/cloud-instant';
 
 export type { InstantCreateInput, InstantJob, InstantStatus } from './instant-creator-state';
 export type InstantJobReference = { id: string; token: string } | { dedupeKey: string; token: string };
+export type InstantUploadImages = Partial<Record<CloudImageId, string | readonly string[]>>;
 export interface InstantCreatorService {
   status(signal: AbortSignal): Promise<InstantStatus>;
   create(input: InstantCreateInput, signal: AbortSignal): Promise<InstantJob>;
   job(reference: InstantJobReference, signal: AbortSignal): Promise<InstantJob>;
+  resumeUpload?(reference: InstantJobReference, images: InstantUploadImages, signal: AbortSignal): Promise<InstantJob>;
   triage?(imageDataUrl:string,signal:AbortSignal):Promise<InstantPhotoReport>;
 }
 export interface InstantCreatorOptions {
@@ -86,6 +89,7 @@ export const instantCreatorService: InstantCreatorService = {
   status: async signal => cloudCreator() ? (await cloud()).status(signal) : request('status', signal),
   create: async (input, signal) => cloudCreator() ? (await cloud()).create(input, signal) : request('create', signal, input),
   job: async (reference, signal) => cloudCreator() ? (await cloud()).job(reference, signal) : request('job', signal, undefined, reference),
+  ...(cloudCreator() ? { resumeUpload: async (reference: InstantJobReference, images: InstantUploadImages, signal: AbortSignal) => (await cloud()).resumeUpload!(reference, images, signal) } : {}),
   ...(cloudCreator() ? {} : { triage: (imageDataUrl: string, signal: AbortSignal) => request<InstantPhotoReport>('triage', signal, {imageDataUrl}) }),
 };
 
@@ -138,7 +142,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   let attemptedModel = '', revealTimer: number | undefined;
   let cameraDialog: { destroy(): void } | undefined, cameraAttempt = 0;
   let storyAudio: ReturnType<typeof mountStoryAudio> | undefined;
-  let step: InstantWizardStep = 'photo', confirmingJob = false;
+  let step: InstantWizardStep = 'photo', confirmingJob = false, recoveringUpload = false;
   let pendingReference: InstantJobReference | null = null;
   const editedWords = new Set<string>();
   const active = () => !dead && host.isConnected && options.isCurrent();
@@ -178,8 +182,9 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
         </form>
         <section class="instant-progress" data-instant-progress hidden aria-labelledby="instant-progress-heading"><span class="instant-eyebrow">YOUR GIFT IS TAKING SHAPE</span><h2 id="instant-progress-heading" tabindex="-1">A little world,<br/>just for them.</h2>
           <div data-instant-transformation></div>
+          <section class="instant-upload-recovery" data-instant-upload-recovery hidden aria-label="Finish uploading your gift"><p>Your gift is saved, but a photo upload was interrupted. Continue with the same photos; photos already received are kept.</p>${(['original', 'object', 'world'] as const).map(id => `<label class="instant-field" data-instant-resume-field="${id}" hidden>${id === 'original' ? 'Original gift photo' : id === 'object' ? 'Souvenir reference photo' : 'Place reference photo'}<input type="file" accept="image/jpeg,image/png,image/webp" data-instant-resume-file="${id}"/></label>`).join('')}<small>In this tab, your photo may still be available. After reopening, choose the same file again. If you used an example, save that example photo first.</small><button class="instant-primary" type="button" data-instant-resume-upload>Resume this gift</button><p class="instant-error" data-instant-upload-error role="alert" hidden></p></section>
           <section class="instant-model-preview" data-instant-model-preview hidden aria-label="Your completed 3D keepsake"><div><span>${objectIcon}<strong>Your keepsake is ready.</strong></span><button type="button" data-instant-preview-toggle>Reset 3D view ↺</button></div><p class="instant-model-load" data-instant-preview-load role="status" hidden>Opening your 3D keepsake…</p><small data-instant-preview-note>Drag to turn it. Pinch or scroll to bring it closer.</small></section>
-          <ol aria-label="Generation progress"><li data-instant-provider="tripo"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-tripo-label></strong><small>Tripo · 3D keepsake</small></div></li><li data-instant-provider="worldlabs"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-worldlabs-label></strong><small>World Labs · spatial world</small></div></li></ol><p class="instant-progress-status" data-instant-job-status role="status" aria-live="polite"></p><button class="instant-primary" type="button" data-instant-open hidden>${giftIcon}Open your gift <span aria-hidden="true">↗</span></button><button class="instant-secondary" type="button" data-instant-recheck hidden>Check again</button><button class="instant-secondary" type="button" data-instant-edit hidden>${giftIcon}Start a different gift</button><small data-instant-job-note>Creating a world can take a few minutes. Your original photo stays available.</small></section>
+          <ol data-instant-provider-progress aria-label="Generation progress"><li data-instant-provider="tripo"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-tripo-label></strong><small>Tripo · 3D keepsake</small></div></li><li data-instant-provider="worldlabs"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-worldlabs-label></strong><small>World Labs · spatial world</small></div></li></ol><p class="instant-progress-status" data-instant-job-status role="status" aria-live="polite"></p><button class="instant-primary" type="button" data-instant-open hidden>${giftIcon}Open your gift <span aria-hidden="true">↗</span></button><button class="instant-secondary" type="button" data-instant-recheck hidden>Check again</button><button class="instant-secondary" type="button" data-instant-edit hidden>${giftIcon}Start a different gift</button><small data-instant-job-note>Creating a world can take a few minutes. Your original photo stays available.</small></section>
         <div class="instant-unavailable" data-instant-unavailable hidden><p>Live creation is taking a pause. You can still choose your photo and write your story.</p><button class="instant-secondary" type="button" data-instant-status-retry>Check the creator again</button>${options.onExploreExample ? `<button class="instant-secondary" type="button" data-instant-explore>${giftIcon}Step into a ready-made gift ↗</button>` : ''}</div>
       </section>
     </main>`;
@@ -459,6 +464,16 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     storyAudio?.stop(); pendingReference = null; confirmingJob = false;
     if (currentJob && (currentJob.id !== job.id || currentJob.assets.modelUrl !== job.assets.modelUrl)) { closeModelPreview(); attemptedModel = ''; }
     currentJob = job; remember(job); form.hidden = true; progress.hidden = false; unavailable.hidden = true;
+    const uploadPending = job.uploadState === 'pending';
+    host.querySelector<HTMLElement>('[data-instant-upload-recovery]')!.hidden = !uploadPending;
+    host.querySelector<HTMLElement>('[data-instant-transformation]')!.hidden = uploadPending;
+    host.querySelector<HTMLElement>('[data-instant-provider-progress]')!.hidden = uploadPending;
+    for (const id of ['original', 'object', 'world'] as const) {
+      host.querySelector<HTMLElement>(`[data-instant-resume-field="${id}"]`)!.hidden = !uploadPending || !job.uploads?.some(upload => upload.id === id);
+      if (!uploadPending) host.querySelector<HTMLInputElement>(`[data-instant-resume-file="${id}"]`)!.value = '';
+    }
+    text('#instant-progress-heading', uploadPending ? 'Finish uploading your photos.' : 'A little world, just for them.');
+    host.querySelector<HTMLButtonElement>('[data-instant-resume-upload]')!.disabled = recoveringUpload || !service.resumeUpload;
     const modelReady = instantModelReady(job), visual = giftTransformationState(job);
     progress.dataset.jobState = job.state;
     transformation.update(visual);
@@ -468,18 +483,18 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
       host.querySelector<HTMLElement>(`[data-instant-provider="${provider}"]`)!.dataset.state = job[provider].state;
       text(`[data-instant-${provider}-label]`, instantProviderLabel(provider, job[provider].state, provider === 'tripo' ? job.tripoReference?.state : undefined, job[provider].errorCode || (provider === 'tripo' ? job.tripoReference?.errorCode : undefined)));
     }
-    const ready = instantGiftReady(job), finished = instantJobFinished(job);
+    const ready = !uploadPending && instantGiftReady(job), finished = !uploadPending && instantJobFinished(job);
     host.querySelector<HTMLButtonElement>('[data-instant-open]')!.hidden = !ready;
     host.querySelector<HTMLButtonElement>('[data-instant-edit]')!.hidden = !finished;
     host.querySelector<HTMLButtonElement>('[data-instant-recheck]')!.hidden = true;
     const worldStillCreating = job.worldlabs.state === 'pending' || job.worldlabs.state === 'processing';
-    text('[data-instant-job-status]', ready ? 'Your photo became a keepsake. Your story has a world to live in.' : visual.phase === 'interrupted' ? worldStillCreating ? 'The keepsake needs attention. Your little world is still being created.' : 'This gift is unfinished. Your photo is safe; one or more parts need attention.' : 'Both parts are being made from your photo and your place.');
-    text('[data-instant-job-note]', ready ? 'Open it, turn the keepsake, then step into the place inside.' : finished ? 'No automatic retry is started. You can keep these details and choose a different gift.' : 'Creating a world can take a few minutes. Returning to this creator in this browser restores the job.');
-    if (finished) { clearTimeout(pollTimer); pollTimer = undefined; }
+    text('[data-instant-job-status]', uploadPending ? 'Generation will start after your photos finish uploading.' : ready ? 'Your photo became a keepsake. Your story has a world to live in.' : visual.phase === 'interrupted' ? worldStillCreating ? 'The keepsake needs attention. Your little world is still being created.' : 'This gift is unfinished. Your photo is safe; one or more parts need attention.' : 'Both parts are being made from your photo and your place.');
+    text('[data-instant-job-note]', uploadPending ? 'Your photos are never saved in browser storage. This browser keeps only the reference to your gift.' : ready ? 'Open it, turn the keepsake, then step into the place inside.' : finished ? 'No automatic retry is started. You can keep these details and choose a different gift.' : 'Creating a world can take a few minutes. Returning to this creator in this browser restores the job.');
+    if (finished || uploadPending) { clearTimeout(pollTimer); pollTimer = undefined; }
     const modelKey = `${job.id}:${job.assets.modelUrl}`;
     if (modelReady && !previewOpen && attemptedModel !== modelKey) { attemptedModel = modelKey; void openModelPreview(); }
   }
-  function schedulePoll() { if (active() && currentJob && !instantJobFinished(currentJob)) { clearTimeout(pollTimer); pollTimer = window.setTimeout(() => void poll(), 4_000); } }
+  function schedulePoll() { if (active() && currentJob && currentJob.uploadState !== 'pending' && !instantJobFinished(currentJob)) { clearTimeout(pollTimer); pollTimer = window.setTimeout(() => void poll(), 4_000); } }
   async function poll() {
     if (!active() || !currentJob) return;
     const reference = { id: currentJob.id, token: currentJob.token };
@@ -491,6 +506,29 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     text('[data-instant-availability]', 'Checking the creator…');
     try { const next = await service.status(events.signal); if (!active()) return; status = next; updateExamples(); availability(); }
     catch { if (!active()) return; status = null; availability(); }
+  }
+  async function resumeUpload() {
+    if (!active() || recoveringUpload || currentJob?.uploadState !== 'pending' || !service.resumeUpload) return;
+    const reference = { id: currentJob.id, token: currentJob.token };
+    const recoveryError = host.querySelector<HTMLElement>('[data-instant-upload-error]')!;
+    const button = host.querySelector<HTMLButtonElement>('[data-instant-resume-upload]')!;
+    recoveringUpload = true; button.disabled = true; recoveryError.hidden = true;
+    try {
+      const images: InstantUploadImages = {};
+      for (const upload of currentJob.uploads || []) {
+        const file = host.querySelector<HTMLInputElement>(`[data-instant-resume-file="${upload.id}"]`)!.files?.[0];
+        if (!file) continue; // The cloud service can still use bytes retained in this tab.
+        const issue = validateInstantPhoto(file, status?.maxImageBytes); if (issue) throw new Error(issue);
+        const original = await fileDataUrl(file, events.signal);
+        images[upload.id] = upload.mime === 'image/jpeg' ? [original, await fileDataUrl(await preparedPhoto(file, events.signal), events.signal)] : original;
+      }
+      const job = await service.resumeUpload(reference, images, events.signal);
+      if (!active() || currentJob?.id !== reference.id) return;
+      showJob(job); schedulePoll();
+    } catch (cause) {
+      if (!active() || currentJob?.id !== reference.id) return;
+      recoveryError.textContent = cause instanceof Error ? cause.message : 'Your upload could not continue. Try again with the same photo.'; recoveryError.hidden = false;
+    } finally { if (active()) { recoveringUpload = false; button.disabled = false; } }
   }
   async function imageData(sourcePhoto: File | InstantExample): Promise<string> {
     if (sourcePhoto instanceof File) return fileDataUrl(await preparedPhoto(sourcePhoto, events.signal), events.signal);
@@ -532,6 +570,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     if (INSTANT_WIZARD_STEPS.includes(target)) goToStep(target);
   });
   on('[data-instant-home]', options.onHome);
+  on('[data-instant-resume-upload]', () => void resumeUpload());
   on('[data-instant-intent]', event => { const next = (event.currentTarget as HTMLButtonElement).dataset.instantIntent; if (next === 'object' || next === 'place') updateIntent(next); });
   on('[data-instant-catalog]', event => updateIntent((event.currentTarget as HTMLButtonElement).dataset.instantCatalog === 'cities' ? 'place' : 'object'));
   on('[data-instant-examples-prev]', () => scrollExamples(-1));

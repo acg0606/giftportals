@@ -19,7 +19,9 @@ const curiositiesURL=await moduleURL('shared/gift-curiosities.ts');
 const examplesURL=await moduleURL('shared/instant-examples.ts');
 const examples=await import(examplesURL);
 const budgetURL=await moduleURL('api/_lib/quality-trial-budget.ts',{'./rules.js':rulesURL});
-const instantURL = await moduleURL('api/_lib/instant.ts', { './rules.js': rulesURL, './providers.js': providersURL, './image-safety.js': safetyURL,'./quality-trial-budget.js':budgetURL,'../../shared/gift-curiosities.js':curiositiesURL,'../../shared/instant-examples.js':examplesURL,'../../shared/gift-art-style.js':await moduleURL('shared/gift-art-style.ts') });
+const artStyleURL=await moduleURL('shared/gift-art-style.ts');
+const cloudRecipesURL=await moduleURL('api/_lib/cloud-instant-recipes.ts',{'../../shared/gift-art-style.js':artStyleURL});
+const instantURL = await moduleURL('api/_lib/instant.ts', { './rules.js': rulesURL, './providers.js': providersURL, './image-safety.js': safetyURL,'./quality-trial-budget.js':budgetURL,'./cloud-instant-recipes.js':cloudRecipesURL,'../../shared/gift-curiosities.js':curiositiesURL,'../../shared/instant-examples.js':examplesURL,'../../shared/gift-art-style.js':artStyleURL });
 const i = await import(instantURL);
 const safetyModule=await import(safetyURL);
 // All provider calls are injected. Tests never load credentials or reach the network.
