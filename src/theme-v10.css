@@ -148,7 +148,7 @@ body:has(#app > :is(.dusk-welcome,.instant-creator,.quality-comparison,.quality-
   color: var(--v10-ink); background: var(--v10-sage); border-color: var(--v10-accent);
   box-shadow: inset 0 0 0 1px var(--v10-accent);
 }
-.instant-creator :is(.instant-upload > button,.instant-selected,.instant-review-photo,.instant-model-preview) {
+.instant-creator :is(.instant-upload > button,.instant-selected,.instant-review-photo,.instant-model-preview,.instant-upload-recovery) {
   color: var(--v10-ink); background: var(--v10-mist); border-color: var(--v10-input-line);
 }
 .instant-creator .instant-upload > .instant-camera { background: var(--v10-cloud); }
