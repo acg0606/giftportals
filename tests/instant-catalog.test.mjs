@@ -36,12 +36,19 @@ test('category lists are copies and never truncate or change catalog image prove
   assert.equal(JSON.stringify(INSTANT_EXAMPLES), before); assert.equal(cities.length, 5);
 });
 
-test('all five places offer reviewed miniature references while only completed examples expose ready gift links', async () => {
+test('Kyoto uses its original-photo miniature flow while four places retain curated references and only completed examples expose ready links', async () => {
   const cities = instantCatalogCategory(INSTANT_EXAMPLES, 'cities');
   for (const city of cities) {
-    assert.equal(city.objectRepresentation, 'souvenir-miniature'); assert.equal(city.objectImageRole, 'miniature-reference');
+    assert.equal(city.objectRepresentation, 'souvenir-miniature');
+    if (city.id === 'kyoto') {
+      assert.equal(city.objectImageUrl, undefined);assert.equal(city.objectImageRole, undefined);
+      assert.equal(city.imageUrl, '/assets/examples/v13/kyoto.jpg');await readFile(new URL(`../public${city.imageUrl}`, import.meta.url));
+      continue;
+    }
+    assert.equal(city.objectImageRole, 'miniature-reference');
     assert.notEqual(city.objectImageUrl, city.imageUrl); await readFile(new URL(`../public${city.objectImageUrl}`, import.meta.url));
   }
+  assert.deepEqual(cities.filter(city => city.objectImageUrl).map(city => city.id), ['rio','paris','new-york','cairo']);
   assert.deepEqual(INSTANT_EXAMPLES.filter(example => example.readyGiftUrl).map(example => example.id), ['rio', 'paris', 'antikythera']);
   for (const city of cities.filter(example => !['rio','paris'].includes(example.id))) assert.equal(city.readyGiftUrl, undefined);
 });

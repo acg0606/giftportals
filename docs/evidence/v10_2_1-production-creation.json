@@ -48,11 +48,19 @@
   "referenceModeration": "allow",
   "sameBrowserCreatedJobsToday": 2,
   "browserVerification": {
-    "registrationAfterPartialPatch": "pending",
-    "reloadRestore": "pending",
-    "keepsakeOpen": "pending",
-    "webglRendering": "not verified; cloud browser reports GL_VENDOR and GL_RENDERER Disabled"
+    "registeredBeforeOpen": true,
+    "memoryDeskCount": 1,
+    "deskTitleMatched": true,
+    "myMemoriesAfterReload": 1,
+    "myMemoriesTitleMatched": true,
+    "reopenedSavedKeepsake": true,
+    "worldViewDisabled": true,
+    "walkInsideAbsent": true,
+    "webglRendering": "not verified; cloud browser reports GL_VENDOR and GL_RENDERER Disabled",
+    "privateScreenshotProvidedToOwner": true
   },
   "billingChanges": false,
-  "privateIdsOrCapabilitiesIncluded": false
+  "privateIdsOrCapabilitiesIncluded": false,
+  "browserRelease": "0befe3f6b1e2201704d3c788fe9935ee5d04264e",
+  "browserDeployment": "dpl_4FkHLW2YKgcMZoVJm7YN4JXhk9Qg"
 }

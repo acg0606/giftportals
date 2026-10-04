@@ -357,17 +357,34 @@ test('a fresh place WebP becomes a metadata-free JPEG original without a fabrica
   });
 });
 
-test('city Review shows a distinct curated miniature reference and submits its approved PNG bytes without reframing the original', async () => {
+test('Paris Review retains its distinct curated miniature reference and submits its PNG bytes without reframing the original', async () => {
   await fixture(async state => {
-    state.find('[data-instant-example="kyoto"]').click(); state.next(); state.next(); state.next();
-    assert.equal(state.find('[data-instant-review-photo]').src, '/assets/examples/v13/kyoto.jpg');
-    assert.equal(state.find('[data-instant-review-miniature]').src, '/assets/examples/v17/kyoto-souvenir-reference.png'); assert.equal(state.find('[data-instant-review-miniature]').hidden, false);
+    state.find('[data-instant-example="paris"]').click(); state.next(); state.next(); state.next();
+    assert.equal(state.find('[data-instant-review-photo]').src, '/assets/examples/v13/paris.jpg');
+    assert.equal(state.find('[data-instant-review-miniature]').src, '/assets/examples/v17/paris-souvenir-reference.png'); assert.equal(state.find('[data-instant-review-miniature]').hidden, false);
     assert.match(state.find('[data-instant-review-representation]').textContent, /reference guides/); state.consent(); state.submit(); await flush();
     assert.equal(state.creates.length, 1); const submitted = state.creates[0];
     assert.equal(submitted.objectImageRole, 'miniature-reference'); assert.notEqual(submitted.imageDataUrl, submitted.objectImageDataUrl);
+    assert.equal(Buffer.from(submitted.imageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v13/paris.jpg');
+    assert.equal(Buffer.from(submitted.objectImageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v17/paris-souvenir-reference.png');
+    assert.equal(submitted.worldImageDataUrl, undefined); assert.deepEqual(state.fetchUrls, ['/assets/examples/v13/paris.jpg', '/assets/examples/v17/paris-souvenir-reference.png']);
+  });
+});
+
+test('Kyoto stays selectable and submits only its unchanged original through normal miniature generation, preserving personal words', async () => {
+  await fixture(async state => {
+    state.find('[data-instant-example="kyoto"]').click();state.edit('story', 'My own Kyoto memory.');state.next();state.next();state.next();
+    assert.equal(state.find('[data-instant-review-photo]').src, '/assets/examples/v13/kyoto.jpg');
+    assert.equal(state.find('[data-instant-review-miniature]').hidden, true);assert.match(state.find('[data-instant-review-representation]').textContent, /inspires a small 3D souvenir/);
+    assert.equal(state.find('[data-instant-review-place-photo]').src, '/assets/examples/v13/kyoto.jpg');
+    state.consent();state.submit();await flush();
+    assert.equal(state.creates.length, 1);const submitted = state.creates[0];
+    assert.equal(submitted.exampleId, 'kyoto');assert.equal(submitted.photoIntent, 'place');assert.equal(submitted.story, 'My own Kyoto memory.');
+    assert.match(submitted.worldPrompt, /artistic Kyoto garden/);
     assert.equal(Buffer.from(submitted.imageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v13/kyoto.jpg');
-    assert.equal(Buffer.from(submitted.objectImageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v17/kyoto-souvenir-reference.png');
-    assert.equal(submitted.worldImageDataUrl, undefined); assert.deepEqual(state.fetchUrls, ['/assets/examples/v13/kyoto.jpg', '/assets/examples/v17/kyoto-souvenir-reference.png']);
+    assert.equal(submitted.objectImageDataUrl, undefined);assert.equal(submitted.objectImageRole, undefined);assert.equal(submitted.worldImageDataUrl, undefined);
+    assert.deepEqual(state.fetchUrls, ['/assets/examples/v13/kyoto.jpg']);
+    assert.equal(state.fetchUrls.some(url => url.includes('kyoto-souvenir-reference')), false);
   });
 });
 

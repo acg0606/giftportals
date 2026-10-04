@@ -1,0 +1,38 @@
+{
+  "label": "PRODUCTION — exact public catalog fixtures; third explicit creation on same browser owner",
+  "checkedAt": "2026-10-04T18:48:14.465Z",
+  "sourceRef": "0befe3f6b1e2201704d3c788fe9935ee5d04264e",
+  "state": "failed",
+  "created_at": "2026-10-04 18:46:41.580118+00",
+  "updated_at": "2026-10-04 18:47:01.35073+00",
+  "paid_submission_intents": 0,
+  "stage_failures": {
+    "tripo": "PHOTO_SAFETY_REVIEW_REQUIRED",
+    "worldlabs": "PHOTO_SAFETY_REVIEW_REQUIRED"
+  },
+  "moderation_decision": "review",
+  "moderation_results": [
+    {
+      "id": "original",
+      "scores": {
+        "sexual": 0.0004055142883295774,
+        "adultProduct": 0.00036295755200391113
+      },
+      "sha256": "bd32f92c92de49d834743aedd18bbb1bea595e3fe8f05297c7076ef9017f4eb9",
+      "category": "ordinary",
+      "decision": "allow"
+    },
+    {
+      "id": "object",
+      "scores": {
+        "sexual": 0.0001985714331918455,
+        "adultProduct": 0.21435132588308858
+      },
+      "sha256": "c4d3f8118483518ce969522116a44c4407f0be5a675c807e07fb31a2805c3dc3",
+      "category": "uncertain",
+      "decision": "review"
+    }
+  ],
+  "same_browser_jobs_today": 3,
+  "privateIdsOrCapabilitiesIncluded": false
+}
