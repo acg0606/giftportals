@@ -320,3 +320,6 @@
 .gg-xr-holder { margin-top:16px; }
 .gg-xr-close { display:flex; margin:0 0 8px auto; min-height:44px; }
 .gg-xr-close svg { width:18px; height:18px; }
+.gg-world-retry { display:grid; gap:10px; margin:12px 0 20px; }
+.gg-world-retry button { width:fit-content; min-height:44px; }
+.gg-world-retry small,.gg-world-retry p { margin:0; color:#496457; font-size:12px; line-height:1.7; }

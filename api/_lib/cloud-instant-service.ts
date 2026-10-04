@@ -38,13 +38,27 @@ export function cloudWorldDiagnostics(result:Record<string,unknown>):CloudWorldD
   else if(/timeout|timed out|deadline exceeded/.test(message))reason='timeout';
   else if(/(?:download|fetch|retrieve).{0,80}(?:input|image|media|url|asset)|(?:input|image|media|url|asset).{0,80}(?:download|fetch|retrieve)|(?:signed|input).{0,30}url.{0,30}expired/.test(message))reason='input-download';
   else if(/invalid.{0,40}(?:input|argument|image|prompt|parameter)|unsupported.{0,40}(?:input|image|format)|malformed.{0,40}(?:input|image|request)/.test(message))reason='invalid-input';
-  else if(/internal.{0,30}(?:error|failure|server)|unexpected.{0,30}(?:error|failure)|provider.{0,30}(?:error|failure)/.test(message))reason='provider-internal';
+  else if(errorCode===500||errorCode==='INTERNAL'||/internal.{0,30}(?:error|failure|server)|unexpected.{0,30}(?:error|failure)|provider.{0,30}(?:error|failure)/.test(message))reason='provider-internal';
   return {done:typeof result.done==='boolean'?result.done:null,errorPresent,errorShape,errorEmpty,errorCode,reason,reasonText:worldDiagnosticReasons[reason]};
 }
 export function cloudRequestHash(token: string, dedupeKey: unknown, secret: string): string {
   ensure(typeof dedupeKey === 'string' && /^[A-Za-z0-9_-]{8,120}$/.test(dedupeKey), 'REQUEST_TOKEN_INVALID');
   ensure(secret.length >= 32, 'CLOUD_NOT_CONFIGURED', 503);
   return createHmac('sha256', secret).update(`${giftHash(token)}:${dedupeKey}`).digest('hex');
+}
+export function cloudWorldRetryRequestHash(id:string,token:string,retryKey:unknown,secret:string):string {
+  ensure(typeof retryKey==='string'&&/^[A-Za-z0-9_-]{8,120}$/.test(retryKey),'REQUEST_TOKEN_INVALID');
+  ensure(secret.length>=32,'CLOUD_NOT_CONFIGURED',503);
+  return createHmac('sha256',secret).update(`world-retry:${uuid(id)}:${giftHash(token)}:${retryKey}`).digest('hex');
+}
+export function cloudWorldRetryEligible(job:CloudJob,now=Date.now()):boolean {
+  const expiry=job.expires_at?Date.parse(job.expires_at):NaN,stage=job.stages.worldlabs;
+  return ['partial','failed'].includes(job.state)&&!job.lease_id&&Number.isFinite(expiry)&&expiry>now
+    &&stage?.state==='failed'&&stage.errorCode==='PROVIDER_GENERATION_FAILED'&&typeof stage.taskId==='string'
+    &&stage.diagnostics?.done!==false
+    &&/^[A-Za-z0-9_-]{1,120}$/.test(stage.taskId)
+    &&!Object.values(job.stages).some(value=>value&&['submitting','processing','submission_uncertain'].includes(value.state))
+    &&job.document.photoSafety?.decision==='allow';
 }
 export function cloudInputDocument(input: CloudPrepareInput) {
   ensure(input && typeof input === 'object' && input.consent === true, 'GENERATION_CONSENT_REQUIRED');
@@ -73,7 +87,7 @@ export function cloudInputDocument(input: CloudPrepareInput) {
     objectRepresentation: input.photoIntent === 'place' ? 'souvenir-miniature' as const : input.images.object ? 'derived-object' as const : 'original-object' as const,
     ...(curiosities.length ? {curiosityIds:curiosities.map(value=>value.id)} : {}), ...(example ? {exampleId:example.id} : {}),
     generation:{tripo:{model:'v3.1-20260211',face_limit:30000,texture:true,pbr:true,texture_quality:'detailed',geometry_quality:'detailed',orientation:'align_image'},
-      worldlabs:{model:'marble-1.1',reference:worldImage?'image':'text',promptVersion:WORLD_ART_PROMPT_VERSION,textPrompt:cloudWorldPrompt({...clean,photoIntent:input.photoIntent,hasPlaceReference:worldImage,exampleTitle:example?.title}),contextSource:example?'catalog-selection':'user-context',...(worldImage?{isPano:false,disableRecaption:true}:{})},
+      worldlabs:{model:'marble-1.0',reference:worldImage?'image':'text',promptVersion:WORLD_ART_PROMPT_VERSION,textPrompt:cloudWorldPrompt({...clean,photoIntent:input.photoIntent,hasPlaceReference:worldImage,exampleTitle:example?.title}),contextSource:example?'catalog-selection':'user-context',...(worldImage?{isPano:false,disableRecaption:true}:{})},
       ...(needsReference?{tripoReference:{model:'chat_image_2',quality:'medium',size:'1536x1024',output_format:'png',prompt:cloudSouvenirPrompt(clean),promptVersion:SOUVENIR_ART_PROMPT_VERSION}}:{})},
   };
 }
@@ -104,16 +118,17 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
   const approvedInputs=async(job:CloudJob)=>{
     const images:CloudSafetyImage[]=[];for(const input of job.document.images){const asset=job.assets[input.id];ensure(asset,'IMAGE_CONTENT_INVALID');images.push({id:input.id,mime:asset.mime,sha256:asset.sha256,bytes:await verifiedBytes(asset),source:asset});}return images;
   };
-  async function dto(job:CloudJob,token:string):Promise<CloudInstantJobDTO> {
+  async function dto(job:CloudJob,token:string,ownerHash?:string):Promise<CloudInstantJobDTO> {
     const document=job.document,read=async(key:string)=>job.assets[key]?repo.signRead(job.assets[key]):undefined;
     const approved=document.photoSafety?.decision==='allow'&&document.photoSafety.results.length>0&&document.photoSafety.results.every(result=>result.decision==='allow'&&result.category==='ordinary');
     const stage=(name:CloudStageName)=>{const value=job.stages[name];return {state:!value?(document.stageFailures?.[name]?'failed' as const:'pending' as const):value.state==='completed'?'completed' as const:['failed','submission_uncertain'].includes(value.state)?'failed' as const:'processing' as const,progress:value?.progress||0,taskId:value?.taskId,errorCode:value?.state==='submission_uncertain'?'SUBMISSION_AMBIGUOUS':value?.errorCode||document.stageFailures?.[name]};};
     const semantics=document.worldSemantics,validSemantics=semantics&&Number.isFinite(semantics.metricScaleFactor)&&semantics.metricScaleFactor>=.05&&semantics.metricScaleFactor<=100&&Number.isFinite(semantics.groundPlaneOffset)&&Math.abs(semantics.groundPlaneOffset)<=500?{metricScaleFactor:semantics.metricScaleFactor,groundPlaneOffset:semantics.groundPlaneOffset}:undefined;
     const [photoUrl,modelUrl,worldUrl,panoramaUrl,tripoInputUrl,colliderUrl]=approved?await Promise.all(['original','model','generated-world','panorama',job.assets.reference?'reference':'object','collider'].map(read)):[];
+    const available=approved&&cloudWorldRetryEligible(job,now())&&Boolean(ownerHash)&&await repo.worldRetryOwner(job.id,giftHash(token),ownerHash!);
     return {storage:'cloud',uploadState:job.state==='awaiting_upload'?'pending':'finalized',...(job.state==='awaiting_upload'?{uploads:await missingUploads(job)}:{}),id:job.id,token,state:['completed','partial','failed'].includes(job.state)?job.state as 'completed'|'partial'|'failed':['submission_uncertain','expired'].includes(job.state)?'failed':'processing',
       title:document.title,worldPrompt:document.worldPrompt,story:document.story,dedication:document.dedication,senderName:document.senderName,recipientName:document.recipientName,photoIntent:document.photoIntent,objectRepresentation:document.objectRepresentation,
       createdAt:job.created_at,updatedAt:job.updated_at,...(job.expires_at && Number.isFinite(Date.parse(job.expires_at)) ? {mediaExpiresAt:Date.parse(job.expires_at)/1000} : {}),tripo:stage('tripo'),worldlabs:stage('worldlabs'),...(document.needsReference?{tripoReference:stage('tripo-reference')}:{ }),assets:{photoUrl:photoUrl||'',modelUrl,worldUrl,panoramaUrl,tripoInputUrl,colliderUrl},
-      generation:{...document.generation,worldlabs:{...document.generation.worldlabs,worldSemantics:validSemantics,splatQuality:document.splatQuality,colliderStatus:document.colliderStatus}},curiosities:selectedCuriosities(document.curiosityIds),};
+      worldRetry:{available,attempts:document.worldRetry?.attempt||0},generation:{...document.generation,worldlabs:{...document.generation.worldlabs,...document.worldRetry?.recipeOverride,worldSemantics:validSemantics,splatQuality:document.splatQuality,colliderStatus:document.colliderStatus}},curiosities:selectedCuriosities(document.curiosityIds),};
   }
   const status=async()=>{
     const config=deps.settings();let budget:Record<string,unknown>={},canCreate=false;try{({budget,canCreate}=await repo.status());}catch{/* Unconfigured database is a closed creation gate. */}
@@ -121,16 +136,45 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
   };
   const prepare=async(input:CloudPrepareInput,ownerHash:string):Promise<CloudPreparedJob>=>{
     const config=assertEnabled(),token=input.requestToken,tokenHash=giftHash(token),document=cloudInputDocument(input);
-    const result=await repo.prepare({id:randomUUID(),tokenHash,requestKeyHash:cloudRequestHash(token,input.dedupeKey,config.dedupeSecret),inputHash:hash(JSON.stringify(document)),ownerHash,document,storageBytes:document.images.reduce((n,image)=>n+image.bytes,0)});
+    const values={id:randomUUID(),tokenHash,requestKeyHash:cloudRequestHash(token,input.dedupeKey,config.dedupeSecret),inputHash:hash(JSON.stringify(document)),ownerHash,document,storageBytes:document.images.reduce((n,image)=>n+image.bytes,0)};
+    let result;
+    try{result=await repo.prepare(values);}
+    catch(error){
+      if(!(error instanceof AppError)||error.code!=='DEDUPE_MISMATCH')throw error;
+      const original=await repo.lookup(values.requestKeyHash,tokenHash);
+      // A lost prepare response can cross the server's default-model change.
+      // Keep that existing job's accepted recipe; the RPC still verifies every
+      // input field, its hash and creator identity before returning a duplicate.
+      if(original.document.generation.worldlabs.model!=='marble-1.1')throw error;
+      const pinned={...document,generation:{...document.generation,worldlabs:{...document.generation.worldlabs,model:'marble-1.1'}}};
+      result=await repo.prepare({...values,document:pinned,inputHash:hash(JSON.stringify(pinned))});
+    }
     const uploads=result.job.state==='awaiting_upload'?await missingUploads(result.job):[];
     return {id:result.job.id,token,uploads,deduplicated:result.deduplicated};
   };
-  const finalize=async(id:string,token:string)=>{
-    const job=await repo.get(uuid(id),giftHash(token));if(job.state!=='awaiting_upload')return dto(job,token);
+  const finalize=async(id:string,token:string,ownerHash?:string)=>{
+    const job=await repo.get(uuid(id),giftHash(token));if(job.state!=='awaiting_upload')return dto(job,token,ownerHash);
     const assets=inputAssets(job);for(const asset of Object.values(assets))await verifiedBytes(asset);
-    return dto(await repo.finalize(job.id,giftHash(token),assets),token);
+    return dto(await repo.finalize(job.id,giftHash(token),assets),token,ownerHash);
   };
-  const get=async(reference:{id?:string;dedupeKey?:string;token:string})=>dto(reference.id?await repo.get(uuid(reference.id),giftHash(reference.token)):await repo.lookup(cloudRequestHash(reference.token,reference.dedupeKey,deps.settings().dedupeSecret),giftHash(reference.token)),reference.token);
+  const get=async(reference:{id?:string;dedupeKey?:string;token:string;ownerHash?:string})=>dto(reference.id?await repo.get(uuid(reference.id),giftHash(reference.token)):await repo.lookup(cloudRequestHash(reference.token,reference.dedupeKey,deps.settings().dedupeSecret),giftHash(reference.token)),reference.token,reference.ownerHash);
+  const retryWorld=async(id:string,token:string,retryKey:string,ownerHash:string)=>{
+    const config=deps.settings();ensure(config.enabled&&config.providers.worldlabs&&deps.moderator.configured,'GENERATION_PAUSED',503);
+    const validated=await repo.get(uuid(id),giftHash(token));
+    ensure(await repo.worldRetryOwner(validated.id,giftHash(token),ownerHash),'JOB_UNAVAILABLE',404);
+    // Reverify every declared input and its retained moderation proof. The RPC
+    // serializes eligibility, idempotency, history and accounting before work.
+    verifyCloudSafety(validated.document.photoSafety!,await approvedInputs(validated));
+    const requestKeyHash=cloudWorldRetryRequestHash(validated.id,token,retryKey,config.dedupeSecret);
+    let diagnostics:(CloudWorldDiagnostics & {taskId:string})|undefined;
+    const previous=validated.stages.worldlabs;
+    if(previous?.state==='failed'&&previous.errorCode==='PROVIDER_GENERATION_FAILED'&&previous.taskId){
+      const receipt=await deps.providers.poll('worldlabs',previous.taskId);
+      ensure(receipt.done===true&&receipt.error!==null&&typeof receipt.error==='object'&&!Array.isArray(receipt.error)&&Object.keys(receipt.error).length>0&&receipt.response==null,'WORLD_RETRY_UNAVAILABLE',409);
+      diagnostics={...cloudWorldDiagnostics(receipt),taskId:previous.taskId};
+    }
+    return dto(await repo.retryWorld(validated.id,giftHash(token),ownerHash,requestKeyHash,{model:'marble-1.0'},diagnostics),token,ownerHash);
+  };
   const diagnoseWorld=async(id:string,token:string)=>{
     const job=await repo.get(uuid(id),giftHash(token)),expiry=job.expires_at?Date.parse(job.expires_at):NaN;
     ensure(job.state!=='expired'&&Number.isFinite(expiry)&&expiry>now(),'JOB_UNAVAILABLE',404);
@@ -172,7 +216,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       let stage=job.stages[selected];
       if(stage?.state==='submitting'||stage?.state==='submission_uncertain'){await save(job,'submission_uncertain');return {processed:true,state:'submission_uncertain'};}
       if(!stage){
-        assertEnabled();const images=await approvedInputs(job);verifyCloudSafety(job.document.photoSafety!,images);
+        const active=deps.settings();ensure(active.enabled&&active.providers[selected==='worldlabs'?'worldlabs':'tripo']&&deps.moderator.configured,'GENERATION_PAUSED',503);const images=await approvedInputs(job);verifyCloudSafety(job.document.photoSafety!,images);
         const provider=selected==='worldlabs'?'worldlabs':'tripo';await deps.providers.credit(provider,provider==='worldlabs'?1580:selected==='tripo'&&job.document.needsReference?60:100);
         let asset=selected==='tripo-reference'?job.assets.original:selected==='worldlabs'?(job.assets.world|| (job.document.photoIntent==='place'?job.assets.original:undefined)):job.assets.reference||job.assets.object||job.assets.original;
         if(selected==='tripo'&&job.document.needsReference){ensure(job.stages['tripo-reference']?.state==='completed'&&job.assets.reference&&job.document.objectSafety,'PHOTO_SAFETY_REQUIRED',503);const derived={id:'object' as const,mime:job.assets.reference.mime,bytes:await verifiedBytes(job.assets.reference),sha256:job.assets.reference.sha256};verifyCloudSafety(job.document.objectSafety!,[derived]);}
@@ -183,7 +227,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
         job.stages[selected]={...stage,state:'processing',taskId,progress:0};await save(job);return {processed:true,state:'processing'};
       }
       ensure(stage.taskId&&/^[A-Za-z0-9_-]{1,120}$/.test(stage.taskId),'SUBMISSION_AMBIGUOUS',409);ensure((stage.polls||0)<720,'JOB_EXPIRED',408);
-      const result=await deps.providers.poll(selected,stage.taskId);if(selected==='worldlabs'&&result.error!=null)console.error(JSON.stringify({event:'cloud_world_operation_failed',...cloudWorldDiagnostics(result)}));stage={...stage,polls:(stage.polls||0)+1,progress:typeof result.progress==='number'&&Number.isFinite(result.progress)?Math.max(stage.progress||0,Math.min(100,Math.max(0,result.progress))):stage.progress};job.stages[selected]=stage;
+      const result=await deps.providers.poll(selected,stage.taskId),worldFailure=selected==='worldlabs'&&result.error!=null&&(result.done===true||typeof result.error==='object'&&Object.keys(result.error).length>0);if(worldFailure)console.error(JSON.stringify({event:'cloud_world_operation_failed',...cloudWorldDiagnostics(result)}));stage={...stage,...(worldFailure?{diagnostics:cloudWorldDiagnostics(result)}:{}),polls:(stage.polls||0)+1,progress:typeof result.progress==='number'&&Number.isFinite(result.progress)?Math.max(stage.progress||0,Math.min(100,Math.max(0,result.progress))):stage.progress};job.stages[selected]=stage;
       const completed=await deps.providers.complete(selected,result);if(!completed){await save(job);return {processed:true,state:'processing'};}
       if(selected==='tripo-reference'){
         const reference=completed.assets.find(asset=>asset.key==='reference');ensure(reference,'PROVIDER_ASSET_INVALID',502);const image={id:'object' as const,mime:reference.mime,bytes:reference.bytes,sha256:reference.sha256,source:{id:'object',path:`${job.id}/moderation/${reference.sha256}.${extension(reference.mime)}`,mime:reference.mime,bytes:reference.bytes.length,sha256:reference.sha256},quarantine:true};const report=await deps.moderator.screen([image]);verifyCloudSafety(report,[image]);job.document={...job.document,objectSafety:report};
@@ -216,6 +260,6 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       return {processed:true,state:terminal?'failed':'processing',errorCode:code};
     }
   }
-  const advance=async(id:string,token:string)=>{const validated=await repo.get(uuid(id),giftHash(token));if(['queued','processing','submission_uncertain'].includes(validated.state))await tick(randomUUID(),validated.id);return get({id:validated.id,token});};
-  return {status,prepare,finalize,get,diagnoseWorld,advance,tick};
+  const advance=async(id:string,token:string,ownerHash?:string)=>{const validated=await repo.get(uuid(id),giftHash(token));if(['queued','processing','submission_uncertain'].includes(validated.state))await tick(randomUUID(),validated.id);return get({id:validated.id,token,ownerHash});};
+  return {status,prepare,finalize,get,diagnoseWorld,retryWorld,advance,tick};
 }

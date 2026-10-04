@@ -18,8 +18,9 @@ export interface GeneratedGiftData {
   objectRepresentation?: InstantObjectRepresentation; modelYaw?: number;
   curiosities?: readonly CuriosityFact[];
   worldSemantics?: { metricScaleFactor: number; groundPlaneOffset: number };
+  worldRetry?: { available: boolean; attempts: number };
 }
-export interface GeneratedGiftOptions { gift: GeneratedGiftData; initialView?: 'object' | 'world'; isCurrent(): boolean; onExit(): void; onShare?(): void; onCollection?(): void; onJourney?(): void; journeyLabel?: string; shareScope?: 'local' | 'cloud' }
+export interface GeneratedGiftOptions { gift: GeneratedGiftData; initialView?: 'object' | 'world'; isCurrent(): boolean; onExit(): void; onShare?(): void; onCollection?(): void; onJourney?(): void; onRetryWorld?(signal: AbortSignal): Promise<void>; worldRetryPending?: boolean; journeyLabel?: string; shareScope?: 'local' | 'cloud' }
 export interface GeneratedGiftHandle { destroy(): void }
 interface ObjectHandle { destroy(): void; reset(): void; rotate(delta: number): void; zoom(delta: number): void }
 type Phase = 'object' | 'world';
@@ -88,8 +89,7 @@ function storyPoints(gift: GeneratedGiftData): GeneratedGiftTouchpoint[] {
   ];
 }
 
-/** Display completed per-gift media. This controller performs no generation,
- * storage, account, sharing or physical-visit writes. */
+/** Display delivered per-gift media; world generation requires its explicit retry action. */
 export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOptions): GeneratedGiftHandle {
   const gift = options.gift, instance = ++sequence, points = storyPoints(gift), curiosities = giftCuriosities(gift);
   const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -101,6 +101,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   let pointReader: StoryReaderHandle | undefined, tourReader: StoryReaderHandle | undefined;
   let printPanel: { destroy(): void } | undefined, printPending = false, printEpoch = 0;
   let xrPanel: { destroy(): void } | undefined, xrPending = false, xrEpoch = 0, xrOwnsViewer = false;
+  let worldRetryAbort: AbortController | undefined;
   const worldAsset = gift.worldUrl || '';
   let plusCandidate = false;
   try {
@@ -127,7 +128,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   }
   function destroyViewer() { version++; destroyXR(); printEpoch++; printPending = false; printPanel?.destroy(); printPanel = undefined; pendingFocus = undefined; viewer?.destroy(); viewer = undefined; pointReader?.destroy(); tourReader?.destroy(); pointReader = undefined; tourReader = undefined; }
   function destroy() {
-    if (dead) return; dead = true; destroyViewer(); events.abort(); viewEvents.abort();
+    if (dead) return; dead = true; worldRetryAbort?.abort(); worldRetryAbort = undefined; destroyViewer(); events.abort(); viewEvents.abort();
     if (dialog.open) dialog.close(); dialog.remove();
     for (const saved of scrolling || []) { if (saved.value) saved.style.setProperty('overflow', saved.value, saved.priority); else saved.style.removeProperty('overflow'); }
     scrolling = undefined; if (opener?.isConnected) opener.focus({ preventScroll: true });
@@ -232,6 +233,27 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
       dialog.querySelector('[data-gg-point-title]')?.setAttribute('id', `gg-point-title-${instance}`);
       dialog.querySelector('[data-gg-point-reader] .story-reader-close')?.setAttribute('data-gg-hide-story', '');
       pointReader.update(readerData(points[0])); tourReader.update({ ...readerData(points[0]), closeLabel: 'Exit tour' });
+    }
+    if (phase === 'object' && !canEnterWorld() && !expired() && options.onRetryWorld) {
+      const unavailable = dialog.querySelector<HTMLElement>('[data-gg-world-unavailable]');
+      if (unavailable) {
+        const retry = document.createElement('div'); retry.className = 'gg-world-retry';
+        retry.innerHTML = `<button class="gg-quiet" type="button" data-gg-world-retry>${options.worldRetryPending ? 'Check world retry' : 'Try world again'}</button><small>A new attempt uses World Labs credits. Your photo, story and keepsake stay here.</small><p data-gg-world-retry-status role="status" aria-live="polite" hidden></p>`;
+        unavailable.after(retry);
+        listen('[data-gg-world-retry]', () => {
+          if (!active() || expired() || worldRetryAbort || !options.onRetryWorld) return;
+          const abort = new AbortController(); worldRetryAbort = abort;
+          const button = dialog.querySelector<HTMLButtonElement>('[data-gg-world-retry]')!, result = dialog.querySelector<HTMLElement>('[data-gg-world-retry-status]')!;
+          button.disabled = true; button.textContent = 'Requesting world…'; result.hidden = false; result.textContent = 'Requesting only the world. Your keepsake and story remain available.';
+          void options.onRetryWorld(abort.signal).catch(cause => {
+            if (!active() || abort.signal.aborted) return;
+            if (typeof cause === 'object' && cause !== null && 'worldRetryUnavailable' in cause && cause.worldRetryUnavailable === true) {
+              button.hidden = true; result.textContent = 'A world retry is unavailable for this gift right now. Reopen the gift to check its status.'; return;
+            }
+            button.textContent = 'Check world retry'; result.textContent = 'We could not confirm this retry. Check world retry to recover the same attempt.';
+          }).finally(() => { if (worldRetryAbort === abort) { worldRetryAbort = undefined; if (active()) button.disabled = false; } });
+        });
+      }
     }
     listen('[data-gg-exit]', exit);
     listen('[data-gg-share]', () => { if (active()) options.onShare?.(); });

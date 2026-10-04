@@ -42,6 +42,14 @@ test('partial and failed jobs stop polling; only a partial with a delivered keep
   assert.match(instantProviderLabel('tripo', 'processing'), /Sculpting/);
 });
 
+test('a world-only retry keeps the delivered souvenir usable while a first creation still waits for completion', () => {
+  const retry = { ...complete, state: 'processing', worldlabs: { state: 'processing' }, worldRetry: { available: false, attempts: 1 }, assets: { photoUrl: '/photo', modelUrl: '/gift.glb' } };
+  assert.equal(instantGiftReady(retry), true); assert.equal(instantWorldReady(retry), false); assert.equal(instantJobFinished(retry), false);
+  assert.equal(instantGiftReady({ ...retry, worldRetry: undefined }), false);
+  assert.equal(instantGiftReady({ ...retry, tripo: { state: 'processing' } }), false);
+  assert.equal(instantGiftReady({ ...retry, assets: { photoUrl: '/photo' } }), false);
+});
+
 test('terminal photo failures offer an honest next action while an uncertain submission stays uncertain', () => {
   const failed = code => ({ ...complete, state: 'failed', tripo: { state: 'failed', errorCode: code }, worldlabs: { state: 'failed', errorCode: code } });
   for (const code of ['PHOTO_SAFETY_BLOCKED', 'PHOTO_SAFETY_REVIEW_REQUIRED']) {

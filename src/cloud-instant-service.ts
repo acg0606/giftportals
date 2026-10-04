@@ -20,7 +20,7 @@ const diagnosticReasons: Record<WorldDiagnosticReason, string> = {
   'insufficient-credits': 'The world service reported insufficient credits for this creation.',
   'rate-limit': 'The world service reported too many requests.',
   'timeout': 'The world service reported that this creation took too long.',
-  'provider-internal': 'The world service reported an internal failure.',
+  'provider-internal': 'The world service reported an internal failure. Its internal cause is unknown.',
   unknown: 'The world service did not return a clear reason for this failure.',
 };
 const diagnosticCodes = new Set<WorldDiagnosticErrorCode>(['OK','CANCELLED','UNKNOWN','INVALID_ARGUMENT','DEADLINE_EXCEEDED','NOT_FOUND','ALREADY_EXISTS','PERMISSION_DENIED','RESOURCE_EXHAUSTED','FAILED_PRECONDITION','ABORTED','OUT_OF_RANGE','UNIMPLEMENTED','INTERNAL','UNAVAILABLE','DATA_LOSS','UNAUTHENTICATED']);
@@ -142,6 +142,11 @@ export function createCloudInstantService(fetcher: typeof fetch = fetch): Instan
   }
   return {
     status,
+    async retryWorld(reference: { id: string; token: string }, retryKey: string, signal: AbortSignal) {
+      checkOpen(signal);
+      if (!/^[A-Za-z0-9_-]{8,120}$/.test(reference.id) || !/^[A-Za-z0-9_-]{16,160}$/.test(reference.token) || !/^[A-Za-z0-9_-]{8,120}$/.test(retryKey)) throw new Error('This world retry could not be verified. Reopen the gift and try again.');
+      return request<InstantJob>('retry-world', signal, { id: reference.id, retryKey }, reference);
+    },
     async worldDiagnostics(reference: { id: string; token: string }, signal: AbortSignal) {
       checkOpen(signal);
       if (!/^[A-Za-z0-9_-]{8,120}$/.test(reference.id) || !/^[A-Za-z0-9_-]{16,160}$/.test(reference.token)) throw new Error('This world status could not be checked. Reopen the gift and try again.');

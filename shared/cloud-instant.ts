@@ -19,6 +19,7 @@ export interface CloudInstantJobDTO {
   photoIntent: 'object' | 'place'; objectRepresentation: 'original-object' | 'derived-object' | 'souvenir-miniature';
   createdAt: string; updatedAt: string; tripo: CloudStageDTO; worldlabs: CloudStageDTO; tripoReference?: CloudStageDTO;
   mediaExpiresAt?: number;
+  worldRetry?: { available: boolean; attempts: number };
   assets: { photoUrl: string; modelUrl?: string; worldUrl?: string; panoramaUrl?: string; tripoInputUrl?: string; colliderUrl?: string };
   generation: { tripo: Record<string, unknown>; worldlabs: Record<string, unknown> & { worldSemantics?: { metricScaleFactor: number; groundPlaneOffset: number } }; tripoReference?: Record<string, unknown> };
   curiosities?: import('./gift-curiosities.js').CuriosityFact[];

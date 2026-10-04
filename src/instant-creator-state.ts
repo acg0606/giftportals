@@ -26,6 +26,7 @@ export interface InstantJob {
   tripo: { state: InstantProviderState; progress?: number; taskId?: string; errorCode?: string };
   tripoReference?: { state: InstantProviderState; progress?: number; taskId?: string; errorCode?: string };
   worldlabs: { state: InstantProviderState; progress?: number; taskId?: string; errorCode?: string };
+  worldRetry?: { available: boolean; attempts: number };
   assets: { photoUrl: string; modelUrl?: string; worldUrl?: string; panoramaUrl?: string; tripoInputUrl?: string; colliderUrl?: string };
   title: string;
   story: string;
@@ -101,7 +102,7 @@ export function validateInstantPhoto(file: { type: string; size: number }, maxBy
 /** A terminal gift can open as soon as its real keepsake has been delivered,
  * including a partial creation whose world could not be made. */
 export function instantGiftReady(job: InstantJob): boolean {
-  return (job.state === 'completed' || job.state === 'partial') && instantModelReady(job);
+  return (job.state === 'completed' || job.state === 'partial' || job.state === 'processing' && Boolean(job.worldRetry && job.worldRetry.attempts > 0)) && instantModelReady(job);
 }
 
 export function instantModelReady(job: InstantJob): boolean {

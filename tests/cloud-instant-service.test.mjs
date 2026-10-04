@@ -45,6 +45,7 @@ function harness(options = {}) {
     if (action === 'finalize') return options.finalizeResponse?.(call, calls) || success(options.finalized || job(options.finalState || 'processing'));
     if (action === 'job') return options.jobResponse?.(call, calls) || success(options.job || job('completed'));
     if (action === 'world-diagnostics') return options.diagnosticsResponse?.(call, calls) || success(options.diagnostics || diagnostics());
+    if (action === 'retry-world') return options.retryResponse?.(call, calls) || success(options.retried || { ...job('processing'), tripo: { state: 'completed' }, worldlabs: { state: 'processing' }, worldRetry: { available: false, attempts: 1 }, assets: { photoUrl: '/photo', modelUrl: '/model' } });
     if (action === 'advance') return success(options.advanced || job('completed'));
     throw new Error(`Unexpected action ${action}`);
   };
@@ -54,6 +55,34 @@ function harness(options = {}) {
 test('cloud origin selection preserves localhost and enables normal remote hosts', () => {
   for (const host of ['', 'localhost', 'LOCALHOST', '127.0.0.1', '::1', '[::1]']) assert.equal(cloudCreatorOrigin(host), false);
   for (const host of ['giftportals.vercel.app', 'gifts.example']) assert.equal(cloudCreatorOrigin(host), true);
+});
+
+test('world-only retry posts its original capability and exact idempotency key without new gift or image uploads', async () => {
+  const transport = harness(), retryKey = 'one-explicit-world-attempt';
+  const result = await transport.service.retryWorld({ id, token }, retryKey, new AbortController().signal);
+  assert.equal(result.tripo.state, 'completed'); assert.equal(result.assets.modelUrl, '/model');
+  assert.deepEqual(transport.actions(), ['retry-world']);
+  const call = transport.calls[0];
+  assert.equal(call.method, 'POST'); assert.deepEqual(call.json, { id, retryKey });
+  assert.equal(call.headers['X-Instant-Token'], token); assert.equal(call.credentials, 'same-origin');
+  assert.equal(call.url.includes(token), false); assert.equal(call.body.includes(token), false);
+  assert.equal(call.referrerPolicy, 'no-referrer'); assert.equal(call.redirect, 'error');
+});
+
+test('an interrupted world retry is recovered with the same key, and invalid or closed requests never submit', async () => {
+  const retryKey = 'recover-the-existing-attempt';
+  const transport = harness({ retryResponse: (_call, calls) => { if (calls.length === 1) throw new TypeError('Response was lost'); return success(job('processing')); } });
+  await assert.rejects(transport.service.retryWorld({ id, token }, retryKey, new AbortController().signal));
+  await transport.service.retryWorld({ id, token }, retryKey, new AbortController().signal);
+  assert.deepEqual(transport.calls.map(call => call.json.retryKey), [retryKey, retryKey]);
+  for (const [reference, key] of [[{ id: '../invalid', token }, retryKey], [{ id, token: 'short' }, retryKey], [{ id, token }, '../invalid']]) {
+    const invalid = harness(); await assert.rejects(invalid.service.retryWorld(reference, key, new AbortController().signal), /verified/); assert.deepEqual(invalid.calls, []);
+  }
+  const abort = new AbortController(); abort.abort();
+  const closed = harness(); await assert.rejects(closed.service.retryWorld({ id, token }, retryKey, abort.signal), error => error.name === 'AbortError'); assert.deepEqual(closed.calls, []);
+  const inFlight = harness({ hang: 'retry-world' }), waiting = new AbortController();
+  const promise = inFlight.service.retryWorld({ id, token }, retryKey, waiting.signal); waiting.abort();
+  await assert.rejects(promise, error => error.name === 'AbortError'); assert.equal(inFlight.calls[0].signal.aborted, true);
 });
 
 test('world diagnostics reads only the existing capability job with one GET and never creates or advances', async () => {
