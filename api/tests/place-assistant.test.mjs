@@ -4,7 +4,7 @@ import {EventEmitter} from 'node:events';
 import {resolve} from 'node:path';
 import {createTSLoader,here} from './cloud-instant-test-loader.mjs';
 const load=createTSLoader(),a=await load(resolve(here,'_lib/place-assistant.ts'));
-const {createPlaceAssistantHandler}=await load(resolve(here,'place-assistant.ts'));
+const {createPlaceAssistantHandler,runtimeAssistantToken}=await load(resolve(here,'place-assistant.ts'));
 const photo='data:image/png;base64,'+Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]).toString('base64');
 const location={latitude:-23.610213,longitude:-46.640678,accuracyMeters:12,label:'São Paulo, Brasil'};
 const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
@@ -68,7 +68,7 @@ test('gateway requests use the verified vision model, bounded tokens, a fixed en
 test('credit exhaustion, rate limits and malformed generative output degrade without retries or lost original input',async()=>{
  for(const status of [402,429,500]){
   let calls=0;const service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async()=>{calls++;return new Response('{}',{status});}});
-  const value=await service.suggest({imageDataUrl:photo,photoConsent:true});assert.equal(value.provider,'template');assert.equal(value.photoAnalyzed,false);assert.ok(value.warnings.includes('PHOTO_ANALYSIS_UNAVAILABLE'));assert.equal(calls,1);
+  const value=await service.suggest({imageDataUrl:photo,photoConsent:true});assert.equal(value.provider,'template');assert.equal(value.photoAnalyzed,false);assert.ok(value.warnings.includes('PHOTO_ANALYSIS_UNAVAILABLE'));assert.equal(calls,1);assert.deepEqual(value.generationFailure,{code:status===402?'CREDIT_LIMIT':status===429?'RATE_LIMIT':'PROVIDER_REJECTED',status});
  }
  const invalid=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async()=>json({choices:[{message:{content:'{"title":"Not a valid story"}'}}]})});
  assert.equal((await invalid.suggest({imageDataUrl:photo,photoConsent:true})).photoAnalyzed,false);
@@ -106,4 +106,43 @@ test('public source failures and a mismatched distant article cannot become a ve
  const unavailable=a.createPlaceAssistant({gatewayToken:noToken,fetch:async()=>new Response('{}',{status:429})});
  const fallback=await unavailable.suggest({location,locationConsent:true});
  assert.deepEqual(fallback.places,[]);assert.deepEqual(fallback.curiosities,[]);assert.ok(fallback.warnings.includes('PLACE_LOOKUP_UNAVAILABLE'));assert.ok(fallback.warnings.includes('CURIOSITY_LOOKUP_UNAVAILABLE'));assert.equal(fallback.provider,'template');
+});
+
+test('runtime OIDC reaches status and suggest only on the trusted Vercel cloud host; local spoofing and malformed headers are ignored',async()=>{
+ const oldVercel=process.env.VERCEL,oldOrigin=process.env.GIFTPORTALS_CLOUD_ORIGIN;
+ const token='synthetic_header.synthetic_payload.synthetic_signature';
+ try{
+  process.env.GIFTPORTALS_CLOUD_ORIGIN='https://giftportals.vercel.app';
+  const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async()=>{throw Error('unexpected-network');}});
+  const handler=createPlaceAssistantHandler(service);
+  const headers={host:'giftportals.vercel.app',origin:'https://giftportals.vercel.app','content-type':'application/json','sec-fetch-site':'same-origin','x-vercel-oidc-token':token};
+  delete process.env.VERCEL;
+  assert.equal(runtimeAssistantToken(request({headers})),undefined);
+  process.env.VERCEL='1';
+  assert.equal(runtimeAssistantToken(request()),undefined);
+  assert.equal(runtimeAssistantToken(request({headers:{...headers,'x-vercel-oidc-token':'not-a-jwt'}})),undefined);
+  assert.equal(runtimeAssistantToken(request({headers:{...headers,'x-vercel-oidc-token':['a','b']}})),undefined);
+  assert.equal(runtimeAssistantToken(request({headers:{...headers,'x-vercel-oidc-token':'a'.repeat(17000)}})),undefined);
+  assert.equal(runtimeAssistantToken(request({headers:{...request().headers,'x-vercel-oidc-token':token}})),undefined);
+  const output=response();await handler(request({url:'/api/place-assistant?action=status',method:'GET',headers}),output);
+  assert.equal(output.body.data.photoAnalysisAvailable,true);assert.equal(output.body.data.provider,'vercel');assert.ok(!JSON.stringify(output.body).includes(token));
+  let usedToken;const injected=createPlaceAssistantHandler({status:service.status,suggest:async(_body,_signal,value)=>{usedToken=value;return{provider:'vercel'};}});
+  const post=response();await injected(request({headers}),post);assert.equal(usedToken,token);assert.ok(!JSON.stringify(post.body).includes(token));
+  assert.equal(service.status().photoAnalysisAvailable,false);
+ }finally{if(oldVercel===undefined)delete process.env.VERCEL;else process.env.VERCEL=oldVercel;if(oldOrigin===undefined)delete process.env.GIFTPORTALS_CLOUD_ORIGIN;else process.env.GIFTPORTALS_CLOUD_ORIGIN=oldOrigin;}
+});
+
+test('overlapping requests retain their own runtime token after asynchronous place lookup',async()=>{
+ let releaseLookup,lookupStarted;const waiting=new Promise(r=>{releaseLookup=r;}),started=new Promise(r=>{lookupStarted=r;});
+ const used=[];
+ const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async(url,init)=>{
+  if(String(url).includes('overpass')){lookupStarted();await waiting;return json(places);}
+  if(String(url).includes('wikipedia')){await waiting;return json(facts);}
+  used.push(init.headers.Authorization);return json({choices:[{message:{content:JSON.stringify(gatewayResult)}}]});
+ }});
+ const first=service.suggest({imageDataUrl:photo,photoConsent:true,location,locationConsent:true,placeName:'Praça sintética'},undefined,'synthetic-token-A');
+ await started;
+ const second=await service.suggest({imageDataUrl:photo,photoConsent:true},undefined,'synthetic-token-B');
+ assert.equal(second.photoAnalyzed,true);releaseLookup();assert.equal((await first).photoAnalyzed,true);
+ assert.deepEqual(used,['Bearer synthetic-token-B','Bearer synthetic-token-A']);assert.equal(service.status().photoAnalysisAvailable,false);
 });

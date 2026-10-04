@@ -517,7 +517,13 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     readyLink.hidden = !readyHref;
     if (readyHref) readyLink.setAttribute('href', readyHref); else readyLink.removeAttribute('href');
     const defaults = next instanceof File ? { worldPrompt: '', title: '', story: '' } : { worldPrompt: next.worldPrompt, title: `${next.title}, for you`, story: next.story || '' };
-    if (!keepWords) for (const name of ['worldPrompt', 'title', 'story'] as const) if (!editedWords.has(name)) { field(name).value = defaults[name]; if (name === 'worldPrompt') appliedPlaceSentence = ''; }
+    if (!keepWords) for (const name of ['worldPrompt', 'title', 'story'] as const) if (!editedWords.has(name)) {
+      field(name).value = defaults[name];
+      // Catalog copy is an automatic starting point. Explicit Use/Write my own
+      // may replace or clear it until the person takes ownership by editing.
+      if (defaults[name]) assistantWords.set(name, defaults[name]);
+      if (name === 'worldPrompt') appliedPlaceSentence = '';
+    }
     if (next instanceof File) { previewUrl = URL.createObjectURL(next); image.src = previewUrl; text('[data-instant-source-name]', next.name || 'Your photo'); }
     else { image.src = next.imageUrl; text('[data-instant-source-name]', next.title); giftCuriosities?.preset({ objectHint: next.objectHint, regionId: next.regionId, factIds: next.curiosityIds || [], story: next.story || 'A little inspiration, ready for your own story.' }); }
     host.querySelector<HTMLElement>('[data-instant-selected]')!.hidden = false;

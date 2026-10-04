@@ -4,9 +4,18 @@ import {AppError,ensure,secretMatches} from './_lib/rules.js';
 import {createPlaceAssistant,MAX_ASSISTANT_BODY_BYTES} from './_lib/place-assistant.js';
 export const config={maxDuration:60};
 type Request=IncomingMessage&{body?:unknown};
-const key=Symbol.for('giftportals.place-assistant.v10.2');
+const key=Symbol.for('giftportals.place-assistant.v10.2.runtime-oidc');
 const shared=globalThis as typeof globalThis&{[key]?:ReturnType<typeof createPlaceAssistant>};
 const adapter=shared[key] ||= createPlaceAssistant();
+/** Vercel injects this header into function requests; callers outside that runtime cannot supply credentials. */
+export function runtimeAssistantToken(req:Request):string|undefined{
+ if(process.env.VERCEL!=='1')return;
+ let origin:URL;try{origin=new URL(process.env.GIFTPORTALS_CLOUD_ORIGIN||'');}catch{return;}
+ if(origin.protocol!=='https:'||req.headers.host!==origin.host)return;
+ const raw=req.headers['x-vercel-oidc-token'];
+ if(typeof raw!=='string'||raw.length<24||raw.length>16384||!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(raw))return;
+ return raw;
+}
 export function assertAssistantOrigin(req:Request){
  const host=req.headers.host;
  ensure(typeof host==='string','ORIGIN_DENIED',403);
@@ -38,7 +47,7 @@ export function createPlaceAssistantHandler(service=adapter){
   try{
    assertAssistantOrigin(req);
    const action=new URL(req.url||'/api/place-assistant','http://localhost').searchParams.get('action')||'status';let data;
-   if(action==='status'){ensure(req.method==='GET','METHOD_NOT_ALLOWED',405);data=service.status();}
+   if(action==='status'){ensure(req.method==='GET','METHOD_NOT_ALLOWED',405);data=service.status(runtimeAssistantToken(req));}
    else if(action==='suggest'){
     ensure(req.method==='POST','METHOD_NOT_ALLOWED',405);const body=parseBody(req);
     const now=Date.now(),peer=String(req.headers['x-vercel-forwarded-for']||req.socket?.remoteAddress||'unknown');
@@ -52,7 +61,7 @@ export function createPlaceAssistantHandler(service=adapter){
     if(quotas.size>=512){for(const [id,v]of quotas){if(now-v.at>=10*60*1000)quotas.delete(id);}if(quotas.size>=512)throw new AppError('ASSISTANT_RATE_LIMIT',429);}
     for(const id of ids){const v=quotas.get(id);ensure(!v||now-v.at>=10*60*1000||v.count<12,'ASSISTANT_RATE_LIMIT',429);}
     for(const id of ids){const v=quotas.get(id);quotas.set(id,v&&now-v.at<10*60*1000?{at:v.at,count:v.count+1}:{at:now,count:1});}
-    data=await service.suggest(body,controller.signal);
+    data=await service.suggest(body,controller.signal,runtimeAssistantToken(req));
    }else throw new AppError('ACTION_UNAVAILABLE',404);
    if(!controller.signal.aborted&&!res.destroyed){res.statusCode=200;res.end(JSON.stringify({ok:true,data}));}
   }catch(error){

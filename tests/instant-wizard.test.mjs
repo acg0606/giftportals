@@ -444,6 +444,39 @@ test('an async suggestion and Use never replace manually written title, world or
   }, { photoAvailable: true, assistHandler: () => new Promise(resolve => { finish = resolve; }) });
 });
 
+test('Use replaces untouched catalog defaults after a place suggestion while manual fields keep their own words', async () => {
+  for (const manual of [false, true]) await fixture(async state => {
+    state.find('[data-instant-example="paris"]').click();
+    const defaults = Object.fromEntries(['title', 'worldPrompt', 'story'].map(name => [name, state.field(name).value]));
+    assert.match(defaults.title, /Paris/);
+    state.edit('assistantPlace', 'Praça Américo Portugal Gouvêa');
+    if (manual) state.edit('story', 'Minha história pessoal.');
+    state.find('[data-assistant-suggest]').click(); await flush();
+    assert.equal(state.field('title').value, defaults.title, 'A suggestion preserves defaults until explicit Use');
+    assert.equal(state.field('worldPrompt').value, defaults.worldPrompt);
+    assert.equal(state.field('story').value, manual ? 'Minha história pessoal.' : defaults.story);
+    state.find('[data-assistant-use]').click();
+    assert.equal(state.field('title').value, state.suggestion.title);
+    assert.equal(state.field('worldPrompt').value, state.suggestion.worldPrompt);
+    assert.equal(state.field('story').value, manual ? 'Minha história pessoal.' : state.suggestion.story);
+  }, { suggestion: plazaSuggestion });
+});
+
+test('Write my own clears untouched catalog defaults and preserves every manually edited field', async () => {
+  for (const manual of [false, true]) await fixture(async state => {
+    state.find('[data-instant-example="paris"]').click();
+    state.edit('assistantPlace', 'Praça Américo Portugal Gouvêa');
+    if (manual) {
+      state.edit('title', 'Meu presente'); state.edit('worldPrompt', 'Meu lugar descrito por mim.'); state.edit('story', 'Minha história pessoal.');
+    }
+    state.find('[data-assistant-suggest]').click(); await flush(); state.find('[data-assistant-own]').click();
+    assert.equal(state.field('title').value, manual ? 'Meu presente' : '');
+    assert.equal(state.field('worldPrompt').value, manual ? 'Meu lugar descrito por mim.' : '');
+    assert.equal(state.field('story').value, manual ? 'Minha história pessoal.' : '');
+    assert.equal(state.focus.at(-1), 'instant-story');
+  }, { suggestion: plazaSuggestion });
+});
+
 test('changing the photo or leaving the route aborts interpretation and ignores an old response', async () => {
   for (const retire of ['photo', 'route']) {
     let finish;

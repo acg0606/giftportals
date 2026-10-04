@@ -22,7 +22,7 @@ The existing production configuration contained Tripo and World Labs credentials
 
 ## Verification
 
-The complete automated suite passed: **816 tests, zero failures**, using `node --test --test-concurrency=1 tests/*.test.mjs api/tests/*.test.mjs` (41.4 seconds). Frontend and strict server TypeScript checks and the production Vite build passed.
+The complete automated suite passed: **816 tests, zero failures**, using `node --test --test-concurrency=1 tests/*.test.mjs api/tests/*.test.mjs` (41.4 seconds). Frontend and strict server TypeScript checks and the production Vite build passed. Follow-up regression checks also cover request-scoped Vercel runtime OIDC tokens and replacing or clearing catalog defaults through the author's explicit suggestion controls.
 
 - TypeScript checks for frontend and server, and a production Vite build.
 - Automated tests covering completion, restoration, owner isolation, direct opening, place maps, consent, stale requests, edited fields and sourced details.
@@ -31,6 +31,8 @@ The complete automated suite passed: **816 tests, zero failures**, using `node -
 
 The isolated 390-pixel mobile browser confirmed immediate collection registration before Open gift, a second gift without losing the first, desk and My Memories after reload, zero object selectors and no page errors. The assistant browser checks covered photo permission, explicit POI confirmation without turning location inclusion on, opt-out cleanup of automatic words, preservation of manual words, sourced details added only by the author, rejected source URLs, stale photo replies and a service failure that still permits creation. Generation and GPS in these browser checks used controlled fixtures.
 
-Production publication and live provider availability are recorded separately after deployment; the runtime status flag alone is not proof that an image was interpreted.
+The first production deployment, `28ffe9357e881aba9b0ae24b82399967e54f1d30`, reached READY at `giftportals.vercel.app`. Real public-service lookup returned five OpenStreetMap candidates and a Wikipedia detail for a public Paris test point; the named São Paulo square returned its municipal curiosity. The production browser rendered actual street tiles and the editable sourced curiosity. This lookup used a synthetic location fixture, not the user's GPS. A [production street-map screenshot](evidence/v10_2-street-map.jpg) records the visible result.
+
+The first photo smoke identified that Vercel supplies a function's OIDC credential through the `x-vercel-oidc-token` request header; the environment token is for build/development contexts. The follow-up passes that credential only within the current trusted Vercel request, never through mutable shared state or back to the browser. Live photo availability must be confirmed by a successful photo smoke, rather than the runtime status flag alone.
 
 Physical XR, printing and sponsor-hardware validation retain their prior limits in `V10-SPONSOR-AUDIT.md`.
