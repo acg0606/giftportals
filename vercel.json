@@ -9,6 +9,7 @@
     "api/instant-cloud.ts": { "maxDuration": 180 },
     "api/instant-cloud-tick.ts": { "maxDuration": 180 },
     "api/instant-cloud-retention.ts": { "maxDuration": 60 },
+    "api/place-assistant.ts": { "maxDuration": 60 },
     "api/cloud-vision.py": {
       "maxDuration": 120,
       "includeFiles": "{server/cloud_vision_*.py,api/_lib/cloud-vision-*.json,api/_vision_models/**}",

@@ -11,6 +11,9 @@ import { INSTANT_WIZARD_STEPS, appendInstantTranscript, instantDefaultWorldPromp
 import { mountStoryAudio } from './story-audio';
 import { giftIcon } from './gift-icon';
 import type { CloudImageId } from '../shared/cloud-instant';
+import { instantJobStorageKey, instantPendingStorageKey } from './local-keepsakes';
+import { assistantSourceUrl, assistantWarningCopy, placeAssistantService, type PlaceAssistantService } from './place-assistant-client';
+import type { PlaceAssistantInput, PlaceAssistantStatus, PlaceAssistantSuggestion } from '../shared/place-assistant';
 
 export type { InstantCreateInput, InstantJob, InstantStatus } from './instant-creator-state';
 export type InstantJobReference = { id: string; token: string } | { dedupeKey: string; token: string };
@@ -26,8 +29,11 @@ export interface InstantCreatorOptions {
   isCurrent(): boolean;
   onHome(): void;
   onGiftReady(job: InstantJob): void;
+  onGiftCompleted?(job: InstantJob): void;
   onExploreExample?(): void;
+  storageScope?: string;
   service?: InstantCreatorService;
+  assistantService?: PlaceAssistantService;
 }
 export interface InstantCreatorHandle { destroy(): void }
 
@@ -47,12 +53,11 @@ export function instantReadyGiftHref(example: Pick<InstantExample, 'id' | 'ready
 }
 
 const esc = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
-const storageKey = 'giftportals.instant.job.v1';
-const pendingStorageKey = 'giftportals.instant.pending.v1';
+const legacyStorageKey = 'giftportals.instant.job.v1';
+const legacyPendingStorageKey = 'giftportals.instant.pending.v1';
 const cameraIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 5.5 9.5 3h5L16 5.5h4a1 1 0 0 1 1 1V20H3V6.5a1 1 0 0 1 1-1h4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="4" stroke="currentColor" stroke-width="1.5"/></svg>';
 const uploadIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5M4 15v6h16v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const objectIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Zm0 0v10m0 8v-8m-9-5 9 5 9-5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
-const placeIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.4"/><circle cx="16.5" cy="7.5" r="1.5" stroke="currentColor" stroke-width="1.4"/><path d="m3 17 6-7 6 7 3-3 3 3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
 const pinIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.5" stroke="currentColor" stroke-width="1.6"/></svg>';
 const storyIcon = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M21 4H3v13h4v4l5-4h9V4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 8h10M7 12h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 const stepIcons: Record<InstantWizardStep, string> = { photo: cameraIcon, place: pinIcon, story: storyIcon, review: giftIcon };
@@ -108,20 +113,20 @@ function fileDataUrl(file: File, signal: AbortSignal): Promise<string> {
 }
 
 /** Camera originals are resized and reencoded; embedded photo metadata is not sent. */
-async function preparedPhoto(file: File, signal: AbortSignal): Promise<File> {
+async function preparedPhoto(file: File, signal: AbortSignal, maxBytes = 3 * 1024 * 1024, longestEdge = 1600): Promise<File> {
   if (signal.aborted) throw new DOMException('The photo request was closed.', 'AbortError');
   let bitmap: ImageBitmap;
   try { bitmap = await createImageBitmap(file); } catch { throw new Error('This photo could not be opened. Choose a different JPG, PNG, or WebP image.'); }
   try {
     if (signal.aborted) throw new DOMException('The photo request was closed.', 'AbortError');
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, longestEdge / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     const context = canvas.getContext('2d'); if (!context) throw new Error('This browser could not prepare your photo. Try another browser.');
     context.fillStyle = '#f7f4ec'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Your photo could not be prepared. Choose another image.')), 'image/jpeg', .86));
     if (signal.aborted) throw new DOMException('The photo request was closed.', 'AbortError');
     const ready = new File([blob], file.name.replace(/\.[^.]*$/, '') + '.jpg', { type: 'image/jpeg' });
-    const issue = validateInstantPhoto(ready, 3 * 1024 * 1024); if (issue) throw new Error(issue);
+    const issue = validateInstantPhoto(ready, maxBytes); if (issue) throw new Error(issue);
     return ready;
   } finally { bitmap.close(); }
 }
@@ -134,10 +139,26 @@ function newRequestToken(): string {
 /** Starts from a photo, with no account step. Every generation state comes from the real service. */
 export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOptions): InstantCreatorHandle {
   const service = options.service || instantCreatorService;
+  const assistant = options.assistantService || placeAssistantService;
+  const storageScope = options.storageScope || 'anonymous';
+  const storageKey = instantJobStorageKey(storageScope), pendingStorageKey = instantPendingStorageKey(storageScope);
+  // Anonymous drafts may move into the new anonymous namespace. An account
+  // never adopts unscoped drafts left by another person in this browser.
+  if (storageScope === 'anonymous') {
+    try {
+      for (const [legacy, scoped] of [[legacyStorageKey, storageKey], [legacyPendingStorageKey, pendingStorageKey]]) {
+        const saved = sessionStorage.getItem(legacy);
+        if (saved && !sessionStorage.getItem(scoped)) sessionStorage.setItem(scoped, saved);
+        sessionStorage.removeItem(legacy);
+      }
+    } catch { /* In-place creation remains available without storage. */ }
+  }
   const events = new AbortController();
+  const reportedComplete = new Set<string>();
   let dead = false, submitting = false, readingSource = false, status: InstantStatus | null = null, currentJob: InstantJob | null = null;
   let source: File | InstantExample | null = null, placePhoto: File | null = null, previewUrl: string | null = null, placePreviewUrl: string | null = null;
-  let pollTimer: number | undefined, dedupeKey = '', requestToken = '', sourceEpoch = 0, intent: InstantPhotoIntent = 'object';
+  let pollTimer: number | undefined, dedupeKey = '', requestToken = '', sourceEpoch = 0;
+  const intent: InstantPhotoIntent = 'place';
   let previewViewer: { destroy(): void; reset(): void; setWireframe(enabled: boolean): void; setAutoRotate(enabled: boolean): void } | undefined, previewOpen = false, previewAttempt = 0;
   let attemptedModel = '', revealTimer: number | undefined;
   let cameraDialog: { destroy(): void } | undefined, cameraAttempt = 0;
@@ -145,9 +166,18 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   let step: InstantWizardStep = 'photo', confirmingJob = false, recoveringUpload = false;
   let pendingReference: InstantJobReference | null = null;
   const editedWords = new Set<string>();
+  const assistantWords = new Map<string, string>();
+  const automaticPlaceWords = new Map<string, string>();
+  let assistantStatus: PlaceAssistantStatus | undefined, suggestion: PlaceAssistantSuggestion | undefined;
+  let assistantAbort: AbortController | undefined, assistantEpoch = 0, assistantBusy = false, lookupKey = '';
+  let suggestionUsesLocation = false;
+  let confirmedPlaceLabel = '', suggestionTarget = '';
+  let photoInterpretation: { description: string; provider: string } | undefined;
+  const curiosityEdits = new Map<string, string>();
   const active = () => !dead && host.isConnected && options.isCurrent();
   const examples = () => instantIntentExamples(INSTANT_EXAMPLES, intent);
   host.className = 'instant-creator';
+  host.dataset.photoIntent = intent;
   host.innerHTML = `<header class="instant-topline"><a href="#/home" class="instant-brand" aria-label="GiftPortals home"><img src="/assets/portal-dusk/brand-mark.png" alt=""/>GiftPortals</a><button type="button" class="instant-back" data-instant-home>Back</button></header>
     <main class="instant-layout">
       <section class="instant-intro" aria-labelledby="instant-title"><span class="instant-eyebrow">A LITTLE THING. A WHOLE WORLD.</span><h1 id="instant-title"><span class="instant-title-gift" aria-hidden="true">${giftIcon}</span>What will you<br/>turn into a gift?</h1><p>A photo becomes a keepsake.<br/>Your story becomes a place they can step into.</p><div class="instant-art" aria-hidden="true"><img class="instant-art-bg" src="/assets/portal-dusk/welcome-bg.webp" alt=""/><img class="instant-art-object" src="/assets/portal-dusk/rio-keepsake.png" alt=""/></div><p class="instant-intro-foot">Made with Tripo + World Labs.</p></section>
@@ -155,18 +185,18 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
         <form data-instant-form novalidate>
           <nav class="instant-wizard-progress" aria-label="Gift creation steps"><ol>${INSTANT_WIZARD_STEPS.map((name, index) => `<li data-instant-step-marker="${name}"><span aria-hidden="true">${stepIcons[name]}</span><strong>${index + 1}. ${name === 'photo' ? 'Photo' : name === 'place' ? 'Place' : name === 'story' ? 'Story' : 'Review'}</strong></li>`).join('')}</ol><p data-instant-step-status role="status" aria-live="polite">Step 1 of 4 · Photo</p></nav>
           <fieldset class="instant-inputs" data-instant-inputs><legend class="instant-sr-only">Your gift and the place inside</legend>
-            <section class="instant-source instant-wizard-card" data-instant-step="photo" aria-labelledby="instant-photo-heading"><div class="instant-section-heading"><span class="instant-step" aria-hidden="true">${cameraIcon}</span><h2 id="instant-photo-heading" tabindex="-1">Start with something small.</h2></div><p data-instant-photo-hint>One clear photo of an object you love.</p>
-              <div class="instant-intents" role="group" aria-label="What is in your photo?"><button type="button" data-instant-intent="object" aria-pressed="true">${objectIcon}<span><strong>An object</strong><small>Make a keepsake</small></span></button><button type="button" data-instant-intent="place" aria-pressed="false">${placeIcon}<span><strong>A place</strong><small>Make a miniature</small></span></button></div>
+            <section class="instant-source instant-wizard-card" data-instant-step="photo" aria-labelledby="instant-photo-heading"><div class="instant-section-heading"><span class="instant-step" aria-hidden="true">${cameraIcon}</span><h2 id="instant-photo-heading" tabindex="-1">Start with a photo you love.</h2></div><p data-instant-photo-hint>Your photo becomes a little 3D souvenir and a world to explore.</p>
               <div class="instant-upload"><button type="button" class="instant-camera" data-instant-camera>${cameraIcon}<span>Take a photo</span></button><button type="button" class="instant-upload-button" data-instant-upload>${uploadIcon}<span>Choose a photo</span></button></div>
               <input class="instant-sr-only" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose your gift photo" data-instant-upload-file tabindex="-1"/>
-              <div class="instant-selected" data-instant-selected hidden><img data-instant-photo alt="Your selected gift photo"/><span><strong data-instant-source-name></strong><small data-instant-source-hint>A photo to turn into your 3D keepsake.</small><a class="instant-ready-example" data-instant-ready-example hidden>${giftIcon}Explore this gift <span aria-hidden="true">↗</span></a></span><button type="button" data-instant-change aria-label="Choose a different gift photo">Change</button></div>
-              <div class="instant-examples"><span>Or start with a little inspiration</span><nav class="instant-example-categories" aria-label="Inspiration categories"><button type="button" data-instant-catalog="cities" aria-pressed="false">${placeIcon}<span>Cities <small>5</small></span></button><button type="button" data-instant-catalog="objects" aria-pressed="true">${objectIcon}<span>Human ingenuity <small>5</small></span></button></nav><p class="instant-example-caption" data-instant-example-caption>Original artistic references · choose one to make it yours</p><div class="instant-example-navigation"><span>Explore all 5</span><div><button type="button" data-instant-examples-prev aria-label="Previous examples" title="Previous examples">${exampleChevron(false)}</button><button type="button" data-instant-examples-next aria-label="More examples" title="More examples">${exampleChevron(true)}</button></div></div><div data-instant-examples aria-label="Choose an inspiration"></div></div>
+              <div class="instant-selected" data-instant-selected hidden><img data-instant-photo alt="Your selected gift photo"/><span><strong data-instant-source-name></strong><small data-instant-source-hint>Your photo, made into a small 3D souvenir.</small><a class="instant-ready-example" data-instant-ready-example hidden>${giftIcon}Explore this gift <span aria-hidden="true">↗</span></a></span><button type="button" data-instant-change aria-label="Choose a different gift photo">Change</button></div>
+              <section class="instant-assistant-photo" data-assistant-photo hidden aria-label="Photo interpretation"><p data-assistant-photo-availability role="status">Checking photo interpretation…</p><label class="instant-consent" data-assistant-photo-consent-label hidden><input type="checkbox" name="photoAnalysisConsent" data-assistant-photo-consent/><span data-assistant-photo-consent-copy></span></label><button type="button" class="instant-secondary" data-assistant-analyze disabled>Interpret my photo</button><p class="instant-hint" data-assistant-photo-description hidden></p></section>
+              <div class="instant-examples"><span>Or start with a little inspiration</span><p class="instant-example-caption" data-instant-example-caption>Places to remember · choose one to make it yours</p><div class="instant-example-navigation"><span>Explore all 5</span><div><button type="button" data-instant-examples-prev aria-label="Previous examples" title="Previous examples">${exampleChevron(false)}</button><button type="button" data-instant-examples-next aria-label="More examples" title="More examples">${exampleChevron(true)}</button></div></div><div data-instant-examples aria-label="Choose an inspiration"></div></div>
             </section>
-            <section class="instant-story instant-wizard-card" data-instant-step="place" hidden aria-labelledby="instant-world-heading"><div class="instant-section-heading"><span class="instant-step" aria-hidden="true">${pinIcon}</span><h2 id="instant-world-heading" tabindex="-1">A place to step into.</h2></div><p class="instant-card-copy">Optional. Choose a place, or continue with our gentle setting.</p><div data-instant-context></div><details class="instant-place-custom"><summary>Customize the world <span>optional</span></summary><div><label class="instant-field" for="instant-world">The place inside<textarea id="instant-world" name="worldPrompt" maxlength="1600" rows="3" placeholder="A quiet garden at dusk, warm lanterns, a little bench by the water…"></textarea></label><small class="instant-hint">Your photo and this description guide its imagined world.</small>
+            <section class="instant-story instant-wizard-card" data-instant-step="place" hidden aria-labelledby="instant-world-heading"><div class="instant-section-heading"><span class="instant-step" aria-hidden="true">${pinIcon}</span><h2 id="instant-world-heading" tabindex="-1">A place to step into.</h2></div><p class="instant-card-copy">Optional. Choose a place, or continue with our gentle setting.</p><div data-instant-context></div><section class="instant-assistant-place" aria-label="Place suggestions"><label class="instant-field" for="instant-place-search">Find a place or landmark<input id="instant-place-search" name="assistantPlace" maxlength="160" placeholder="A square, park, museum, or address…"/></label><button type="button" class="instant-secondary" data-assistant-suggest>Suggest a place &amp; story</button><p class="instant-hint">Search uses OpenStreetMap and Wikipedia. Nearby places are suggestions; confirm the right one.</p><p data-assistant-status role="status" aria-live="polite"></p><div class="instant-assistant-places" data-assistant-places hidden></div></section><details class="instant-place-custom"><summary>Customize the world <span>optional</span></summary><div><label class="instant-field" for="instant-world">The place inside<textarea id="instant-world" name="worldPrompt" maxlength="1600" rows="3" placeholder="A quiet garden at dusk, warm lanterns, a little bench by the water…"></textarea></label><small class="instant-hint">Your photo and this description guide its imagined world.</small>
               <div class="instant-place-reference"><button type="button" data-instant-place-upload>${uploadIcon}<span>Add a place photo <small>optional</small></span></button><input class="instant-sr-only" type="file" accept="image/jpeg,image/png,image/webp" data-instant-place-file aria-label="Choose an optional place photo" tabindex="-1"/><div data-instant-place-selected hidden><img data-instant-place-photo alt="Your optional place reference"/><span data-instant-place-name></span><button type="button" data-instant-place-remove aria-label="Remove place photo">Remove</button></div></div>
               </div></details>
             </section>
-            <section class="instant-story instant-wizard-card" data-instant-step="story" hidden aria-labelledby="instant-story-heading"><div class="instant-section-heading"><span class="instant-step" aria-hidden="true">${storyIcon}</span><h2 id="instant-story-heading" tabindex="-1">What makes it yours?</h2></div><p class="instant-card-copy">Optional. Write a memory, tell it in your own voice, or keep it simple.</p><div data-instant-audio></div><label class="instant-field" for="instant-story">The story waiting inside<textarea id="instant-story" name="story" maxlength="1200" rows="3" placeholder="Tell them what makes this moment yours."></textarea></label>
+            <section class="instant-story instant-wizard-card" data-instant-step="story" hidden aria-labelledby="instant-story-heading"><div class="instant-section-heading"><span class="instant-step" aria-hidden="true">${storyIcon}</span><h2 id="instant-story-heading" tabindex="-1">What makes it yours?</h2></div><p class="instant-card-copy">Optional. Write a memory, tell it in your own voice, or keep it simple.</p><section class="instant-assistant-story" data-assistant-story hidden aria-label="Suggested memory"><h3>A starting point for your memory</h3><strong data-assistant-title></strong><p data-assistant-story-copy></p><small data-assistant-provenance></small><div class="instant-assistant-actions"><button type="button" data-assistant-use>Use these words</button><button type="button" data-assistant-edit>Edit</button><button type="button" data-assistant-own>Write my own</button><button type="button" data-assistant-regenerate>Refresh suggestions</button></div><small data-assistant-location-note hidden>Using these words includes the place name in your gift. Coordinates stay on this page.</small><div class="instant-assistant-facts" data-assistant-facts hidden></div><p data-assistant-warnings></p></section><div data-instant-audio></div><label class="instant-field" for="instant-story">The story waiting inside<textarea id="instant-story" name="story" maxlength="1200" rows="3" placeholder="Tell them what makes this moment yours."></textarea></label>
               <details class="instant-personal"><summary>${giftIcon}Gift name &amp; personal note <span>optional</span></summary><div><label class="instant-field" for="instant-name">Name your gift<input id="instant-name" name="title" maxlength="120" value="A little world for you" required/></label><div class="instant-names"><label class="instant-field" for="instant-from">From<input id="instant-from" name="senderName" maxlength="80" placeholder="Your name" autocomplete="given-name"/></label><label class="instant-field" for="instant-to">To<input id="instant-to" name="recipientName" maxlength="80" placeholder="Someone special" autocomplete="off"/></label></div><label class="instant-field" for="instant-note">A note on the gift<textarea id="instant-note" name="dedication" maxlength="280" rows="2" placeholder="This made me think of you."></textarea></label></div></details>
               <details class="instant-curiosity-panel"><summary>Add a curiosity <span>optional</span></summary><div data-instant-curiosities></div></details>
             </section>
@@ -205,10 +235,27 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   let giftCuriosities:GiftCuriositiesHandle|undefined;
   const giftContext = mountGiftContext(host.querySelector<HTMLElement>('[data-instant-context]')!, {
     presentation: 'step',
+    lookupPlaces: true,
     cities: CURIOSITY_REGIONS,
     onChange: context => {
       if (submitting || currentJob || pendingReference) return; changeKey();giftCuriosities?.refreshRegion();
       if (!context.includeInStory && appliedPlaceSentence) { const merged = giftPlacePrompt(field('worldPrompt').value, '', appliedPlaceSentence); field('worldPrompt').value = merged.prompt; appliedPlaceSentence = ''; }
+      if (!context.includeInStory) {
+        for (const [name, value] of automaticPlaceWords) if (!editedWords.has(name) && field(name).value === value) { field(name).value = ''; assistantWords.delete(name); }
+        automaticPlaceWords.clear();
+      }
+      queueMicrotask(() => {
+        if (!active() || wizardBusy()) return;
+        const lookup = giftContext.getLookupLocation();
+        const key = lookup ? `${lookup.latitude}:${lookup.longitude}:${lookup.accuracyMeters}` : '';
+        if (key && key !== lookupKey) { if (field('assistantPlace').value === confirmedPlaceLabel) field('assistantPlace').value = ''; lookupKey = key; confirmedPlaceLabel = ''; cancelAssistant(); void suggestMemory(false, true); }
+        else if (!key && lookupKey) {
+          if (field('assistantPlace').value === confirmedPlaceLabel) field('assistantPlace').value = '';
+          lookupKey = ''; confirmedPlaceLabel = ''; cancelAssistant();
+          if (suggestionUsesLocation) { suggestion = undefined; suggestionTarget = ''; host.querySelector<HTMLElement>('[data-assistant-story]')!.hidden = true; host.querySelector<HTMLElement>('[data-assistant-places]')!.hidden = true; }
+        }
+        else if (context.includeInStory && confirmedPlaceLabel && suggestionTarget === confirmedPlaceLabel && suggestion) applySuggestion();
+      });
     },
     onApply: context => {
       if (submitting || currentJob || pendingReference || !context.includeInStory || !context.placeLabel) return;
@@ -230,6 +277,124 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     queueMicrotask(() => { if (active() && step === 'review' && !submitting && !currentJob && !pendingReference) reviewGift(); });
   }
   const wizardBusy = () => submitting || Boolean(currentJob) || confirmingJob || Boolean(pendingReference) || inputs.disabled;
+  const providerName = () => assistantStatus?.provider === 'openai' ? 'OpenAI' : assistantStatus?.provider === 'gemini' ? 'Google Gemini' : assistantStatus?.provider === 'vercel' ? 'Vercel AI Gateway' : 'the photo interpretation service';
+  function assistantAvailability() {
+    host.querySelector<HTMLElement>('[data-assistant-photo]')!.hidden = !source;
+    const canAnalyze = Boolean(assistantStatus?.photoAnalysisAvailable);
+    host.querySelector<HTMLElement>('[data-assistant-photo-consent-label]')!.hidden = !canAnalyze;
+    text('[data-assistant-photo-availability]', assistantStatus ? canAnalyze ? 'Interpret the scene and get a starting point for your memory.' : 'Photo interpretation is unavailable right now. Place suggestions and your own words still work.' : 'Photo interpretation could not be reached. You can still use a place or write your memory.');
+    text('[data-assistant-photo-consent-copy]', `I can use this photo and send it to ${assistantStatus?.imageConsentLabel || providerName()} to suggest a description and memory. This does not create the 3D gift.`);
+    host.querySelector<HTMLButtonElement>('[data-assistant-analyze]')!.disabled = !canAnalyze || !source || assistantBusy || wizardBusy() || !host.querySelector<HTMLInputElement>('[data-assistant-photo-consent]')!.checked;
+    for (const button of host.querySelectorAll<HTMLButtonElement>('[data-assistant-suggest],[data-assistant-regenerate]')) button.disabled = assistantBusy || wizardBusy();
+  }
+  async function loadAssistantStatus() {
+    try { const next = await assistant.status(events.signal); if (!active()) return; assistantStatus = next; }
+    catch { if (!active()) return; assistantStatus = undefined; }
+    assistantAvailability();
+  }
+  function cancelAssistant(clear = false) {
+    assistantEpoch++; assistantAbort?.abort(); assistantAbort = undefined; assistantBusy = false;
+    if (clear) {
+      suggestion = undefined; suggestionUsesLocation = false; suggestionTarget = ''; photoInterpretation = undefined; curiosityEdits.clear();
+      for (const [name, value] of assistantWords) if (!editedWords.has(name) && field(name).value === value) field(name).value = '';
+      assistantWords.clear(); automaticPlaceWords.clear();
+      host.querySelector<HTMLInputElement>('[data-assistant-photo-consent]')!.checked = false;
+      for (const selector of ['[data-assistant-story]', '[data-assistant-places]', '[data-assistant-photo-description]']) host.querySelector<HTMLElement>(selector)!.hidden = true;
+      text('[data-assistant-status]', '');
+    }
+    assistantAvailability();
+  }
+  function applySuggestion(explicit = false) {
+    if (!suggestion || !active() || wizardBusy()) return;
+    const context = giftContext.getContext();
+    if (suggestionUsesLocation && !confirmedPlaceLabel) { text('[data-assistant-warnings]', 'Confirm a place above before using the suggested words. You can also write your own memory.'); return; }
+    if (suggestionUsesLocation && !explicit && (!context.includeInStory || !confirmedPlaceLabel || suggestionTarget !== confirmedPlaceLabel)) return;
+    for (const name of ['title', 'worldPrompt', 'story'] as const) {
+      const value = suggestion[name]?.trim();
+      const existing = field(name).value.trim();
+      if (!value || existing && (!explicit || editedWords.has(name) || field(name).value !== assistantWords.get(name)) || editedWords.has(name) && !explicit) continue;
+      field(name).value = value; assistantWords.set(name, value); field(name).setCustomValidity('');
+      if (suggestionUsesLocation && !explicit) automaticPlaceWords.set(name, value); else automaticPlaceWords.delete(name);
+    }
+    changeKey();
+  }
+  function renderSuggestion() {
+    if (!suggestion) return;
+    const result = suggestion;
+    host.querySelector<HTMLElement>('[data-assistant-story]')!.hidden = false;
+    text('[data-assistant-title]', result.title); text('[data-assistant-story-copy]', result.story);
+    text('[data-assistant-provenance]', result.photoAnalyzed ? `Photo interpreted by ${providerName()}. Suggested words remain editable.` : photoInterpretation ? 'Suggested words from public place information. Your earlier photo interpretation remains above.' : 'Suggested words from public place information. Your photo has not been interpreted.');
+    text('[data-assistant-warnings]', result.warnings.map(assistantWarningCopy).join(' '));
+    host.querySelector<HTMLElement>('[data-assistant-location-note]')!.hidden = !suggestionUsesLocation;
+    const description = host.querySelector<HTMLElement>('[data-assistant-photo-description]')!;
+    description.hidden = !photoInterpretation;
+    description.textContent = photoInterpretation ? `${photoInterpretation.description} · ${photoInterpretation.provider}` : '';
+    const places = host.querySelector<HTMLElement>('[data-assistant-places]')!;
+    const candidates = result.places.filter(place => assistantSourceUrl(place.source.url));
+    places.hidden = !candidates.length;
+    places.innerHTML = candidates.map(place => `<article><strong>${esc(place.label)}</strong><small>${place.distanceMeters > 0 ? `About ${Math.round(place.distanceMeters)} m from the lookup point · ` : ''}Suggested place · confirm before using</small><a href="${esc(assistantSourceUrl(place.source.url))}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">${esc(place.source.title)} ↗</a><button type="button" data-assistant-place="${esc(place.id)}">This is the place</button></article>`).join('');
+    on('[data-assistant-place]', event => {
+      if (wizardBusy()) return;
+      const candidate = result.places.find(place => place.id === (event.currentTarget as HTMLElement).getAttribute('data-assistant-place'));
+      if (!candidate) return;
+      confirmedPlaceLabel = candidate.label; field('assistantPlace').value = candidate.label;
+      giftContext.setSuggestedPlace(candidate.label);
+      text('[data-assistant-status]', `Selected: ${candidate.label}. The place name is included only when you choose to use it.`);
+      cancelAssistant();
+      void suggestMemory(false, false, candidate.label);
+    });
+    const facts = host.querySelector<HTMLElement>('[data-assistant-facts]')!;
+    const sourced = result.curiosities.filter(fact => assistantSourceUrl(fact.sourceUrl));
+    facts.hidden = !sourced.length;
+    facts.innerHTML = sourced.map(fact => `<article><span>${fact.scope === 'nearby' ? 'About a nearby place' : 'About this place'}</span><h4>${esc(fact.title)}</h4><textarea rows="3" maxlength="900" aria-label="Edit ${esc(fact.title)}" data-assistant-fact-text="${esc(fact.id)}"></textarea><a href="${esc(assistantSourceUrl(fact.sourceUrl))}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">${esc(fact.sourceTitle)} ↗</a><button type="button" data-assistant-fact-add="${esc(fact.id)}">Add to my story</button></article>`).join('');
+    const factField = (id: string) => [...host.querySelectorAll<HTMLTextAreaElement>('[data-assistant-fact-text]')].find(field => field.getAttribute('data-assistant-fact-text') === id)!;
+    for (const fact of sourced) factField(fact.id).value = curiosityEdits.get(fact.id) ?? fact.text;
+    on('[data-assistant-fact-add]', event => {
+      if (wizardBusy()) return;
+      const id = (event.currentTarget as HTMLElement).getAttribute('data-assistant-fact-add');
+      const fact = sourced.find(fact => fact.id === id); if (!fact) return;
+      const words = factField(fact.id).value.trim();
+      if (!words) return;
+      const entry = `${words}\nSource: ${assistantSourceUrl(fact.sourceUrl)}`;
+      const composed = appendInstantTranscript(field('story').value, entry);
+      if (composed.error) { showError(composed.error); return; }
+      field('story').value = composed.story; editedWords.add('story'); changeKey();
+      text('[data-assistant-status]', 'The detail and its source were added to your editable story.');
+    });
+  }
+  async function suggestMemory(includePhoto = false, automatic = false, placeOverride = '') {
+    if (!active() || wizardBusy() || assistantBusy) return;
+    const consent = host.querySelector<HTMLInputElement>('[data-assistant-photo-consent]')!.checked;
+    if (includePhoto && (!source || !consent || !assistantStatus?.photoAnalysisAvailable)) { text('[data-assistant-photo-availability]', 'Choose the photo permission before interpreting your photo.'); return; }
+    const lookup = giftContext.getLookupLocation();
+    const placeName = placeOverride || field('assistantPlace').value.trim() || (!lookup ? giftContext.getContext().placeLabel || '' : '');
+    if (!includePhoto && !lookup && !placeName) { text('[data-assistant-status]', 'Enter a place, use your location, or choose photo interpretation.'); return; }
+    cancelAssistant(); const request = ++assistantEpoch, photoEpoch = sourceEpoch, abort = assistantAbort = new AbortController();
+    const cancel = () => abort.abort(); events.signal.addEventListener('abort', cancel, { once: true });
+    const current = () => active() && !wizardBusy() && request === assistantEpoch && photoEpoch === sourceEpoch && !abort.signal.aborted;
+    assistantBusy = true; assistantAvailability(); text('[data-assistant-status]', includePhoto ? 'Interpreting the photo and finding a starting point…' : 'Finding public place details and a starting point…');
+    try {
+      const input: PlaceAssistantInput = { language: typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('pt') ? 'pt' : 'en' };
+      if (includePhoto && source) { input.imageDataUrl = await imageData(source, abort.signal, true); input.photoConsent = true; }
+      if (lookup) { input.location = lookup; input.locationConsent = true; }
+      if (placeName) input.placeName = placeName;
+      if (!current()) return;
+      const next = await assistant.suggest(input, abort.signal);
+      if (!current()) return;
+      if (next.photoAnalyzed && next.photoDescription) photoInterpretation = { description: next.photoDescription, provider: providerName() };
+      suggestion = next; suggestionUsesLocation = Boolean(input.location); suggestionTarget = input.placeName || '';
+      renderSuggestion();
+      // A typed place is deliberate input. A GPS suggestion stays reviewable
+      // until its place is confirmed and inclusion is explicitly chosen.
+      if (!input.location || confirmedPlaceLabel) applySuggestion();
+      text('[data-assistant-status]', next.places.length ? 'Place suggestions are ready. Confirm the right place, then use or edit the words.' : next.photoAnalyzed ? 'Your photo interpretation and suggested words are ready to edit.' : next.warnings[0] ? assistantWarningCopy(next.warnings[0]) : 'Suggested words are ready to edit.');
+      if (!automatic && step === 'story') field('story').focus({ preventScroll: true });
+    } catch (cause) { if (current()) text('[data-assistant-status]', cause instanceof Error ? cause.message : 'Suggestions are unavailable. Your words remain here.'); }
+    finally {
+      events.signal.removeEventListener('abort', cancel);
+      if (request === assistantEpoch && active()) { assistantBusy = false; assistantAbort = undefined; assistantAvailability(); }
+    }
+  }
   function reviewGift() {
     const canReview = Boolean(source);
     host.querySelectorAll<HTMLElement>('.instant-review-photo,.instant-review-block,.instant-review .instant-consent,.instant-review > .instant-hint').forEach(element => element.hidden = !canReview);
@@ -238,22 +403,21 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     const chosenPhoto = host.querySelector<HTMLImageElement>('[data-instant-photo]')!;
     host.querySelector<HTMLImageElement>('[data-instant-review-photo]')!.src = chosenPhoto.src;
     text('[data-instant-review-source]', source instanceof File ? source.name || 'Your photo' : source?.title || 'Your photo');
-    text('[data-instant-review-intent]', intent === 'place' ? 'A place' : 'An object');
-    const miniatureReference = intent === 'place' && source && !(source instanceof File) && source.objectImageRole === 'miniature-reference' ? source.objectImageUrl : undefined;
-    text('[data-instant-review-representation]', intent === 'place' ? miniatureReference ? 'The matching miniature reference guides your 3D souvenir.' : 'Your place inspires a small 3D souvenir. The original photo guides its world.' : 'Your photo guides the 3D keepsake.');
+    text('[data-instant-review-intent]', 'A photo');
+    const miniatureReference = source && !(source instanceof File) && source.objectImageRole === 'miniature-reference' ? source.objectImageUrl : undefined;
+    text('[data-instant-review-representation]', miniatureReference ? 'The matching miniature reference guides your 3D souvenir.' : 'Your photo inspires a small 3D souvenir and guides its world.');
     const referencePreview = host.querySelector<HTMLImageElement>('[data-instant-review-miniature]')!;
     referencePreview.hidden = !miniatureReference;
     if (miniatureReference) referencePreview.src = miniatureReference; else referencePreview.removeAttribute('src');
     text('[data-instant-review-world]', field('worldPrompt').value.trim());
-    const chosen = source;
-    const defaultPlace = intent === 'object' && chosen && !(chosen instanceof File) ? chosen.worldImageUrl || INSTANT_EXAMPLES.find(example => example.id === chosen.id)?.worldImageUrl : undefined;
-    const referenceUrl = placePreviewUrl || (intent === 'place' ? chosenPhoto.src : defaultPlace);
+    const referenceUrl = placePreviewUrl || chosenPhoto.src;
     host.querySelector<HTMLElement>('[data-instant-review-reference]')!.hidden = !referenceUrl;
     host.querySelector<HTMLButtonElement>('[data-instant-review-place-remove]')!.hidden = !placePhoto;
     if (referenceUrl) host.querySelector<HTMLImageElement>('[data-instant-review-place-photo]')!.src = referenceUrl;
-    text('[data-instant-review-place-name]', placePhoto ? `World reference: ${placePhoto.name || 'Your place photo'}` : intent === 'place' ? 'Your original place photo guides the world.' : defaultPlace ? 'The matching example place photo guides the world.' : 'The place description guides the world.');
+    text('[data-instant-review-place-name]', placePhoto ? `World reference: ${placePhoto.name || 'Your place photo'}` : 'Your original photo guides the world.');
     const context = giftContext.getContext();
-    text('[data-instant-review-location]', context.includeInStory && appliedPlaceSentence ? 'Your chosen place is included in the description above.' : 'Location is not added to the world description.');
+    const includedPlaceName = confirmedPlaceLabel && ['worldPrompt', 'story'].some(name => field(name).value.includes(confirmedPlaceLabel));
+    text('[data-instant-review-location]', includedPlaceName ? 'Your chosen place name is included in your words. GPS coordinates are not saved.' : context.includeInStory && appliedPlaceSentence ? 'Your chosen place is included in the description above.' : 'Location is not added to the world description.');
     text('[data-instant-review-title]', field('title').value.trim());
     text('[data-instant-review-names]', `${field('senderName').value.trim() || 'Not added'} / ${field('recipientName').value.trim() || 'Not added'}`);
     text('[data-instant-review-dedication]', field('dedication').value.trim() || 'Not added');
@@ -293,13 +457,17 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   }
   function goToStep(next: InstantWizardStep) {
     if (!active() || wizardBusy() || next !== 'photo' && !source) return;
+    if (next === 'review') {
+      if (!field('title').value.trim()) { field('title').value = 'A little world for you'; assistantWords.set('title', field('title').value); }
+      if (!field('worldPrompt').value.trim()) { field('worldPrompt').value = instantDefaultWorldPrompt(intent); assistantWords.set('worldPrompt', field('worldPrompt').value); }
+    }
     storyAudio?.stop(); cameraAttempt++; cameraDialog?.destroy(); cameraDialog = undefined;
     step = next; showError(); renderWizard(true); availability();
   }
   function continueWizard() {
     if (!source) { showError('Choose a photo to continue.'); return; }
     if (step === 'place') {
-      if (!field('worldPrompt').value.trim()) { field('worldPrompt').value = instantDefaultWorldPrompt(intent); appliedPlaceSentence = ''; changeKey(); }
+      if (!field('worldPrompt').value.trim()) { goToStep(instantWizardDestination(step, 1, Boolean(source))); return; }
       const issue = validateInstantText(field('title').value, field('worldPrompt').value).worldPrompt;
       field('worldPrompt').setCustomValidity(issue);
       if (issue) { host.querySelector<HTMLDetailsElement>('.instant-place-custom')!.open = true; field('worldPrompt').reportValidity(); return; }
@@ -314,10 +482,9 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   }
   function updateExamples() {
     const list = host.querySelector<HTMLElement>('[data-instant-examples]')!;
-    const category = intent === 'place' ? 'cities' : 'objects', scroll = list.dataset.category === category ? list.scrollLeft : 0;
+    const category = 'cities', scroll = list.dataset.category === category ? list.scrollLeft : 0;
     list.dataset.category = category;
     list.replaceChildren();
-    host.querySelectorAll<HTMLButtonElement>('[data-instant-catalog]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.instantCatalog === (intent === 'place' ? 'cities' : 'objects'))));
     for (const example of examples()) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'instant-example';
       button.setAttribute('aria-pressed', String(!(source instanceof File) && source?.id === example.id));
@@ -339,37 +506,22 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     rail.scrollBy({ left: direction * Math.max(135, rail.clientWidth * .85), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     syncExampleNavigation();
   }
-  function updateIntent(next: InstantPhotoIntent) {
-    if (!active() || wizardBusy() || next === intent) return;
-    intent = next; changeKey(); showError();
-    host.dataset.photoIntent = intent;
-    host.querySelectorAll<HTMLButtonElement>('[data-instant-intent]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.instantIntent === intent)));
-    text('#instant-photo-heading', intent === 'place' ? 'Start with a place you love.' : 'Start with something small.');
-    text('[data-instant-photo-hint]', intent === 'place' ? 'A little 3D souvenir, with your place inside.' : 'One clear photo of an object you love.');
-    text('[data-instant-source-hint]', intent === 'place' ? 'Your place, made into a small 3D souvenir.' : 'A photo to turn into your 3D keepsake.');
-    if (source instanceof File && !editedWords.has('worldPrompt')) { field('worldPrompt').value = instantDefaultWorldPrompt(intent); appliedPlaceSentence = ''; }
-    if (source && !(source instanceof File)) {
-      const nextExample = examples().find(example => example.id === (source as InstantExample).id);
-      if (nextExample) selectSource(nextExample, true);
-      else { source = null; sourceEpoch++; releasePreview(); giftCuriosities?.reset(); host.querySelector<HTMLElement>('[data-instant-selected]')!.hidden = true; step = 'photo'; availability(); }
-    }
-    updateExamples();
-  }
   function selectSource(next: File | InstantExample, keepWords = false) {
     if (!active() || wizardBusy()) return;
-    if (!(next instanceof File) && next.photoIntent && next.photoIntent !== intent) updateIntent(next.photoIntent);
+    if (!(next instanceof File) && next.photoIntent !== intent) return;
+    cancelAssistant(true);
     sourceEpoch++; releasePreview(); source = next; changeKey(); showError();giftCuriosities?.reset();
     const image = host.querySelector<HTMLImageElement>('[data-instant-photo]')!;
     const readyLink = host.querySelector<HTMLAnchorElement>('[data-instant-ready-example]')!;
     const readyHref = instantReadyGiftHref(next instanceof File ? null : next);
     readyLink.hidden = !readyHref;
     if (readyHref) readyLink.setAttribute('href', readyHref); else readyLink.removeAttribute('href');
-    const defaults = next instanceof File ? { worldPrompt: instantDefaultWorldPrompt(intent), title: 'A little world for you', story: '' } : { worldPrompt: next.worldPrompt, title: `${next.title}, for you`, story: next.story || '' };
+    const defaults = next instanceof File ? { worldPrompt: '', title: '', story: '' } : { worldPrompt: next.worldPrompt, title: `${next.title}, for you`, story: next.story || '' };
     if (!keepWords) for (const name of ['worldPrompt', 'title', 'story'] as const) if (!editedWords.has(name)) { field(name).value = defaults[name]; if (name === 'worldPrompt') appliedPlaceSentence = ''; }
     if (next instanceof File) { previewUrl = URL.createObjectURL(next); image.src = previewUrl; text('[data-instant-source-name]', next.name || 'Your photo'); }
     else { image.src = next.imageUrl; text('[data-instant-source-name]', next.title); giftCuriosities?.preset({ objectHint: next.objectHint, regionId: next.regionId, factIds: next.curiosityIds || [], story: next.story || 'A little inspiration, ready for your own story.' }); }
     host.querySelector<HTMLElement>('[data-instant-selected]')!.hidden = false;
-    updateExamples(); availability();
+    updateExamples(); availability(); assistantAvailability();
   }
   function closeModelPreview() {
     clearTimeout(revealTimer); revealTimer = undefined;
@@ -493,6 +645,10 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     if (finished || uploadPending) { clearTimeout(pollTimer); pollTimer = undefined; }
     const modelKey = `${job.id}:${job.assets.modelUrl}`;
     if (modelReady && !previewOpen && attemptedModel !== modelKey) { attemptedModel = modelKey; void openModelPreview(); }
+    if (ready && !reportedComplete.has(job.id)) {
+      reportedComplete.add(job.id);
+      options.onGiftCompleted?.(job);
+    }
   }
   function schedulePoll() { if (active() && currentJob && currentJob.uploadState !== 'pending' && !instantJobFinished(currentJob)) { clearTimeout(pollTimer); pollTimer = window.setTimeout(() => void poll(), 4_000); } }
   async function poll() {
@@ -530,13 +686,13 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
       recoveryError.textContent = cause instanceof Error ? cause.message : 'Your upload could not continue. Try again with the same photo.'; recoveryError.hidden = false;
     } finally { if (active()) { recoveringUpload = false; button.disabled = false; } }
   }
-  async function imageData(sourcePhoto: File | InstantExample): Promise<string> {
-    if (sourcePhoto instanceof File) return fileDataUrl(await preparedPhoto(sourcePhoto, events.signal), events.signal);
-    const response = await fetch(sourcePhoto.imageUrl, { signal: events.signal });
+  async function imageData(sourcePhoto: File | InstantExample, signal = events.signal, forAssistant = false): Promise<string> {
+    if (sourcePhoto instanceof File) return fileDataUrl(await preparedPhoto(sourcePhoto, signal, forAssistant ? 2 * 1024 * 1024 : 3 * 1024 * 1024, forAssistant ? 1280 : 1600), signal);
+    const response = await fetch(sourcePhoto.imageUrl, { signal });
     if (!response.ok) throw new Error('This example photo could not load. Choose your own photo or try another example.');
     const blob = await response.blob(); const file = new File([blob], `${sourcePhoto.id}.png`, { type: blob.type || 'image/png' });
     const issue = validateInstantPhoto(file, status?.maxImageBytes); if (issue) throw new Error(issue);
-    return fileDataUrl(file, events.signal);
+    return fileDataUrl(forAssistant ? await preparedPhoto(file, signal, 2 * 1024 * 1024, 1280) : file, signal);
   }
 
   giftCuriosities=mountGiftCuriosities(host.querySelector<HTMLElement>('[data-instant-curiosities]')!,{
@@ -571,13 +727,25 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   });
   on('[data-instant-home]', options.onHome);
   on('[data-instant-resume-upload]', () => void resumeUpload());
-  on('[data-instant-intent]', event => { const next = (event.currentTarget as HTMLButtonElement).dataset.instantIntent; if (next === 'object' || next === 'place') updateIntent(next); });
-  on('[data-instant-catalog]', event => updateIntent((event.currentTarget as HTMLButtonElement).dataset.instantCatalog === 'cities' ? 'place' : 'object'));
   on('[data-instant-examples-prev]', () => scrollExamples(-1));
   on('[data-instant-examples-next]', () => scrollExamples(1));
   host.querySelector<HTMLElement>('[data-instant-examples]')!.addEventListener('scroll', syncExampleNavigation, { signal: events.signal, passive: true });
   window.addEventListener('resize', syncExampleNavigation, { signal: events.signal });
   on('[data-instant-preview-toggle]', () => void openModelPreview());
+  on('[data-assistant-analyze]', () => void suggestMemory(true));
+  on('[data-assistant-suggest]', () => {
+    const typed = field('assistantPlace').value.trim();
+    if (typed) confirmedPlaceLabel = typed;
+    void suggestMemory(false);
+  });
+  on('[data-assistant-regenerate]', () => void suggestMemory(Boolean(assistantStatus?.photoAnalysisAvailable && host.querySelector<HTMLInputElement>('[data-assistant-photo-consent]')!.checked)));
+  on('[data-assistant-use]', () => { applySuggestion(true); field('story').focus({ preventScroll: true }); });
+  on('[data-assistant-edit]', () => { host.querySelector<HTMLDetailsElement>('.instant-personal')!.open = true; field('story').focus({ preventScroll: true }); });
+  on('[data-assistant-own]', () => {
+    if (wizardBusy()) return;
+    for (const [name, value] of assistantWords) if (!editedWords.has(name) && field(name).value === value) { field(name).value = ''; editedWords.add(name); }
+    assistantWords.clear(); automaticPlaceWords.clear(); changeKey(); field('story').focus({ preventScroll: true });
+  });
   on('[data-instant-camera]', () => void openCamera());
   on('[data-instant-upload],[data-instant-change]', () => host.querySelector<HTMLInputElement>('[data-instant-upload-file]')!.click());
   on('[data-instant-place-upload]', () => host.querySelector<HTMLInputElement>('[data-instant-place-file]')!.click());
@@ -589,6 +757,9 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     if (wizardBusy()) return;
     const input = event.target;
     if (input instanceof HTMLInputElement && input.name === 'consent') { input.setCustomValidity(''); showError(); return; }
+    if (input instanceof HTMLInputElement && input.name === 'photoAnalysisConsent') { if (!input.checked) cancelAssistant(); assistantAvailability(); return; }
+    if (input instanceof HTMLInputElement && input.name === 'assistantPlace') { confirmedPlaceLabel = ''; cancelAssistant(); return; }
+    if (input instanceof HTMLTextAreaElement && input.getAttribute('data-assistant-fact-text') !== null) { curiosityEdits.set(input.getAttribute('data-assistant-fact-text')!, input.value); return; }
     if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) { input.setCustomValidity(''); if (['title', 'worldPrompt', 'story'].includes(input.name)) editedWords.add(input.name); }
     changeKey(); showError();
   }, { signal: events.signal });
@@ -610,14 +781,13 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     const snapshot = { title: field('title').value.trim(), worldPrompt: field('worldPrompt').value.trim(), senderName: field('senderName').value.trim(), recipientName: field('recipientName').value.trim(), story: field('story').value.trim(), dedication: field('dedication').value.trim(),curiosityIds:giftCuriosities?.selectedIds()||[] };
     if (!dedupeKey) { dedupeKey = `gift-${crypto.randomUUID()}`; requestToken = newRequestToken(); }
     try { sessionStorage.setItem(pendingStorageKey, JSON.stringify({ dedupeKey, requestToken })); } catch { /* In-place retries retain their key in memory. */ }
-    submitting = true; readingSource = true; inputs.disabled = true; storyAudio?.stop(); showError(); availability(); create.innerHTML = `${cameraIcon}Preparing your photo…`;
+    cancelAssistant(); submitting = true; readingSource = true; inputs.disabled = true; storyAudio?.stop(); showError(); availability(); create.innerHTML = `${cameraIcon}Preparing your photo…`;
     let sent = false;
     void (async () => {
       try {
         const imageDataUrl = await imageData(chosen);
-        const defaultPlace = photoIntent === 'object' && !(chosen instanceof File) ? chosen.worldImageUrl || INSTANT_EXAMPLES.find(example => example.id === chosen.id)?.worldImageUrl : undefined;
-        const worldImageDataUrl = placePhoto ? await fileDataUrl(await preparedPhoto(placePhoto, events.signal), events.signal) : defaultPlace ? await imageData({ id: 'rio-place', title: 'Rio at dusk', imageUrl: defaultPlace, worldPrompt: '' }) : undefined;
-        const objectReference = photoIntent === 'place' && !(chosen instanceof File) && chosen.objectImageRole === 'miniature-reference' ? chosen.objectImageUrl : undefined;
+        const worldImageDataUrl = placePhoto ? await fileDataUrl(await preparedPhoto(placePhoto, events.signal), events.signal) : undefined;
+        const objectReference = !(chosen instanceof File) && chosen.objectImageRole === 'miniature-reference' ? chosen.objectImageUrl : undefined;
         const objectImageDataUrl = objectReference ? await imageData({ ...chosen as InstantExample, imageUrl: objectReference }) : undefined;
         const imagePlan = instantImagePlan(photoIntent, imageDataUrl, objectImageDataUrl, worldImageDataUrl);
         if (!active() || epoch !== sourceEpoch) return;
@@ -648,10 +818,11 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   on('[data-instant-explore]', () => options.onExploreExample?.());
   updateExamples(); create.disabled = true; renderWizard();
   void loadStatus();
+  void loadAssistantStatus();
   let reference: InstantJobReference | null = null;
   try { reference = readInstantJobReference(sessionStorage.getItem(storageKey)) || readInstantPendingReference(sessionStorage.getItem(pendingStorageKey)); } catch { /* Browser storage may be unavailable. */ }
   if (reference) {
     pendingReference = reference; step = 'review'; inputs.disabled = true; void confirmPending();
   }
-  return { destroy() { if (dead) return; dead = true; storyAudio?.stop(); storyAudio?.destroy(); cameraAttempt++; cameraDialog?.destroy(); cameraDialog = undefined; events.abort(); clearTimeout(pollTimer); closeModelPreview(); transformation.destroy(); releasePreview(); if (placePreviewUrl) URL.revokeObjectURL(placePreviewUrl); giftCuriosities?.destroy();giftContext.destroy(); host.replaceChildren(); } };
+  return { destroy() { if (dead) return; dead = true; assistantEpoch++; assistantAbort?.abort(); storyAudio?.stop(); storyAudio?.destroy(); cameraAttempt++; cameraDialog?.destroy(); cameraDialog = undefined; events.abort(); clearTimeout(pollTimer); closeModelPreview(); transformation.destroy(); releasePreview(); if (placePreviewUrl) URL.revokeObjectURL(placePreviewUrl); giftCuriosities?.destroy();giftContext.destroy(); host.replaceChildren(); } };
 }

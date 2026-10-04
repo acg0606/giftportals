@@ -4,6 +4,7 @@ export interface CollectionRoomItem {
   title: string;
   subtitle: string;
   story: string;
+  createdAt?: string;
   imageUrl?: string;
   modelUrl?: string;
   mediaExpiresAt?: number;

@@ -1,0 +1,109 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {EventEmitter} from 'node:events';
+import {resolve} from 'node:path';
+import {createTSLoader,here} from './cloud-instant-test-loader.mjs';
+const load=createTSLoader(),a=await load(resolve(here,'_lib/place-assistant.ts'));
+const {createPlaceAssistantHandler}=await load(resolve(here,'place-assistant.ts'));
+const photo='data:image/png;base64,'+Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]).toString('base64');
+const location={latitude:-23.610213,longitude:-46.640678,accuracyMeters:12,label:'São Paulo, Brasil'};
+const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
+const gatewayResult={title:'Um instante verde',story:'Um cantinho verde para guardar em uma lembrança e compartilhar.',worldPrompt:'Um lugar com árvores e luz suave para explorar.',photoDescription:'A imagem parece mostrar uma árvore sobre um fundo claro.'};
+const facts={query:{pages:[{pageid:123,title:'Praça sintética',extract:'Esta é uma descrição publicada do lugar sintético de teste, fornecida pelo serviço de fontes públicas.',coordinates:[{lat:location.latitude,lon:location.longitude}]}]}};
+const places={elements:[{type:'way',id:987,tags:{name:'Praça sintética',place:'square'},center:{lat:location.latitude,lon:location.longitude}},{type:'way',id:555,tags:{name:'Lugar distante',leisure:'park'},center:{lat:0,lon:0}},{type:'way',id:3,tags:{name:'Centro inválido'},center:{lat:Infinity,lon:0}}]};
+const noToken=()=>undefined;
+globalThis.fetch=async()=>{throw Error('NO_NETWORK_IN_TESTS');};
+
+test('photo and coordinate consent are checked before every external call',async()=>{
+ let calls=0;const service=a.createPlaceAssistant({fetch:async()=>{calls++;return json({});},gatewayToken:()=> 'synthetic-token'});
+ await assert.rejects(service.suggest({imageDataUrl:photo}),e=>e.code==='ASSISTANT_PHOTO_CONSENT_REQUIRED');
+ await assert.rejects(service.suggest({location}),e=>e.code==='ASSISTANT_LOCATION_CONSENT_REQUIRED');
+ assert.equal(calls,0);
+ for(const mutation of [{location:{...location,latitude:NaN},locationConsent:true},{location:{...location,accuracyMeters:-1},locationConsent:true},{imageDataUrl:'https://evil.invalid/photo.png',photoConsent:true},{imageDataUrl:'data:image/png;base64,AAAA',photoConsent:true},{imageDataUrl:photo,photoConsent:true,language:'es'}]){
+  assert.throws(()=>a.parseAssistantInput(mutation));
+ }
+ assert.equal(a.parseAssistantInput({location,locationConsent:true}).location.latitude,-23.6102);
+});
+
+test('unconfigured text/image provider returns a reviewable template and never pretends to analyze the image',async()=>{
+ let calls=0;const service=a.createPlaceAssistant({fetch:async()=>{calls++;throw Error('unexpected-network');},gatewayToken:noToken});
+ assert.equal(service.status().photoAnalysisAvailable,false);
+ const value=await service.suggest({imageDataUrl:photo,photoConsent:true,language:'pt'});
+ assert.equal(value.provider,'template');assert.equal(value.photoAnalyzed,false);assert.equal(value.photoDescription,undefined);
+ assert.ok(value.warnings.includes('PHOTO_ANALYSIS_NOT_CONFIGURED'));assert.ok(value.story.startsWith('Esta foto'));assert.equal(calls,0);
+});
+
+test('nearby square suggestions preserve uncertainty and sourced curiosity scope; coordinates/images never go to the AI provider as a location',async()=>{
+ const calls=[];const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async(url,init)=>{calls.push([String(url),init]);return json(String(url).includes('overpass')?places:facts);}});
+ const value=await service.suggest({imageDataUrl:photo,photoConsent:true,location,locationConsent:true,language:'pt'});
+ assert.equal(value.places.length,1);assert.equal(value.places[0].label,'Praça sintética');assert.equal(value.places[0].approximate,true);assert.ok(value.warnings.includes('NEARBY_PLACE_REQUIRES_CONFIRMATION'));
+ assert.equal(value.locationStatus,'matched');assert.equal(value.curiosities[0].scope,'nearby');assert.match(value.curiosities[0].sourceUrl,/^https:\/\/pt\.wikipedia\.org\//);
+ assert.ok(value.story.includes('São Paulo'));assert.ok(!value.story.includes('Praça sintética'));
+ assert.equal(calls.length,2);assert.ok(calls.every(([url,init])=>!JSON.stringify(init).includes(photo)));
+ await service.suggest({imageDataUrl:photo,photoConsent:true,location,locationConsent:true,language:'pt'});assert.equal(calls.length,2);
+});
+
+test('confirmed placeName drives editable text and exact sourced lookup; nearby fallback remains labeled nearby',async()=>{
+ const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async(url)=>{
+  if(String(url).includes('overpass'))return json(places);
+  const params=new URL(url).searchParams;assert.equal(params.get('titles'),'Praça sintética');return json(facts);
+ }});
+ const value=await service.suggest({placeName:'Praça sintética',location,locationConsent:true,language:'pt'});
+ assert.ok(value.story.includes('Praça sintética'));assert.equal(value.curiosities[0].scope,'place');
+ const fallback=a.createPlaceAssistant({gatewayToken:noToken,fetch:async(url)=>String(url).includes('overpass')?json(places):new URL(url).searchParams.get('titles')?json({query:{pages:[{missing:true,title:'Praça sintética'}]}}):json(facts)});
+ assert.equal((await fallback.suggest({placeName:'Praça sintética',location,locationConsent:true})).curiosities[0].scope,'nearby');
+});
+
+test('gateway requests use the verified vision model, bounded tokens, a fixed endpoint and cache a photo/context once',async()=>{
+ let calls=0;const service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async(url,init)=>{
+  calls++;assert.equal(String(url),'https://ai-gateway.vercel.sh/v1/chat/completions');assert.equal(init.redirect,'error');
+  const body=JSON.parse(init.body);assert.equal(body.model,'google/gemini-2.5-flash-lite');assert.equal(body.max_tokens,900);assert.equal(body.messages[0].content[1].image_url.url,photo);
+  assert.ok(body.messages[0].content[0].text.includes('do not identify people'));return json({choices:[{message:{content:JSON.stringify(gatewayResult)}}]});
+ }});
+ const value=await service.suggest({imageDataUrl:photo,photoConsent:true});assert.equal(value.provider,'vercel');assert.equal(value.photoAnalyzed,true);assert.equal(value.photoDescription,gatewayResult.photoDescription);
+ assert.deepEqual(value.curiosities,[]);assert.equal(Object.hasOwn(value,'key'),false);
+ await service.suggest({imageDataUrl:photo,photoConsent:true});assert.equal(calls,1);
+});
+
+test('credit exhaustion, rate limits and malformed generative output degrade without retries or lost original input',async()=>{
+ for(const status of [402,429,500]){
+  let calls=0;const service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async()=>{calls++;return new Response('{}',{status});}});
+  const value=await service.suggest({imageDataUrl:photo,photoConsent:true});assert.equal(value.provider,'template');assert.equal(value.photoAnalyzed,false);assert.ok(value.warnings.includes('PHOTO_ANALYSIS_UNAVAILABLE'));assert.equal(calls,1);
+ }
+ const invalid=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async()=>json({choices:[{message:{content:'{"title":"Not a valid story"}'}}]})});
+ assert.equal((await invalid.suggest({imageDataUrl:photo,photoConsent:true})).photoAnalyzed,false);
+});
+
+function request(extra={}){return Object.assign(new EventEmitter(),{url:'/api/place-assistant?action=suggest',method:'POST',headers:{host:'127.0.0.1:4323',origin:'http://127.0.0.1:4323','sec-fetch-site':'same-origin','content-type':'application/json'},socket:{remoteAddress:'127.0.0.1'},body:JSON.stringify({language:'pt'}),...extra});}
+function response(){return Object.assign(new EventEmitter(),{headers:{},writableEnded:false,destroyed:false,setHeader(k,v){this.headers[k]=v;},end(body){this.writableEnded=true;this.body=JSON.parse(body);}});}
+test('HTTP handler blocks cross-origin, oversized bodies and repeated requests before calling an upstream',async()=>{
+ let calls=0;const handler=createPlaceAssistantHandler({status:()=>({available:true}),suggest:async()=>{calls++;return{provider:'template'};}});
+ for(const [extra,code]of [[{headers:{host:'evil.invalid',origin:'https://evil.invalid'}},'ORIGIN_DENIED'],[{headers:{host:'127.0.0.1:4323',origin:'https://evil.invalid'}},'ORIGIN_DENIED'],[{socket:{remoteAddress:'192.168.0.1'}},'ORIGIN_DENIED'],[{body:'x'.repeat(a.MAX_ASSISTANT_BODY_BYTES+1)},'BODY_TOO_LARGE'],[{method:'GET'},'METHOD_NOT_ALLOWED']]){const output=response();await handler(request(extra),output);assert.equal(output.body.error.code,code);}
+ assert.equal(calls,0);
+ for(let n=0;n<12;n++){const output=response();await handler(request(),output);assert.equal(output.body.ok,true);}
+ const blocked=response();await handler(request(),blocked);assert.equal(blocked.body.error.code,'ASSISTANT_RATE_LIMIT');assert.equal(calls,12);
+});
+
+test('the named São Paulo square uses reviewed municipal evidence only after an exact user choice',async()=>{
+ let calls=0;const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async()=>{calls++;throw Error('unexpected-network');}});
+ const value=await service.suggest({placeName:'Praça Américo Portugal Gouvêa',language:'pt'});
+ assert.equal(calls,0);assert.equal(value.curiosities[0].scope,'place');assert.match(value.curiosities[0].sourceUrl,/^https:\/\/drive\.prefeitura\.sp\.gov\.br\//);assert.ok(value.curiosities[0].text.includes('mosaicos'));
+ assert.deepEqual(a.reviewedPlaceCuriosities('Outra Praça Américo Portugal Gouveia','pt'),[]);
+ assert.deepEqual(a.reviewedPlaceCuriosities(undefined,'pt'),[]);
+});
+
+test('GPS/place suggestions alone never consume generative credits or send coordinates to the gateway',async()=>{
+ const service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async(url)=>{assert.ok(!String(url).includes('ai-gateway'));return json(String(url).includes('overpass')?places:facts);}});
+ const value=await service.suggest({location,locationConsent:true,placeName:'Praça sintética'});
+ assert.equal(value.provider,'template');assert.equal(value.photoAnalyzed,false);assert.ok(value.places.length);
+});
+
+test('public source failures and a mismatched distant article cannot become a verified place curiosity',async()=>{
+ const distant={query:{pages:[{pageid:333,title:'Praça sintética',extract:'A long description of a different place with a similar title must not leak into the chosen local context.',coordinates:[{lat:0,lon:0}]}]}};
+ const mismatch=a.createPlaceAssistant({gatewayToken:noToken,fetch:async(url)=>json(String(url).includes('overpass')?{elements:[]}:distant)});
+ const value=await mismatch.suggest({placeName:'Praça sintética',location,locationConsent:true});
+ assert.deepEqual(value.curiosities,[]);assert.ok(value.warnings.includes('NO_VERIFIED_PLACE_CURIOSITY'));assert.equal(value.locationStatus,'unavailable');
+ const unavailable=a.createPlaceAssistant({gatewayToken:noToken,fetch:async()=>new Response('{}',{status:429})});
+ const fallback=await unavailable.suggest({location,locationConsent:true});
+ assert.deepEqual(fallback.places,[]);assert.deepEqual(fallback.curiosities,[]);assert.ok(fallback.warnings.includes('PLACE_LOOKUP_UNAVAILABLE'));assert.ok(fallback.warnings.includes('CURIOSITY_LOOKUP_UNAVAILABLE'));assert.equal(fallback.provider,'template');
+});

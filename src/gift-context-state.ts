@@ -55,7 +55,7 @@ export function createGiftContextState(geolocation?: Pick<Geolocation, 'getCurre
   const snapshot = (): GiftContextSnapshot => ({ context: { ...context }, status, pending: status === 'requesting' });
   const announce = () => { if (!dead) changed?.(snapshot()); };
   const skip = () => { if (dead) return; sequence++; context = { mode: 'off', includeInStory: false }; status = 'off'; announce(); };
-  const requestLocation = () => {
+  const requestLocation = (includeInStory = true) => {
     if (dead || status === 'requesting') return;
     if (!geolocation) { status = 'unsupported'; announce(); return; }
     const attempt = ++sequence; status = 'requesting'; announce();
@@ -63,7 +63,7 @@ export function createGiftContextState(geolocation?: Pick<Geolocation, 'getCurre
       if (dead || attempt !== sequence) return;
       const rounded = roundedGiftPosition(position.coords.latitude, position.coords.longitude);
       if (!rounded) { status = 'unavailable'; announce(); return; }
-      context = { mode: 'device', includeInStory: true, ...rounded, precision: 'rounded-0.01-deg' }; status = 'ready'; announce();
+      context = { mode: 'device', includeInStory, ...rounded, precision: 'rounded-0.01-deg' }; status = 'ready'; announce();
     }, error => { if (dead || attempt !== sequence) return; status = error.code === 1 ? 'denied' : error.code === 3 ? 'timeout' : 'unavailable'; announce(); }, { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 }); }
     catch { if (!dead && attempt === sequence) { status = 'unavailable'; announce(); } }
   };

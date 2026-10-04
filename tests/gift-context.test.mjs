@@ -26,6 +26,18 @@ test('GPS is rounded before retention, previews and output, with opt-out clearin
   state.include(false); assert.deepEqual(state.getContext(), { mode: 'off', includeInStory: false });
   state.skip(); assert.deepEqual(state.snapshot().context, { mode: 'off', includeInStory: false });
 });
+test('a place lookup can use GPS without including location in the saved story', () => {
+  const { state, attempts, changed } = fixture(); state.requestLocation(false);
+  attempts[0].success({ coords: { latitude: -23.6141123, longitude: -46.6412234, accuracy: 25 } });
+  assert.deepEqual(state.getContext(), { mode: 'off', includeInStory: false });
+  assert.equal(state.snapshot().context.latitude, -23.61);
+  assert.equal(state.snapshot().context.longitude, -46.64);
+  assert.equal(JSON.stringify(changed).includes('-23.6141123'), false);
+  state.setLabel('A square the user confirmed');
+  assert.equal(state.getContext().mode, 'off', 'confirming the place name must preserve the save opt-out');
+  state.include(true);
+  assert.deepEqual(state.getContext(), { mode: 'device', includeInStory: true, latitude: -23.61, longitude: -46.64, precision: 'rounded-0.01-deg', placeLabel: 'A square the user confirmed', regionId: undefined });
+});
 test('Skip, manual choice and destruction invalidate late native GPS callbacks', () => {
   const { state, attempts } = fixture(); state.requestLocation(); state.skip();
   attempts[0].success({ coords: { latitude: 52.123456, longitude: 8.654321 } }); assert.equal(state.getContext().mode, 'off');

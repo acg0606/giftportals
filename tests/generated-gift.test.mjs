@@ -661,37 +661,41 @@ test('VR panel opens lazily once beside Print with private GLB and orientation, 
 
 test('unsupported and cancelled VR panels keep the ordinary gift renderer and controls alive', async()=>{
   for(const xrUnsupported of[true,false])await fixture(async state=>{
-    await state.resolve('object');const ordinary=state.viewers[0];ordinary.callbacks.onReady();ordinary.callbacks.onReveal();state.element('xr').click();await state.resolve('xr');const panel=state.xrPanels[0];if(xrUnsupported)panel.accept();else panel.cancel();
+    await state.resolve('object');const ordinary=state.viewers[0];ordinary.callbacks.onReady();state.element('xr').click();await state.resolve('xr');const panel=state.xrPanels[0];if(xrUnsupported)panel.accept();else panel.cancel();
     assert.equal(ordinary.destroyCount,0);assert.equal(state.element('controls').hidden,false);state.element('xr-close').click();assert.equal(panel.destroyCount,1);assert.equal(state.imports.object.length,1);assert.equal(state.element('xr').disabled,false);assert.equal(state.element('xr-host').hidden,true);
   },{xrUnsupported});
 });
 
-test('decoded keepsake keeps its real image until reveal, then exposes 3D controls without reopening on a duplicate ready callback', async()=>fixture(async state=>{
-  await state.resolve('object'); const object=state.viewers[0]; object.callbacks.onReady();
-  assert.equal(state.selector('.gg-visual').classList.contains('is-opening'),true);
+test('decoded keepsake opens the souvenir directly, with controls and honest copy on the first ready callback', async()=>fixture(async state=>{
+  assert.ok(state.selector('[data-gg-poster] img'),'The original image remains available while the actual model loads');
   assert.equal(state.element('controls').hidden,true);
-  assert.match(state.element('caption').textContent,/Open your gift/);
-  assert.ok(state.selector('[data-gg-poster] img'),'The actual gift image remains in the opening view');
-  object.callbacks.onReveal();
+  await state.resolve('object'); const object=state.viewers[0];
+  assert.equal(object.callbacks.unboxing,false,'No separate reveal can cover an already visible image');
+  object.callbacks.onReady();
+  assert.equal(state.selector('.gg-visual').classList.contains('is-ready'),true);
   assert.equal(state.selector('.gg-visual').classList.contains('is-opening'),false);
   assert.equal(state.element('controls').hidden,false);
+  assert.equal(state.element('status').hidden,true);
   assert.match(state.element('caption').textContent,/Drag to rotate/);
+  assert.doesNotMatch(state.dialog().innerHTML,/Discover the memory|Open your gift to reveal/);
+  assert.ok(state.selector('.gg-original-story'),'The story stays readable beside the souvenir');
+  state.selector('[data-gg-control="left"]').click(); assert.deepEqual(state.actions.at(-1),['rotate','object',.2]);
   object.callbacks.onReady();
   assert.equal(state.selector('.gg-visual').classList.contains('is-opening'),false);
   assert.equal(state.element('controls').hidden,false);
 }));
 
-test('a retired or failed keepsake reveal cannot alter a world view or replace the image fallback',async()=>{
+test('a retired or failed keepsake ready callback cannot alter a world view or replace the image fallback',async()=>{
   await fixture(async state=>{
     await state.resolve('object'); const object=state.viewers[0]; object.callbacks.onReady();
     state.element('enter').click(); await state.resolve('world'); state.viewers[1].callbacks.onReady();
-    const caption=state.element('caption').textContent; object.callbacks.onReveal();
+    const caption=state.element('caption').textContent; object.callbacks.onReady();
     assert.equal(state.element('caption').textContent,caption);
     assert.equal(state.selector('.gg-visual').classList.contains('is-opening'),false);
   });
   await fixture(async state=>{
     await state.resolve('object'); const object=state.viewers[0]; object.callbacks.onReady(); object.callbacks.onError('Synthetic render failure');
-    object.callbacks.onReveal(); assert.equal(state.element('controls').hidden,true);
+    object.callbacks.onReady(); assert.equal(state.element('controls').hidden,true);
     assert.equal(state.selector('.gg-visual').classList.contains('is-opening'),false);
     assert.ok(state.element('retry'));
   });

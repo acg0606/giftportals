@@ -47,3 +47,27 @@
 .gc-step-panel .gc-map { height: 150px; }
 @media (max-width: 430px) { .gc-manual > div { flex-wrap: wrap; } .gc-manual button { width: 100%; } .gc-actions button { flex: 1; } }
 @media (prefers-reduced-motion: reduce) { .gc-expand { transition: none; } }
+
+/* Detailed streets live in the same optional place step as the local overview. */
+.gc-street-map { position: relative; height: clamp(240px, 34vw, 320px); overflow: hidden; background: #e6eee6; touch-action: none; cursor: grab; }
+.gc-street-map.is-dragging { cursor: grabbing; }
+.gc-street-layer { position: absolute; inset: 0; pointer-events: none; }
+.gc-street-layer img { position: absolute; width: 256px; height: 256px; max-width: none; border: 0; border-radius: 0; user-select: none; }
+.gc-street-pin { position: absolute; z-index: 1; width: 30px; height: 38px; transform: translate(-50%, -92%); pointer-events: none; filter: drop-shadow(0 2px 3px #12344a55); }
+.gc-panel .gc-street-pin > svg { display: block; width: 30px; height: 38px; }
+.gc-street-status { position: absolute; z-index: 2; left: 50%; top: 42%; transform: translate(-50%, -50%); padding: 9px 14px; border-radius: 20px; margin: 0; color: #12344a; background: #fffdf8ed; font-size: 12px; white-space: nowrap; }
+.gc-street-hint { position: absolute; z-index: 2; top: 10px; left: 10px; padding: 6px 9px; border-radius: 8px; color: #344f5b; background: #fffdf8ee; font-size: 10px; pointer-events: none; }
+.gc-street-credit { position: absolute; z-index: 2; bottom: 0; right: 0; display: inline-flex; align-items: center; min-height: 32px; padding: 6px 9px; color: #164969; background: #fffdf8f2; font-size: 10px; text-underline-offset: 3px; }
+.gc-map-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 0 11px 9px; }
+.gc-map-tools button { font-size: 11px; }
+.gc-map-notice { margin: 0; padding: 0 11px 12px; color: #c4d4d4; font-size: 10px; line-height: 1.6; }
+
+/* The place step sits on v10's light paper; its labels need the same contrast
+   as the rest of the creation form rather than the older dark panel colors. */
+.instant-creator .gift-context-step :is(.gc-intro,.gc-status,.gc-context-note,.gc-privacy,.gc-step-state) { color: var(--v10-muted, #526873); }
+.instant-creator .gift-context-step :is(.gc-manual label,.gc-include) { color: var(--v10-ink, #12344a); }
+.instant-creator .gift-context-step .gc-panel button { color: var(--v10-ink, #12344a); background: var(--v10-paper, #fffdf8); border-color: var(--v10-input-line, #9fb3bd); }
+.instant-creator .gift-context-step .gc-manual input { color: var(--v10-ink, #12344a); background: var(--v10-cream, #f8f6f0); border-color: var(--v10-input-line, #9fb3bd); }
+.instant-creator .gift-context-step .gc-manual input::placeholder { color: var(--v10-muted, #526873); }
+.instant-creator .gift-context-step .gc-include input { accent-color: var(--v10-accent, #034a70); }
+.instant-creator .gc-street-map:focus-visible { outline: 3px solid var(--v10-focus, #13648f); outline-offset: -3px; }

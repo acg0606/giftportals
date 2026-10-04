@@ -27,12 +27,13 @@ import { mountRioSouvenir } from './rio-souvenir';
 import { mountRioCreator } from './rio-creator';
 import { decodeRioCreatorDraft, newRioCreatorDraft, type RioCreatorDraft } from './rio-creator-state';
 import { mountInstantCreator, instantCreatorService, type InstantJob } from './instant-creator';
-import { instantGiftReady } from './instant-creator-state';
+import { instantGiftReady, readInstantJobReference } from './instant-creator-state';
 import { mountGeneratedGift, type GeneratedGiftData } from './generated-gift';
 import { giftIcon } from './gift-icon';
 import { createGiftWalkScenes, readGiftWorldSemantics } from './gift-walk-catalog';
 import { collectionIcon } from './collection-icon';
 import { createdSessionKeepsake } from './local-keepsakes';
+import { clearKeepsakeScope, forgetKeepsakeReference, instantJobStorageKey, readKeepsakeJob, rememberCreatedKeepsake, storedKeepsakeReferences, type KeepsakeStorage } from './keepsake-library';
 import type { CollectionRoomItem } from './collection-types';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -46,6 +47,10 @@ let renderId = 0;
 let arrivals: string[] = [];
 let currentGift: GiftViewDTO | null = null;
 const sessionKeepsakes = new Map<string, CollectionRoomItem>();
+const keepsakeReadAt = new Map<string, number>();
+const keepsakeScope = () => session() && !session()!.user.demo ? `owner:${session()!.user.id}` : 'anonymous';
+let activeKeepsakeScope = keepsakeScope();
+const keepsakeStorage = (): KeepsakeStorage | undefined => { try { return localStorage; } catch { try { return sessionStorage; } catch { return undefined; } } };
 let closeActiveDialog: (() => void) | null = null;
 let trailState: JourneyState | null = null;
 let trailScopeKey = '';
@@ -72,6 +77,68 @@ function progressTrail(stage: 'open' | 'explore' | 'travel') {
 }
 function toast(message: string) { const element = document.querySelector<HTMLElement>('#toast')!; element.textContent = message; element.classList.add('visible'); setTimeout(() => element.classList.remove('visible'), 5000); }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : 'Something went wrong. Please try again.'; }
+function rememberKeepsake(job: InstantJob) {
+  if (demoScope() || session()?.user.demo) return;
+  const reference = rememberCreatedKeepsake(keepsakeStorage(), keepsakeScope(), job);
+  const item = createdSessionKeepsake(job);
+  if (item && reference) sessionKeepsakes.set(item.id, { ...item, mediaExpiresAt: reference.expiresAt });
+  if (item && reference) keepsakeReadAt.set(item.id, Date.now());
+}
+function resetKeepsakeSession() {
+  const nextScope = keepsakeScope();
+  if (activeKeepsakeScope.startsWith('owner:') && activeKeepsakeScope !== nextScope) clearKeepsakeScope(keepsakeStorage(), activeKeepsakeScope);
+  activeKeepsakeScope = nextScope; sessionKeepsakes.clear(); keepsakeReadAt.clear();
+  // Old unscoped recovery keys have no account provenance. They must never
+  // become an anonymous collection after someone signs out or switches users.
+  try { sessionStorage.removeItem('giftportals.instant.job.v1'); sessionStorage.removeItem('giftportals.instant.pending.v1'); }
+  catch { /* Scoped v10.2 catalogs remain separate even without legacy cleanup. */ }
+}
+function currentKeepsakes(): CollectionRoomItem[] {
+  if (demoScope() || session()?.user.demo) return [];
+  const now = Date.now() / 1000;
+  for (const [id, item] of sessionKeepsakes) if (item.mediaExpiresAt && item.mediaExpiresAt <= now) sessionKeepsakes.delete(id);
+  return [...sessionKeepsakes.values()].reverse();
+}
+async function hydrateKeepsakes(epoch: number, signal: AbortSignal) {
+  if (demoScope() || session()?.user.demo) return;
+  const scope = keepsakeScope(), generation = sessionGeneration();
+  const active = () => epoch === renderId && !signal.aborted && scope === keepsakeScope() && generation === sessionGeneration();
+  const references = new Map(storedKeepsakeReferences(keepsakeStorage(), scope).map(value => [value.id, { id: value.id, token: value.token }]));
+  // v10 kept only the last creator capability. Recover it without adopting any
+  // unrelated recipient link or attributing an anonymous gift to another account.
+  try {
+    const raw = sessionStorage.getItem(instantJobStorageKey(scope)) || (scope === 'anonymous' ? sessionStorage.getItem('giftportals.instant.job.v1') : null);
+    const latest = readInstantJobReference(raw);
+    if (latest) references.set(latest.id, latest);
+  } catch { /* A blocked browser store does not interrupt the memory desk. */ }
+  const queue = [...references.values()].filter(reference => !sessionKeepsakes.has(`session:${reference.id}`) || Date.now() - (keepsakeReadAt.get(`session:${reference.id}`) || 0) > 60_000);
+  const hydration = new AbortController();
+  const cancel = () => hydration.abort(); signal.addEventListener('abort', cancel, { once: true });
+  if (signal.aborted) hydration.abort();
+  const deadline = setTimeout(cancel, 8_000);
+  try {
+  await Promise.all(Array.from({ length: Math.min(4, queue.length) }, async () => {
+    while (queue.length && active() && !hydration.signal.aborted) {
+      const reference = queue.shift()!;
+      try {
+        const job = await readKeepsakeJob(reference, hydration.signal, location.hostname);
+        if (active() && !hydration.signal.aborted && instantGiftReady(job)) rememberKeepsake(job);
+      } catch (error) {
+        if (!active()) return;
+        const code = error && typeof error === 'object' && 'code' in error ? error.code : '';
+        if (['JOB_UNAVAILABLE', 'JOB_EXPIRED', 'GIFT_REFERENCE_MISMATCH'].includes(String(code))) {
+          forgetKeepsakeReference(keepsakeStorage(), scope, reference.id); sessionKeepsakes.delete(`session:${reference.id}`);
+        }
+        // Network interruptions retain the known capability for a later retry.
+      }
+    }
+  }));
+  } finally { clearTimeout(deadline); signal.removeEventListener('abort', cancel); }
+}
+function keepsakeCard(item: CollectionRoomItem, index = 0) {
+  const preview = !item.mediaExpiresAt || item.mediaExpiresAt > Date.now() / 1000 ? item.imageUrl : undefined;
+  return `<a class="memory-card card-${index % 3}" href="#/${esc(item.openPath)}"><div class="memory-card-art">${preview ? `<img src="${esc(preview)}" alt="Keepsake for ${esc(item.title)}" loading="lazy" referrerpolicy="no-referrer"/>` : miniArt('cup')}<span class="model-pill">3D KEEPSAKE</span></div><div class="memory-card-copy"><span class="eyebrow">${esc(item.subtitle)}</span><h3>${esc(item.title)}</h3><span class="text-link">Open gift <span>${icon('arrow')}</span></span></div></a>`;
+}
 function notice() {
   if (session()?.user.demo) return '<div class="service-note">Read-only fictional demo. Sign in to your own account to create or receive private gifts.</div>';
   return staticDemo || cloudStatus?.configured === false ? '<div class="service-note"><span class="demo-status-dot"></span>Explore the public demo · real 3D assets, fictional people. Private gifting is not available in this preview.</div>' : '';
@@ -80,7 +147,7 @@ function header(active = '') {
   const href = (path: string) => `#/${scopedPath(path)}`;
   return `<header class="site-header"><a class="brand" href="#/home" aria-label="GiftPortals home"><img class="brand-image" src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a class="${active === 'gallery' ? 'active' : ''}" href="${href('collection')}">Explore</a><a class="${active === 'world' ? 'active' : ''}" href="${href('world')}">My world</a><a class="${active === 'atlas' ? 'active' : ''}" href="${href('atlas')}">Atlas</a></nav><div class="header-actions">${session() ? `<button class="avatar-button" data-account title="Account and sign out">${esc(session()!.user.displayName.slice(0, 1))}</button>` : `<button class="quiet-button login-trigger" data-auth>Sign in</button>`}<button class="button button-small" data-create>${giftIcon}Make a gift</button></div></header>`;
 }
-function footer() { return '<footer class="site-footer"><a class="brand footer-brand" href="#/home">GiftPortals</a><span>People. Places. Stories. Always with you.</span><span>Version 10.0 · Tripothon S1</span><a href="#/about">About & credits</a></footer>'; }
+function footer() { return '<footer class="site-footer"><a class="brand footer-brand" href="#/home">GiftPortals</a><span>People. Places. Stories. Always with you.</span><span>Version 10.2 · Tripothon S1</span><a href="#/about">About & credits</a></footer>'; }
 function bindCommon() {
   app.querySelectorAll<HTMLButtonElement>('[data-auth]').forEach((button) => button.onclick = () => showAuth());
   app.querySelectorAll<HTMLButtonElement>('[data-create]').forEach((button) => button.onclick = () => navigate('make'));
@@ -133,14 +200,16 @@ function rioCreatorPage(epoch: number) {
   cleanup = () => creator.destroy();
 }
 function instantCreatorPage(epoch: number) {
+  const generation = sessionGeneration();
   app.innerHTML = '<main id="instant-creator-root"></main>';
   const creator = mountInstantCreator(app.querySelector<HTMLElement>('#instant-creator-root')!, {
     isCurrent: () => epoch === renderId,
+    storageScope: keepsakeScope(),
     onHome: () => navigate('home'),
+    onGiftCompleted: job => { if (epoch === renderId && generation === sessionGeneration()) rememberKeepsake(job); },
     onGiftReady: (job: InstantJob) => {
-      if (epoch !== renderId || !instantGiftReady(job)) return;
-      const keepsake = createdSessionKeepsake(job);
-      if (keepsake) sessionKeepsakes.set(keepsake.id, keepsake);
+      if (epoch !== renderId || generation !== sessionGeneration() || !instantGiftReady(job)) return;
+      rememberKeepsake(job);
       navigate(`generated/${encodeURIComponent(job.id)}?key=${encodeURIComponent(job.token)}`);
     },
     onExploreExample: () => navigate('generated/rio-example'),
@@ -330,8 +399,9 @@ async function trailPage(epoch: number) {
   cleanup = () => trail.destroy();
 }
 async function worldPage(epoch: number) {
+  const abort = new AbortController(); cleanup = () => abort.abort();
   let current: WorldDTO;
-  try { current = await ensureWorld(); } catch (error) { if (epoch !== renderId) return; app.innerHTML = `${header('world')}<main class="narrow"><span class="eyebrow">YOUR WORLD</span><h1>Let’s reconnect.</h1><p>${esc(errorMessage(error))}</p><button class="button" data-world-retry>Try again</button></main>${footer()}`; bindCommon(); app.querySelector<HTMLButtonElement>('[data-world-retry]')!.onclick = () => void render(); return; }
+  try { [current] = await Promise.all([ensureWorld(), hydrateKeepsakes(epoch, abort.signal)]); } catch (error) { if (epoch !== renderId) return; app.innerHTML = `${header('world')}<main class="narrow"><span class="eyebrow">YOUR WORLD</span><h1>Let’s reconnect.</h1><p>${esc(errorMessage(error))}</p><button class="button" data-world-retry>Try again</button></main>${footer()}`; bindCommon(); app.querySelector<HTMLButtonElement>('[data-world-retry]')!.onclick = () => void render(); return; }
   if (epoch !== renderId) return;
   const isDemo = current.user.demo || !session();
   const traveled = current.discoveries.filter((item) => item.kind === 'physical').length;
@@ -339,6 +409,8 @@ async function worldPage(epoch: number) {
   const owned = current.memories.filter((item) => item.ownerId === current.user.id);
   app.innerHTML = `${header('world')}${notice()}<main class="world-page studio-world"><div class="world-heading"><div><span class="eyebrow">${isDemo ? 'FICTIONAL DEMO / ' : 'PERSONAL COLLECTION / '}${esc(current.user.displayName.toUpperCase())}</span><h1>Your world, in one place.</h1><p>The things you keep. The stories you receive. The places still ahead.</p></div><div class="world-personas">${isDemo ? `<span>View as</span><button class="persona ${current.user.displayName === 'Maya' ? 'selected' : ''}" data-persona="sender"><i>M</i> Maya</button><button class="persona ${current.user.displayName === 'Noah' ? 'selected' : ''}" data-persona="recipient"><i>N</i> Noah</button>` : '<button class="button" data-create>Create a memory</button>'}</div></div><section class="studio-world-dashboard" aria-label="World overview"><a href="#/${scopedPath('gallery')}"><span>YOUR ORIGINAL STORIES</span><strong>${owned.length}</strong><small>Objects and memories you created</small></a><a href="#/${scopedPath('gallery')}"><span>RECEIVED MEMORIES</span><strong>${current.memories.filter(memory=>memory.ownerId!==current.user.id).length}</strong><small>Stories currently shared with you</small></a><a href="#/${scopedPath('atlas')}"><span>PHYSICAL VISITS</span><strong>${traveled}</strong><small>${isDemo ? 'Fictional demo history' : 'Places recorded by you'}</small></a><a href="#/${scopedPath('atlas')}"><span>MEMORY CONNECTIONS</span><strong>${remembered}</strong><small>A shared memory is separate from a visit</small></a></section>${arrivals.length ? `<section class="arrival-strip"><span class="eyebrow">RECENT TRAIN FRAGMENTS</span>${arrivals.map(id=>current.memories.find(memory=>memory.id===id)).filter((memory):memory is MemoryDTO=>!!memory).map(memory=>`<button data-memory="${esc(memory.id)}">${esc(memory.title)} ↗</button>`).join('')}<button data-train-replay>Replay journey</button></section>` : ''}<section class="world-collection"><div class="section-title"><div><span class="eyebrow">YOUR MEMORY LIBRARY</span><h2>Objects with a story.</h2></div><a class="text-link" href="#/${scopedPath('gallery')}">View all memories ↗</a></div><div class="memory-grid">${current.memories.slice(0,3).map(memoryCard).join('') || '<div class="empty-state"><h2>Your first memory starts here.</h2><p>Add an original gift and a story to begin.</p><button class="button" data-create>Create a memory</button></div>'}</div></section><section class="mini-atlas"><div class="section-title"><div><span class="eyebrow">EXPLORE YOUR CONNECTIONS</span><h2>Memory atlas</h2></div><a class="text-link" href="#/${scopedPath('atlas')}">Open atlas ↗</a></div><div id="discovery-map"></div></section></main>${footer()}`;
   bindCommon(); mountMap(current); app.querySelector('.world-collection')?.insertAdjacentHTML('beforebegin', trailJournal(current));
+  const localItems = currentKeepsakes();
+  if (localItems.length) app.querySelector('.studio-world-dashboard')?.insertAdjacentHTML('beforebegin', `<section class="world-collection"><div class="section-title"><div><span class="eyebrow">CREATED BY YOU</span><h2>Your gifts.</h2></div><a class="text-link" href="#/gallery?view=list">View your memories ↗</a></div><div class="memory-grid">${localItems.slice(0, 3).map(keepsakeCard).join('')}</div></section>`);
   app.querySelector<HTMLButtonElement>('[data-train-replay]')?.addEventListener('click', async () => { const authEpoch = sessionGeneration(); const seen = await takeMemoryTrain(`${current.user.displayName}’s world`, current.memories); if (epoch === renderId && authEpoch === sessionGeneration()) arrivals = seen; });
 }
 function mountMap(current: WorldDTO) {
@@ -371,19 +443,23 @@ async function switchWorld(persona: 'sender' | 'recipient') {
   navigate(`world?demo=${persona}`);
 }
 async function collectionPage(epoch: number) {
+  const abort = new AbortController(); cleanup = () => abort.abort();
   app.innerHTML = '<main class="generated-loading" role="status">Bringing your memories around…</main>';
   try {
     const [{ mountCollectionRoom }, { publicCollectionItems, collectionItemsFromWorld }] = await Promise.all([import('./collection-room'), import('./collection-state')]);
     if (epoch !== renderId) return;
-    const current = session() && !session()!.user.demo && !demoScope() ? await ensureWorld() : null;
+    const [current] = await Promise.all([
+      session() && !session()!.user.demo && !demoScope() ? ensureWorld() : Promise.resolve(null),
+      hydrateKeepsakes(epoch, abort.signal),
+    ]);
     if (epoch !== renderId) return;
-    const localItems = [...sessionKeepsakes.values()];
+    const localItems = currentKeepsakes();
     const personal = Boolean(current) || localItems.length > 0;
-    const items = current ? [...collectionItemsFromWorld(current), ...localItems] : localItems.length ? localItems : publicCollectionItems();
+    const items = current ? [...localItems, ...collectionItemsFromWorld(current)] : localItems.length ? localItems : publicCollectionItems();
     app.innerHTML = '<main id="collection-room-root"></main>';
     const room = mountCollectionRoom(app.querySelector<HTMLElement>('#collection-room-root')!, {
       items, title: personal ? 'Your memory desk.' : 'The memory desk.',
-      subtitle: current ? 'Your stories and gifts shared with you.' : localItems.length ? 'Your creations · kept here for this session.' : 'Three real keepsakes. Let a little world come to you.',
+      subtitle: current ? 'Your stories and gifts shared with you.' : localItems.length ? 'Your creations · saved on this device while their links are available.' : 'Three real keepsakes. Let a little world come to you.',
       isCurrent: () => epoch === renderId,
       onHome: () => navigate('home'), onCreate: () => navigate('make'),
       onOpen: (item, inside) => {
@@ -392,23 +468,32 @@ async function collectionPage(epoch: number) {
         const path = item.kind === 'memory' ? scopedPath(destination) : destination;
         navigate(`${path}${path.includes('?') ? '&' : '?'}from=room`);
       },
-      ...(current ? { onManage: () => navigate(scopedPath('gallery?view=list')) } : {}),
+      ...(personal ? { onManage: () => navigate(scopedPath('gallery?view=list')) } : {}),
     });
-    cleanup = () => room.destroy();
+    cleanup = () => { abort.abort(); room.destroy(); };
   } catch (error) { if (epoch === renderId) missing(errorMessage(error)); }
 }
 
 async function galleryList(epoch: number) {
+  const abort = new AbortController(); cleanup = () => abort.abort();
   let current: WorldDTO;
-  try { current = await ensureWorld(); } catch (error) { if (epoch === renderId) missing(errorMessage(error)); return; }
+  try { [current] = await Promise.all([ensureWorld(), hydrateKeepsakes(epoch, abort.signal)]); } catch (error) { if (epoch === renderId) missing(errorMessage(error)); return; }
   if (epoch !== renderId) return;
+  const localItems = currentKeepsakes();
+  const deviceCollection = !session() && !demoScope() && localItems.length > 0;
   app.innerHTML = `${header('gallery')}${notice()}<main class="gallery-page"><div class="world-heading"><div><span class="eyebrow">${current.user.demo || !session() ? 'FICTIONAL DEMONSTRATION COLLECTION' : `${esc(current.user.displayName.toUpperCase())}’S COLLECTION`}</span><h1>Keep the feeling.</h1><p>Every gift has a place. Every place has a story.</p></div><button class="button" data-create>Add a little world ＋</button></div><div class="gallery-filters"><div class="filter-tabs" role="group" aria-label="Memory type"><button class="selected" data-filter="all">All memories</button><button data-filter="received">Received</button><button data-filter="sent">Sent</button><button data-filter="self">My stories</button>${session() && !session()!.user.demo && !current.user.demo ? '<button data-filter="archived">Archived</button>' : ''}</div><label class="search-field"><span>Search person, place, or story</span><input type="search" placeholder="Find a memory…" aria-label="Search memories"/></label><label class="date-filter">Date<input type="month" aria-label="Filter memories by month"/></label></div><div class="memory-grid gallery-grid" id="gallery-grid"></div><p class="fine-print">Only your own memories and gifts you are authorized to read appear here.</p></main>${footer()}`;
   let filter = 'all'; let archivedMemories: MemoryDTO[] = [];
+  if (deviceCollection) {
+    app.querySelector('.world-heading .eyebrow')!.textContent = 'YOUR CREATIONS ON THIS DEVICE';
+    app.querySelector('.service-note')?.remove();
+  }
   const draw = () => {
     if (epoch !== renderId) return;
     const search = app.querySelector<HTMLInputElement>('input[type="search"]')!.value.toLowerCase(); const month = app.querySelector<HTMLInputElement>('input[type="month"]')!.value;
-    const filtered = (filter === 'archived' ? archivedMemories : current.memories).filter((memory) => (!search || `${memory.title} ${memory.story} ${memory.ownerName} ${memory.location.label}`.toLowerCase().includes(search)) && (!month || memory.location.experiencedAt.startsWith(month)) && (filter === 'all' || filter === 'archived' || (filter === 'self' && memory.ownerId === current.user.id) || (filter === 'received' && current.received.some((gift) => gift.memoryId === memory.id)) || (filter === 'sent' && current.sent.some((gift) => gift.memoryId === memory.id))));
-    app.querySelector<HTMLElement>('#gallery-grid')!.innerHTML = filtered.length ? (filter === 'archived' ? filtered.map((memory) => `<div class="archive-card"><span class="eyebrow">ARCHIVED · ORIGINALS RETAINED</span><h3>${esc(memory.title)}</h3><p>${esc(memory.location.label)}</p><button class="button" data-restore="${esc(memory.id)}">Restore this memory ↗</button></div>`).join('') : filtered.map(memoryCard).join('')) : '<div class="empty-state"><span>◇</span><h2>A quiet corner, for now.</h2><p>No memories match these filters. Try another person, place, or month.</p></div>'; bindCommon();
+    const filtered = (filter === 'archived' ? archivedMemories : deviceCollection ? [] : current.memories).filter((memory) => (!search || `${memory.title} ${memory.story} ${memory.ownerName} ${memory.location.label}`.toLowerCase().includes(search)) && (!month || memory.location.experiencedAt.startsWith(month)) && (filter === 'all' || filter === 'archived' || (filter === 'self' && memory.ownerId === current.user.id) || (filter === 'received' && current.received.some((gift) => gift.memoryId === memory.id)) || (filter === 'sent' && current.sent.some((gift) => gift.memoryId === memory.id))));
+    const local = filter === 'all' || filter === 'self' ? localItems.filter(item => (!search || `${item.title} ${item.story} ${item.subtitle}`.toLowerCase().includes(search)) && (!month || item.createdAt?.startsWith(month))) : [];
+    const cards = filter === 'archived' ? filtered.map((memory) => `<div class="archive-card"><span class="eyebrow">ARCHIVED · ORIGINALS RETAINED</span><h3>${esc(memory.title)}</h3><p>${esc(memory.location.label)}</p><button class="button" data-restore="${esc(memory.id)}">Restore this memory ↗</button></div>`).join('') : local.map(keepsakeCard).join('') + filtered.map(memoryCard).join('');
+    app.querySelector<HTMLElement>('#gallery-grid')!.innerHTML = cards || '<div class="empty-state"><span>◇</span><h2>A quiet corner, for now.</h2><p>No memories match these filters. Try another person, place, or month.</p></div>'; bindCommon();
     app.querySelectorAll<HTMLButtonElement>('[data-restore]').forEach((button) => button.onclick = async () => { button.disabled = true; try { await api<MemoryDTO>('restore', { memoryId: button.dataset.restore }); world = null; toast('Memory restored. Revoked invitations remain revoked.'); void render(); } catch (error) { toast(errorMessage(error)); button.disabled = false; } });
   };
   app.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach((button) => button.onclick = async () => { filter = button.dataset.filter!; app.querySelectorAll('[data-filter]').forEach((item) => item.classList.toggle('selected', item === button)); if (filter === 'archived') { try { const archive = await api<WorldDTO>('world', undefined, { archived: 'true' }); if (epoch !== renderId) return; archivedMemories = archive.memories.filter((memory) => !!memory.archivedAt); } catch (error) { toast(errorMessage(error)); } } draw(); });
@@ -869,7 +954,7 @@ function createPage() {
   review();
 }
 function about() {
-  app.innerHTML = `${header()}<main class="narrow about-page"><span class="eyebrow">GIFTPORTALS · VERSION 10.0</span><h1>GiftPortals</h1><p class="large-copy">Some gifts fit in your hand. Others take you to an entire world.</p><p>Start with a photo of something small. Tripo turns it into a 3D keepsake; World Labs creates the place its story carries. Open the gift, turn it in your hands, then step inside its little world.</p><h2>Make a gift before creating an account.</h2><p>Start with a camera photo, a selected file or an original example. Add an optional place reference and your words. Live availability is shown before creation. Local previews keep jobs on this device; the cloud creator uses private storage and gift links that expire after seven days.</p><h2>What is real, and what is artistic?</h2><p>The generated gift viewer loads actual completed Tripo GLB and World Labs SPZ assets. The Rio example uses fictional people and an artistic interpretation of the bay. Completed gifts with a compatible collision mesh let you walk inside and choose physically supported viewpoints. These worlds are artistic interpretations rather than exact geographic reconstructions. Narrative points contain the sender's words; they are not detected landmarks. The original photo and story remain accessible if 3D cannot load.</p><h2>Private cloud gifting.</h2><p>A cloud gift link acts as a private access key. Anyone holding it can open the gift during its seven-day lifetime. Permanent cross-device collections, authenticated cloud accounts and revocable invitations require separate deployment verification. Opening a gift never records a physical visit. Existing Studio, atlas and earlier illustrated Rio routes remain available.</p><h2>Built with</h2><p>Tripo, World Labs, Three.js, Spark, TypeScript and Vite. The local provider keys stay on the server. Credits, original artwork, earlier work and map sources are documented in the project.</p><button class="button" data-create>Make your little world ↗</button><a class="text-link" href="#/generated/rio-example">Open the Rio example ↗</a></main>${footer()}`; bindCommon();
+  app.innerHTML = `${header()}<main class="narrow about-page"><span class="eyebrow">GIFTPORTALS · VERSION 10.2</span><h1>GiftPortals</h1><p class="large-copy">Some gifts fit in your hand. Others take you to an entire world.</p><p>Start with a photo of a place you love. Tripo turns it into a 3D keepsake; World Labs creates the place its story carries. Open the gift, turn it in your hands, then step inside its little world.</p><h2>Make a gift before creating an account.</h2><p>Start with a camera photo, a selected file or an original example. Add an optional place reference and your words. Live availability is shown before creation. Local previews keep jobs on this device; the cloud creator uses private storage and gift links that expire after seven days.</p><h2>What is real, and what is artistic?</h2><p>The generated gift viewer loads actual completed Tripo GLB and World Labs SPZ assets. The Rio example uses fictional people and an artistic interpretation of the bay. Completed gifts with a compatible collision mesh let you walk inside and choose physically supported viewpoints. These worlds are artistic interpretations rather than exact geographic reconstructions. Narrative points contain the sender's words; they are not detected landmarks. The original photo and story remain accessible if 3D cannot load.</p><h2>Private cloud gifting.</h2><p>A cloud gift link acts as a private access key. Anyone holding it can open the gift during its seven-day lifetime. Permanent cross-device collections, authenticated cloud accounts and revocable invitations require separate deployment verification. Opening a gift never records a physical visit. Existing Studio, atlas and earlier illustrated Rio routes remain available.</p><h2>Built with</h2><p>Tripo, World Labs, Three.js, Spark, TypeScript and Vite. The local provider keys stay on the server. Credits, original artwork, earlier work and map sources are documented in the project.</p><button class="button" data-create>Make your little world ↗</button><a class="text-link" href="#/generated/rio-example">Open the Rio example ↗</a></main>${footer()}`; bindCommon();
 }
 
 function missing(message: string) { app.innerHTML = `${header()}<main class="narrow"><span class="eyebrow">A CLOSED DOOR</span><h1>This little world is unavailable.</h1><p>${esc(message)}</p><a class="button" href="#/world">Explore the public demonstration ↗</a></main>${footer()}`; bindCommon(); }
@@ -909,7 +994,7 @@ async function render() {
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 window.addEventListener('hashchange', () => void render());
-window.addEventListener('giftportals-session-changed', () => { world = null; currentGift = null; sessionKeepsakes.clear(); arrivals = []; trailState = null; trailScopeKey = ''; trailScopeEpoch++; draftInvitations.clear(); if (!session()) { privateRioSeed = null; rioCreatorDraft = newRioCreatorDraft(); } closeActiveDialog?.(); cleanup?.(); cleanup = null; cancelTrain(); void render(); });
+window.addEventListener('giftportals-session-changed', () => { resetKeepsakeSession(); world = null; currentGift = null; arrivals = []; trailState = null; trailScopeKey = ''; trailScopeEpoch++; draftInvitations.clear(); if (!session()) { privateRioSeed = null; rioCreatorDraft = newRioCreatorDraft(); } closeActiveDialog?.(); cleanup?.(); cleanup = null; cancelTrain(); void render(); });
 window.addEventListener('pagehide', () => { cleanup?.(); cancelTrain(); });
 window.addEventListener('pageshow', event => { if (event.persisted) void render(); });
 void render();
@@ -921,4 +1006,3 @@ void Promise.allSettled([api<StatusDTO>('status'), api<MemoryDTO[]>('demo')]).th
   const rioExperience = route() === 'trail' && routeParams().get('experience') === 'rio';
   if (!rioExperience && !app.querySelector('dialog[open]') && (route() === 'home' || (!session() && (['world', 'atlas', 'trail'].includes(route()) || route() === 'gallery' && routeParams().get('view') === 'list')))) void render();
 });
-

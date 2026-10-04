@@ -212,7 +212,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
         <div class="gg-loading" role="status" data-gg-status>${world ? 'Opening the world inside…' : 'Opening your 3D keepsake…'}</div>
         ${tourPanel}
         ${world ? `<aside class="gg-story" data-gg-story data-gg-obstacle hidden aria-labelledby="gg-point-title-${instance}">${chapters}<div data-gg-point-reader></div></aside><div class="gg-tour-reader" data-gg-tour-reader data-gg-obstacle hidden></div>` : ''}
-      </div>${world ? '' : `<section class="gg-copy"><span class="gg-kicker">${gift.recipientName ? `FOR ${escape(gift.recipientName)}` : 'A LITTLE WORLD FOR YOU'}</span><h1 id="generated-gift-title-${instance}" tabindex="-1">${escape(gift.title)}</h1><p class="gg-dedication">${escape(gift.dedication || 'An object. A place. A moment to return to.')}</p>${gift.senderName ? `<span class="gg-signature">From ${escape(gift.senderName)}</span>` : ''}${options.onJourney ? `<button class="gg-primary" type="button" data-gg-journey>${icon('walk')}<span>${escape(options.journeyLabel || 'Walk inside')}</span>${icon('arrow')}</button>` : `<button class="gg-primary" type="button" data-gg-enter>${icon('globe')}<span>Step inside</span>${icon('arrow')}</button>`}${mediaUrl(gift.modelUrl) ? `<div class="gg-keepsake-actions"><button class="gg-print-link gg-quiet" type="button" data-gg-print>${icon('printer')}<span>Print a keepsake</span></button><button class="gg-print-link gg-quiet" type="button" data-gg-xr>${icon('headset')}<span>View in VR</span></button></div><div class="gg-xr-holder" data-gg-xr-host hidden><button class="gg-quiet gg-xr-close" type="button" data-gg-xr-close>${icon('close')}<span>Close VR panel</span></button></div>` : ''}<details class="gg-original-story"><summary>${icon('book')}Read the story</summary><p>${escape(gift.story || 'No story text is attached to this gift.')}</p></details>${contextCards}</section>`}</div>
+      </div>${world ? '' : `<section class="gg-copy"><span class="gg-kicker">${gift.recipientName ? `FOR ${escape(gift.recipientName)}` : 'A LITTLE WORLD FOR YOU'}</span><h1 id="generated-gift-title-${instance}" tabindex="-1">${escape(gift.title)}</h1><p class="gg-dedication">${escape(gift.dedication || 'A photo. A place. A moment to return to.')}</p>${gift.senderName ? `<span class="gg-signature">From ${escape(gift.senderName)}</span>` : ''}${options.onJourney ? `<button class="gg-primary" type="button" data-gg-journey>${icon('walk')}<span>${escape(options.journeyLabel || 'Walk inside')}</span>${icon('arrow')}</button>` : `<button class="gg-primary" type="button" data-gg-enter>${icon('globe')}<span>Step inside</span>${icon('arrow')}</button>`}${mediaUrl(gift.modelUrl) ? `<div class="gg-keepsake-actions"><button class="gg-print-link gg-quiet" type="button" data-gg-print>${icon('printer')}<span>Print a keepsake</span></button><button class="gg-print-link gg-quiet" type="button" data-gg-xr>${icon('headset')}<span>View in VR</span></button></div><div class="gg-xr-holder" data-gg-xr-host hidden><button class="gg-quiet gg-xr-close" type="button" data-gg-xr-close>${icon('close')}<span>Close VR panel</span></button></div>` : ''}<details class="gg-original-story"><summary>${icon('book')}Read the story</summary><p>${escape(gift.story || 'No story text is attached to this gift.')}</p></details>${contextCards}</section>`}</div>
       <footer class="gg-footer"><div class="gg-toolbar">${modebar}<div class="gg-controls" data-gg-controls hidden>${controls}${iconButton('reset', 'reset', world ? 'Return to the starting view' : 'Reset keepsake view')}</div></div><p class="gg-caption" data-gg-caption>${world ? 'World Labs artistic scene · preparing 3D' : 'Tripo keepsake · preparing 3D'}</p>${options.onShare ? `<small class="gg-local-note">${options.shareScope === 'cloud' ? gift.mediaExpiresAt ? 'Private gift link · original photos and generated gifts expire after 7 days.' : 'Gift link · opens this keepsake online.' : 'Local preview link · available while this preview is running.'}</small>` : ''}</footer>
     </div>`;
     if (world) {
@@ -301,7 +301,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
     const status = dialog.querySelector<HTMLElement>('[data-gg-status]')!, controls = dialog.querySelector<HTMLElement>('[data-gg-controls]')!;
     const current = () => active() && version === generation && phase === which && canvas.isConnected;
     const source = mediaUrl(which === 'object' ? gift.modelUrl : gift.worldUrl);
-    let failed = false, giftRevealed = false;
+    let failed = false;
     let walking = false;
     const tourState = (state: GeneratedWorldTourState) => {
       if (!current() || failed || which !== 'world') return;
@@ -343,23 +343,17 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
     const fallback = (message: string) => {
       if (!current()) return; failed = true; viewer?.destroy(); viewer = undefined; controls.hidden = true;
       if (which === 'world') { dialog.querySelector<HTMLElement>('[data-gg-tour-panel]')!.hidden = true; dialog.querySelector<HTMLElement>('[data-gg-tour-reader]')!.hidden = true; dialog.querySelector<HTMLButtonElement>('[data-gg-tour-start]')!.disabled = true; }
-      visual.classList.remove('is-ready', 'is-opening'); dialog.querySelector<HTMLElement>('[data-gg-points]')!.hidden = true;
+      visual.classList.remove('is-ready'); dialog.querySelector<HTMLElement>('[data-gg-points]')!.hidden = true;
       status.hidden = false; status.classList.add('is-fallback'); status.innerHTML = `<span>${escape(message)}</span><button class="gg-quiet" type="button" data-gg-retry>${expired() ? 'Close to refresh' : 'Retry 3D'}</button>`;
       text('[data-gg-caption]', which === 'world' ? 'Image and story view · spatial 3D unavailable' : 'Image and story view · 3D object unavailable');
       listen('[data-gg-retry]', () => { if (!current()) return; if (expired()) exit(); else { render(); dialog.querySelector<HTMLElement>(which === 'object' ? '[data-gg-enter]' : '[data-gg-return]')?.focus({ preventScroll: true }); } });
     };
     if (!source) { fallback(expired() ? 'Media access has expired. Reopen the gift to refresh it.' : 'This 3D asset is not available yet. Your image and story remain here.'); return; }
     const ready = () => {
-      if (!current() || failed) return; visual.classList.add('is-ready'); visual.classList.toggle('is-opening', which === 'object' && !giftRevealed); status.hidden = true; controls.hidden = which === 'object' && !giftRevealed;
-      text('[data-gg-caption]', which === 'object' ? giftRevealed ? 'Drag to rotate · pinch or scroll to zoom' : 'Open your gift to reveal the 3D keepsake' : 'Drag to look around · tap a numbered light to read');
+      if (!current() || failed) return; visual.classList.add('is-ready'); status.hidden = true; controls.hidden = false;
+      text('[data-gg-caption]', which === 'object' ? 'Drag to rotate · pinch or scroll to zoom' : 'Drag to look around · tap a numbered light to read');
       if (which === 'world') dialog.querySelector<HTMLElement>('[data-gg-points]')!.hidden = false;
       if (which === 'world') dialog.querySelector<HTMLButtonElement>('[data-gg-tour-start]')!.disabled = false;
-    };
-    const revealed = () => {
-      if (!current() || failed || which !== 'object') return;
-      giftRevealed = true;
-      visual.classList.remove('is-opening'); controls.hidden = false;
-      text('[data-gg-caption]', 'Drag to rotate · pinch or scroll to zoom');
     };
     const progress = (state: ViewerProgress) => { if (current() && !failed) status.textContent = state.phase === 'decoding' ? 'Preparing this scene for your device…' : state.loadedBytes ? `Opening the scene · ${Math.round(state.loadedBytes / 1024)} KB received` : 'Opening the scene…'; };
     const projected = (positions: ProjectedWorldPoint[]) => {
@@ -368,7 +362,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
     };
     try {
       let next: ObjectHandle | GeneratedWorldHandle;
-      if (which === 'object') { const module = await import('./scene'); if (!current()) return; next = module.mountMemoryScene(canvas, { modelUrl: source, backgroundUrl: mediaUrl(gift.originalUrl), photoIntent:gift.photoIntent,objectRepresentation:gift.objectRepresentation,modelYaw:gift.modelYaw,photoUrl:mediaUrl(gift.originalUrl),theme: 'dusk', unboxing: true, onReady: ready, onReveal: revealed, onError: () => fallback('The 3D object could not open. Your image and story remain available.'), onProgress: progress }); }
+      if (which === 'object') { const module = await import('./scene'); if (!current()) return; next = module.mountMemoryScene(canvas, { modelUrl: source, backgroundUrl: mediaUrl(gift.originalUrl), photoIntent:gift.photoIntent,objectRepresentation:gift.objectRepresentation,modelYaw:gift.modelYaw,photoUrl:mediaUrl(gift.originalUrl),theme: 'dusk', unboxing: false, onReady: ready, onError: () => fallback('The 3D souvenir could not open. Your image and story remain available.'), onProgress: progress }); }
       else { const module = await import('./generated-world'); if (!current()) return; next = module.mountGeneratedWorld(canvas, source, { points: points.map(point => ({ ...point, readingDurationMs: Math.max(12000, Math.min(35000, point.text.length * 38 + 8000)) })), flightProfile, collisionUrl: mediaUrl(gift.collisionUrl || gift.colliderUrl), onWalkingChange: walkingState, onTourChange: tourState,
         onViewpointChange: state => { if (!current() || failed || selected !== state.pointId || pendingFocus !== state.pointId) return; if (state.phase === 'arrived') { pendingFocus = undefined; const point = points.find(point => point.id === state.pointId); if (point) showPoint(point); text('[data-gg-caption]', 'At your viewpoint · close the story to explore'); } else { if (state.phase === 'cancelled') pendingFocus = undefined; hidePoint(); text('[data-gg-caption]', state.phase === 'travelling' ? 'Flying to your viewpoint…' : 'Explore at your own pace · open Stories to read'); } },
         onReady: ready, onError: () => fallback('The 3D world could not open. Your image and story remain available.'), onProgress: progress, onPoints: projected, initialYaw: gift.initialYaw, initialPitch: gift.initialPitch }); }

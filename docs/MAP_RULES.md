@@ -60,6 +60,28 @@ The component accepts structurally compatible backend DTOs. Only caller-provided
 
 ## Accessibility and verification
 
+The v10.2 optional Place step uses a separate 2D OpenStreetMap street view for a
+selected catalog city or rounded GPS position. It requests only visible raster
+tiles from `https://tile.openstreetmap.org`, uses normal browser caching and an
+origin-only Referer, and keeps visible contributor attribution. No tile prefetch,
+offline tile downloads or location changes result from camera movement. The
+bundled Natural Earth overview remains available when street tiles fail or the
+user selects the local map. Map pan, pinch, keyboard navigation, zoom and the
+return-to-pin button never add a visit or change the gift's position. These
+requests follow the [OSMF tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+
+When the creation assistant enables `lookupPlaces`, the explicit **Use my
+location** action explains that GPS is sent to OpenStreetMap for nearby place
+suggestions. The component retains exact coordinates and reported accuracy only
+in temporary memory, separately from the gift DTO. `getLookupLocation()` returns
+a detached lookup object to that assistant. Skip, manual city selection, a new
+attempt and destruction clear it, and late canceled GPS callbacks cannot restore
+it. The component makes no geocoding call itself and does not log or persist the
+lookup object. Saved gift context remains rounded to 0.01 degrees; lookup mode
+starts with story inclusion off. A suggested point is a candidate that the user
+must confirm; GPS accuracy does not prove a visit. Confirming a candidate label
+through `setSuggestedPlace()` preserves the story inclusion choice.
+
 Navigation uses native buttons, a labeled breadcrumb list, a three-state legend, polite save announcements, at least 44-pixel control targets, and a responsive card layout. Keyboard users can drill into places and zoom out; headings receive focus after navigation. Reduced-motion settings disable card movement. Owner and fictional-demo labels remain visible. User text is inserted using `textContent`; only fixed original SVG paths use HTML insertion.
 
 Run pure tests with the project's Node runtime:

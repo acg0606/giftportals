@@ -204,6 +204,23 @@ test('one provider failure leaves the completed gift available with honest parti
  const first = await service.create(input()), job = await service.get(first.id, first.token);
  assert.equal(job.state, 'partial'); assert.equal(job.tripo.state, 'completed'); assert.equal(job.worldlabs.state, 'failed'); assert.ok(job.assets.modelUrl); assert.equal(job.assets.worldUrl, undefined);
 });
+test('collection snapshot authorizes an unfinished local gift without polling, starting providers, reserving credits or rewriting its job', async t => {
+ const { service, directory } = await fixture(t);
+ const first = await service.create(input()); await service.get(first.id, first.token);
+ const path = join(directory, first.id, 'job.json'), stored = JSON.parse(await readFile(path, 'utf8'));
+ stored.state = 'processing'; stored.tripo = { state: 'pending', progress: 0 }; stored.worldlabs = { state: 'pending', progress: 0 };
+ await writeFile(path, JSON.stringify(stored)); const before = await readFile(path, 'utf8'); let calls = 0;
+ const snapshot = i.createInstantService({ directory, settings, safety: testSafety,
+  credit: async () => { calls++; throw Error('Snapshot must not reserve credits'); },
+  upload: async () => { calls++; throw Error('Snapshot must not upload'); },
+  json: async () => { calls++; throw Error('Snapshot must not contact providers'); },
+  complete: async () => { calls++; throw Error('Snapshot must not hydrate provider assets'); },
+ });
+ const gift = await snapshot.snapshot(first.id, first.token);
+ assert.equal(gift.state, 'processing'); assert.equal(gift.tripo.state, 'pending'); assert.equal(gift.token, first.token);
+ await assert.rejects(snapshot.snapshot(first.id, token()), error => error.code === 'JOB_UNAVAILABLE' && error.status === 404);
+ assert.equal(calls, 0); assert.equal(await readFile(path, 'utf8'), before);
+});
 test('retained service denies missing or wrong capabilities with404 after a constructor reload', async () => {
  const previousRules = await import(rulesURL + '#before-hmr');
  const currentRules = await import(rulesURL);

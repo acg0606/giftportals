@@ -2,13 +2,15 @@
 
 Some gifts fit in your hand. Others take you to an entire world.
 
-Release 10.0.0 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs travel studio, open their memories and discover the sender's words. The new welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Demo people, journeys and stories are fictional.
+Release 10.2.0 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs travel studio, open their memories and discover the sender's words. The new welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Demo people, journeys and stories are fictional.
 
 ## Build status
 
-**Release 10.0.0** includes the reference-conditioned World Labs studio, completed Tripo keepsakes, TapNow visual direction, standard WebXR and print preparation. Physical PICO, HeyGears and Jupiter validation remain pending. Live creation uses private Supabase storage and the server's pinned image moderation models.
+**Release 10.2.0** includes the reference-conditioned World Labs studio, completed Tripo keepsakes, TapNow visual direction, standard WebXR and print preparation. Physical PICO, HeyGears and Jupiter validation remain pending. Live creation uses private Supabase storage and the server's pinned image moderation models.
 
 Production: [giftportals.vercel.app](https://giftportals.vercel.app). Source: [acg0606/giftportals](https://github.com/acg0606/giftportals). Current evidence and exact limits are recorded in the [sponsor audit](docs/V10-SPONSOR-AUDIT.md); publication does not constitute a hackathon submission receipt.
+
+Release 10.2 automatically saves completed creator gifts to the desk and My Memories on the same browser device, opens the keepsake directly, focuses creation on photos of places, and adds a detailed OpenStreetMap place view with a local fallback. Editable photo and story suggestions use optional Vercel AI Gateway interpretation; nearby places and sourced details help the author confirm the setting. Device references expire with the private gift and remain separate for each account. See [10.2 validation](docs/V10_2-VALIDATION.md) for evidence and limits.
 
 ## Development
 

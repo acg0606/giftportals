@@ -400,6 +400,7 @@ export function createInstantService(deps: Dependencies = {}) {
   });
  };
  const get=async(id:unknown,token:unknown)=>{const initial=await read(id),capability=authorize(initial,token);return dto(await refresh(id,true),capability);};
+ const snapshot=async(id:unknown,token:unknown)=>{const job=await read(id),capability=authorize(job,token);return dto(job,capability);};
  const asset = async (id: unknown, token: unknown, name: unknown) => {
   const job = await read(id); authorize(job, token); ensure(typeof name === 'string' && ['photo', 'model', 'world', 'panorama','collider','tripo-input'].includes(name), 'ASSET_UNAVAILABLE', 404);
   const entry = name==='tripo-input'?job.objectPhoto:job.assets[name]; ensure(entry, 'ASSET_UNAVAILABLE', 404);const bytes=await readFile(assetPath(job,entry));ensure(bytes.length===entry.bytes&&sha(bytes)===entry.sha256,'ASSET_UNAVAILABLE',404);return { bytes, mime: entry.mime };
@@ -510,5 +511,5 @@ export function createInstantService(deps: Dependencies = {}) {
    derive(job);await save(job);return ownedSummary(job);
   });
  };
- return { status, triage, create, get, resume, asset, enhanceWorld,enhanceCollider,cacheColliderForOwnedJob,remakeKeepsakeForOwnedJob,pollOwnedKeepsake,approveOwnedKeepsakeReference,rejectOwnedKeepsakeReference };
+ return { status, triage, create, get, snapshot, resume, asset, enhanceWorld,enhanceCollider,cacheColliderForOwnedJob,remakeKeepsakeForOwnedJob,pollOwnedKeepsake,approveOwnedKeepsakeReference,rejectOwnedKeepsakeReference };
 }

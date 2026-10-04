@@ -26,7 +26,7 @@ test('only complete creator results form session keepsakes; pending or partial w
 });
 test('session keepsake preserves the original and uses encoded private routes without mutating the source', () => {
   const item = createdSessionKeepsake(completed);
-  assert.equal(item.demo, false); assert.match(item.subtitle, /this session/);
+  assert.equal(item.demo, false); assert.match(item.subtitle, /saved on this device/);
   assert.equal(item.imageUrl, completed.assets.photoUrl); assert.equal(item.photoIntent, 'place');
   assert.equal(item.openPath, `generated/${encodeURIComponent(completed.id)}?key=${encodeURIComponent(completed.token)}`);
   assert.equal(item.worldPath, `${item.openPath}&view=world`);
@@ -47,3 +47,4 @@ test('a miniature uses its own reference thumbnail and preserves original, repre
   assert.equal(createdSessionKeepsake({ ...job, modelYaw: 0 }).modelYaw, 0, 'An explicit cache or job orientation remains authoritative');
   assert.equal(createdSessionKeepsake(completed).modelYaw, undefined, 'Ordinary objects retain their prior orientation');
 });
+

@@ -45,6 +45,9 @@ export default async function handler(req: Request, res: ServerResponse) {
    ensure(req.method === 'POST', 'METHOD_NOT_ALLOWED', 405); let value = req.body;
    if (typeof value === 'string') { ensure(Buffer.byteLength(value) <= MAX_INSTANT_BODY_BYTES, 'BODY_TOO_LARGE', 413); try { value = JSON.parse(value); } catch { throw new AppError('INVALID_JSON'); } }
    ensure(value && typeof value === 'object' && !Array.isArray(value), 'INVALID_BODY'); data = action==='triage'?await qualityService.triage(value):await service.create(value);
+  } else if (action === 'snapshot') {
+   ensure(req.method === 'GET', 'METHOD_NOT_ALLOWED', 405);
+   data = await qualityService.snapshot(query.get('id'), req.headers['x-instant-token']);
   } else if (action === 'job') {
    ensure(req.method === 'GET', 'METHOD_NOT_ALLOWED', 405);
    const result = query.get('id') ? await service.get(query.get('id'), req.headers['x-instant-token']) : await service.resume(query.get('dedupeKey'), req.headers['x-instant-token']);

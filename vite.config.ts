@@ -52,18 +52,18 @@ export default defineConfig({
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const path = req.url?.split('?')[0];
-        if (path !== '/api/giftportals' && path !== '/api/tick' && path !== '/api/instant' && path !== '/api/story-audio') return next();
+        if (path !== '/api/giftportals' && path !== '/api/tick' && path !== '/api/instant' && path !== '/api/story-audio' && path !== '/api/place-assistant') return next();
         try {
           if (req.method !== 'GET' && req.method !== 'HEAD') {
             const chunks: Buffer[] = []; let size = 0;
             for await (const chunk of req) {
               const bytes = Buffer.from(chunk); size += bytes.length;
-              if (size > (path === '/api/instant' ? 17 * 1024 * 1024 : path === '/api/story-audio' ? 9 * 1024 * 1024 : 16384)) { res.statusCode = 413; res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({ok:false,error:{code:'BODY_TOO_LARGE',message:'Request body is too large.'}})); return; }
+              if (size > (path === '/api/instant' ? 17 * 1024 * 1024 : path === '/api/story-audio' ? 9 * 1024 * 1024 : path === '/api/place-assistant' ? 3 * 1024 * 1024 : 16384)) { res.statusCode = 413; res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({ok:false,error:{code:'BODY_TOO_LARGE',message:'Request body is too large.'}})); return; }
               chunks.push(bytes);
             }
             Object.assign(req, { body: Buffer.concat(chunks).toString('utf8') });
           }
-          const module = await server.ssrLoadModule(path === '/api/story-audio' ? '/api/story-audio.ts' : path === '/api/instant' ? '/api/instant.ts' : path === '/api/tick' ? '/api/tick.ts' : '/api/giftportals.ts');
+          const module = await server.ssrLoadModule(path === '/api/place-assistant' ? '/api/place-assistant.ts' : path === '/api/story-audio' ? '/api/story-audio.ts' : path === '/api/instant' ? '/api/instant.ts' : path === '/api/tick' ? '/api/tick.ts' : '/api/giftportals.ts');
           await module.default(req, res);
         } catch {
           res.statusCode = 503; res.setHeader('Content-Type', 'application/json');
