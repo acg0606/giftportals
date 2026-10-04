@@ -24,6 +24,6 @@ export interface PlaceAssistantSuggestion {
  title:string; story:string; worldPrompt:string; photoDescription?:string;
  provider:PlaceAssistantProvider; photoAnalyzed:boolean;
  places:PlaceAssistantCandidate[]; curiosities:PlaceAssistantCuriosity[];
- generationFailure?:{code:'AUTH_UNAVAILABLE'|'CREDIT_LIMIT'|'RATE_LIMIT'|'PROVIDER_REJECTED'|'INVALID_RESPONSE'|'NETWORK_UNAVAILABLE';status?:number};
+ generationFailure?:{code:'AUTH_UNAVAILABLE'|'ACCESS_DENIED'|'MODEL_ACCESS_DENIED'|'ACCOUNT_RESTRICTION'|'CREDIT_LIMIT'|'RATE_LIMIT'|'PROVIDER_REJECTED'|'INVALID_RESPONSE'|'NETWORK_UNAVAILABLE';status?:number};
  warnings:string[]; locationStatus:'not-requested'|'matched'|'unavailable';
 }

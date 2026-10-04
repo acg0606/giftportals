@@ -22,7 +22,7 @@ The existing production configuration contained Tripo and World Labs credentials
 
 ## Verification
 
-The complete automated suite passed: **816 tests, zero failures**, using `node --test --test-concurrency=1 tests/*.test.mjs api/tests/*.test.mjs` (41.4 seconds). Frontend and strict server TypeScript checks and the production Vite build passed. Follow-up regression checks also cover request-scoped Vercel runtime OIDC tokens and replacing or clearing catalog defaults through the author's explicit suggestion controls.
+The complete automated suite passed: **820 tests, zero failures**, using `node --test --test-concurrency=1 tests/*.test.mjs api/tests/*.test.mjs` (41.2 seconds). Frontend and strict server TypeScript checks and the production Vite build passed. Follow-up regression checks also cover request-scoped Vercel runtime OIDC tokens and replacing or clearing catalog defaults through the author's explicit suggestion controls.
 
 - TypeScript checks for frontend and server, and a production Vite build.
 - Automated tests covering completion, restoration, owner isolation, direct opening, place maps, consent, stale requests, edited fields and sourced details.
@@ -36,3 +36,5 @@ The first production deployment, `28ffe9357e881aba9b0ae24b82399967e54f1d30`, rea
 The first photo smoke identified that Vercel supplies a function's OIDC credential through the `x-vercel-oidc-token` request header; the environment token is for build/development contexts. The follow-up passes that credential only within the current trusted Vercel request, never through mutable shared state or back to the browser. Live photo availability must be confirmed by a successful photo smoke, rather than the runtime status flag alone.
 
 Physical XR, printing and sponsor-hardware validation retain their prior limits in `V10-SPONSOR-AUDIT.md`.
+
+A second publication (`7ca4e4c9374bf2f1b3b7b94647d9f094e11b63c1`) reached READY. The runtime correctly exposed OIDC availability, but the live image call received a Gateway 403. This is not recorded as successful photo interpretation. The browser can still use place templates and sourced curiosities. The final adapter compatibility check is recorded below when complete.

@@ -56,7 +56,7 @@ test('confirmed placeName drives editable text and exact sourced lookup; nearby 
 
 test('gateway requests use the verified vision model, bounded tokens, a fixed endpoint and cache a photo/context once',async()=>{
  let calls=0;const service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async(url,init)=>{
-  calls++;assert.equal(String(url),'https://ai-gateway.vercel.sh/v1/chat/completions');assert.equal(init.redirect,'error');
+  calls++;assert.equal(String(url),'https://ai-gateway.vercel.sh/v1/chat/completions');assert.equal(init.redirect,'error');assert.equal(init.headers['ai-gateway-auth-method'],'oidc');
   const body=JSON.parse(init.body);assert.equal(body.model,'google/gemini-2.5-flash-lite');assert.equal(body.max_tokens,900);assert.equal(body.messages[0].content[1].image_url.url,photo);
   assert.ok(body.messages[0].content[0].text.includes('do not identify people'));return json({choices:[{message:{content:JSON.stringify(gatewayResult)}}]});
  }});
@@ -145,4 +145,14 @@ test('overlapping requests retain their own runtime token after asynchronous pla
  const second=await service.suggest({imageDataUrl:photo,photoConsent:true},undefined,'synthetic-token-B');
  assert.equal(second.photoAnalyzed,true);releaseLookup();assert.equal((await first).photoAnalyzed,true);
  assert.deepEqual(used,['Bearer synthetic-token-B','Bearer synthetic-token-A']);assert.equal(service.status().photoAnalysisAvailable,false);
+});
+
+test('403 diagnostics distinguish model/account/auth denials without exposing the provider body or credentials',async()=>{
+ for(const [message,code]of [['Model is not available on the free tier','MODEL_ACCESS_DENIED'],['Team account is disabled','ACCOUNT_RESTRICTION'],['OIDC token is expired; jwt denied','AUTH_UNAVAILABLE'],['Forbidden','ACCESS_DENIED']]){
+  const secret='synthetic-upstream-sensitive-value',service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async()=>json({})});
+  assert.equal(a.classifyGatewayFailure(403,{error:{message}}),code);
+  const failing=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async()=>new Response(JSON.stringify({error:{message,requestData:secret}}),{status:403})});
+  const result=await failing.suggest({imageDataUrl:photo,photoConsent:true});assert.deepEqual(result.generationFailure,{code,status:403});assert.equal(result.photoAnalyzed,false);assert.ok(!JSON.stringify(result).includes(secret));assert.ok(!JSON.stringify(result).includes(message));
+ }
+ assert.equal(a.classifyGatewayFailure(401,{error:{message:'Model denied'}}),'AUTH_UNAVAILABLE');
 });
