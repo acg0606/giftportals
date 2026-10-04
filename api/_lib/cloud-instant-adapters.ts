@@ -95,7 +95,7 @@ async function uploadImage(provider:'tripo'|'worldlabs',bytes:Buffer,mime:string
   const extension=mime==='image/jpeg'?'jpg':mime.split('/')[1],prepared=await http.json('worldlabs','/media-assets:prepare_upload','POST',{file_name:`place.${extension}`,kind:'image',extension}),info=prepared.upload_info,id=providerId(prepared.media_asset?.media_asset_id);
   ensure(info?.upload_method==='PUT'&&typeof info.upload_url==='string','PROVIDER_RESPONSE_INVALID',502);const url=new URL(info.upload_url);
   ensure(url.protocol==='https:'&&!url.username&&!url.password&&(!url.port||url.port==='443')&&['worldlabs.ai','googleapis.com'].some(domain=>url.hostname===domain||url.hostname.endsWith(`.${domain}`)),'PROVIDER_ASSET_ORIGIN_DENIED',502);
-  ensure(info.required_headers===undefined||(info.required_headers&&typeof info.required_headers==='object'&&!Array.isArray(info.required_headers)),'PROVIDER_RESPONSE_INVALID',502);
+  ensure(info.required_headers===undefined||info.required_headers===null||(info.required_headers&&typeof info.required_headers==='object'&&!Array.isArray(info.required_headers)),'PROVIDER_RESPONSE_INVALID',502);
   const headers:Record<string,string>={};for(const[name,value]of Object.entries(info.required_headers||{})){ensure(typeof value==='string'&&!/authorization|cookie|api-key/i.test(name),'PROVIDER_RESPONSE_INVALID',502);headers[name]=value;}
   const response=await fetch(url,{method:'PUT',body:new Uint8Array(bytes),headers,redirect:'error',signal:AbortSignal.timeout(cloudRemaining(deadline,30000,20000))});ensure(response.ok,'PROVIDER_UPLOAD_FAILED',502);return id;
 }

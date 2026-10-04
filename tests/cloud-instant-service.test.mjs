@@ -10,13 +10,14 @@ import ts from 'typescript';
 const source = await readFile(new URL('../src/cloud-instant-service.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 assert.equal(/^import\s/m.test(compiled), false);
-const { cloudCreatorOrigin, cloudImageBytes, createCloudInstantService } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { cloudCreatorOrigin, cloudImageBytes, createCloudInstantService, worldDiagnosticsMessage } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const photo = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5XcAAAAASUVORK5CYII=', 'base64');
 const image = `data:image/png;base64,${photo.toString('base64')}`;
 const id = '12345678-1234-4234-8234-123456789abc', token = 'client_capability_abcdefghijklmnopqrstuvwxyz123456';
 const input = (extra = {}) => ({ imageDataUrl: image, photoIntent: 'place', title: 'A little gift', worldPrompt: 'A quiet garden near the shoreline.', story: 'We kept the afternoon.', dedication: 'For you', senderName: 'Ana', recipientName: 'Leo', dedupeKey: 'same-draft_abcdefgh123456789', requestToken: token, consent: true, ...extra });
 const status = { available: true, localOnly: false, storage: 'cloud', uploadMode: 'signed-direct', generationEnabled: true, providers: { tripo: true, worldlabs: true }, maxImageBytes: 6 * 1024 * 1024, examples: [], safety: { available: true, localOnly: false } };
 const job = (state = 'processing') => ({ storage: 'cloud', id, token, state, title: 'A little gift', worldPrompt: 'A quiet garden near the shoreline.', story: 'We kept the afternoon.', dedication: 'For you', senderName: 'Ana', recipientName: 'Leo', photoIntent: 'place', objectRepresentation: 'souvenir-miniature', createdAt: '2026-10-05T00:00:00Z', updatedAt: '2026-10-05T00:00:00Z', tripo: { state: 'pending', progress: 0 }, worldlabs: { state: 'pending', progress: 0 }, assets: { photoUrl: 'https://project.supabase.co/storage/v1/object/sign/gp-instant-private/photo?token=read-only' }, generation: { tripo: {}, worldlabs: {} } });
+const diagnostics = (extra = {}) => ({ done: true, errorPresent: true, errorShape: 'object', errorEmpty: false, errorCode: 'INTERNAL', reason: 'provider-internal', reasonText: 'A predefined server phrase.', ...extra });
 const success = data => new Response(JSON.stringify({ ok: true, data }), { headers: { 'Content-Type': 'application/json' } });
 const failure = (code = 'CLOUD_NOT_READY', http = 503) => new Response(JSON.stringify({ ok: false, error: { code, message: 'Creation is unavailable.' } }), { status: http, headers: { 'Content-Type': 'application/json' } });
 const plans = body => Object.entries(body.images).map(([imageId, declaration]) => ({ id: imageId, ...declaration, method: 'PUT', headers: { 'Content-Type': declaration.mime }, url: `https://project.supabase.co/storage/v1/object/upload/sign/gp-instant-private/${id}/input/${imageId}-${declaration.sha256}.png?token=upload-only-signature` }));
@@ -43,6 +44,7 @@ function harness(options = {}) {
     if (action === 'upload') return options.uploadResponse?.(call, calls) || new Response('', { status: 200 });
     if (action === 'finalize') return options.finalizeResponse?.(call, calls) || success(options.finalized || job(options.finalState || 'processing'));
     if (action === 'job') return options.jobResponse?.(call, calls) || success(options.job || job('completed'));
+    if (action === 'world-diagnostics') return options.diagnosticsResponse?.(call, calls) || success(options.diagnostics || diagnostics());
     if (action === 'advance') return success(options.advanced || job('completed'));
     throw new Error(`Unexpected action ${action}`);
   };
@@ -52,6 +54,61 @@ function harness(options = {}) {
 test('cloud origin selection preserves localhost and enables normal remote hosts', () => {
   for (const host of ['', 'localhost', 'LOCALHOST', '127.0.0.1', '::1', '[::1]']) assert.equal(cloudCreatorOrigin(host), false);
   for (const host of ['giftportals.vercel.app', 'gifts.example']) assert.equal(cloudCreatorOrigin(host), true);
+});
+
+test('world diagnostics reads only the existing capability job with one GET and never creates or advances', async () => {
+  const transport = harness();
+  const result = await transport.service.worldDiagnostics({ id, token }, new AbortController().signal);
+  assert.equal(result.reason, 'provider-internal'); assert.match(result.reasonText, /internal failure/);
+  assert.deepEqual(transport.actions(), ['world-diagnostics']);
+  const call = transport.calls[0], url = new URL(call.url, 'https://gift.example');
+  assert.deepEqual([...url.searchParams], [['action', 'world-diagnostics'], ['id', id]]);
+  assert.equal(call.method, 'GET'); assert.equal(call.body, undefined); assert.equal(call.headers['X-Instant-Token'], token);
+  assert.equal(call.url.includes(token), false); assert.equal(call.credentials, 'same-origin');
+  assert.equal(call.referrerPolicy, 'no-referrer'); assert.equal(call.redirect, 'error');
+});
+
+test('world diagnostic receipts discard provider text, private fields and unrecognized codes', async () => {
+  const privateText = `vendor response ${token} https://private.example/input`;
+  for (const [code, expected] of [['RESOURCE_EXHAUSTED', 'RESOURCE_EXHAUSTED'], [8, 8], [999999, 999999], [-1, null], [1000000, null], [8.5, null], [privateText, null]]) {
+    const transport = harness({ diagnostics: diagnostics({ reason: 'insufficient-credits', errorCode: code, reasonText: privateText, token, inputUrl: 'https://private.example/input', response: { secret: true } }) });
+    const result = await transport.service.worldDiagnostics({ id, token }, new AbortController().signal);
+    assert.equal(result.errorCode, expected); assert.match(result.reasonText, /insufficient credits/);
+    assert.deepEqual(Object.keys(result).sort(), ['done', 'errorPresent', 'errorShape', 'errorEmpty', 'errorCode', 'reason', 'reasonText'].sort());
+    assert.doesNotMatch(JSON.stringify(result), /private\.example|vendor response|client_capability|secret/);
+    assert.deepEqual(transport.actions(), ['world-diagnostics']);
+  }
+  const unknown = harness({ diagnostics: diagnostics({ reason: privateText, errorShape: privateText, errorCode: privateText }) });
+  const result = await unknown.service.worldDiagnostics({ id, token }, new AbortController().signal);
+  assert.equal(result.reason, 'unknown'); assert.equal(result.errorShape, 'other'); assert.equal(result.errorCode, null);
+  assert.match(result.reasonText, /did not return a clear reason/);
+});
+
+test('world diagnostics stays read-only on invalid replies, remote errors, cancellation and invalid references', async () => {
+  for (const value of [null, [], {}, diagnostics({ done: 'true' }), diagnostics({ errorPresent: null })]) {
+    const transport = harness({ diagnosticsResponse: () => success(value) });
+    await assert.rejects(transport.service.worldDiagnostics({ id, token }, new AbortController().signal), /could not be checked/);
+    assert.deepEqual(transport.actions(), ['world-diagnostics']);
+  }
+  const denied = harness({ diagnosticsResponse: () => failure('JOB_UNAVAILABLE', 404) });
+  await assert.rejects(denied.service.worldDiagnostics({ id, token }, new AbortController().signal), error => error.code === 'JOB_UNAVAILABLE');
+  assert.deepEqual(denied.actions(), ['world-diagnostics']);
+  const invalid = harness(), closed = new AbortController(); closed.abort();
+  await assert.rejects(invalid.service.worldDiagnostics({ id, token }, closed.signal), { name: 'AbortError' });
+  for (const reference of [{ id: '../not-a-job', token }, { id, token: 'short' }]) await assert.rejects(invalid.service.worldDiagnostics(reference, new AbortController().signal), /could not be checked/);
+  assert.deepEqual(invalid.actions(), []);
+  const stalled = harness({ hang: 'world-diagnostics' }), owner = new AbortController();
+  const task = stalled.service.worldDiagnostics({ id, token }, owner.signal); task.catch(() => {}); owner.abort();
+  await assert.rejects(task, { name: 'AbortError' }); assert.deepEqual(stalled.actions(), ['world-diagnostics']);
+});
+
+test('world diagnostic copy distinguishes reported failures, processing and an unconfirmed finished world', () => {
+  const expected = { 'content-policy': /image approval restriction/, 'input-download': /could not download/, 'invalid-input': /invalid creation input/, 'insufficient-credits': /insufficient credits/, 'rate-limit': /too many requests/, timeout: /took too long/, 'provider-internal': /internal failure/, unknown: /did not return a clear reason/ };
+  for (const [reason, phrase] of Object.entries(expected)) assert.match(worldDiagnosticsMessage(diagnostics({ reason, reasonText: `${token} vendor response` })), phrase);
+  assert.match(worldDiagnosticsMessage(diagnostics({ reason: 'unknown', done: false, errorPresent: false })), /still processing/);
+  const finished = worldDiagnosticsMessage(diagnostics({ reason: 'unknown', done: true, errorPresent: false, errorShape: 'null', errorEmpty: true }));
+  assert.match(finished, /finished without a failure reason/); assert.match(finished, /available world has not been confirmed/);
+  assert.doesNotMatch(finished, /is ready|RESOURCE_EXHAUSTED|client_capability/);
 });
 
 test('photo declaration proves the exact local bytes with SHA-256 and contains no data URL', async () => {

@@ -4,6 +4,16 @@ import { AppError,ensure,hasMagic,providerAssetUrl } from './rules.js';
 import { providerId } from './providers.js';
 type Provider='tripo'|'worldlabs';
 const BASE={tripo:'https://openapi.tripo3d.ai/v3',worldlabs:'https://api.worldlabs.ai/marble/v1'};
+function completedWorld(value:unknown){
+  ensure(value&&typeof value==='object'&&!Array.isArray(value),'PROVIDER_RESPONSE_INVALID',502);
+  const envelope=value as Record<string,any>,world=envelope.world===undefined?envelope:envelope.world;
+  ensure(world&&typeof world==='object'&&!Array.isArray(world),'PROVIDER_RESPONSE_INVALID',502);
+  // The API reference uses world_id/direct World; the quickstart also documents
+  // id and a {world} envelope. Both identify the same recorded world.
+  const id=providerId(world.world_id??world.id);
+  ensure(world.world_id===undefined||world.id===undefined||world.world_id===world.id,'PROVIDER_RESPONSE_INVALID',502);
+  return {world:world as Record<string,any>,id};
+}
 /** Every network operation shares the invocation deadline, including response bodies. */
 export function cloudRemaining(deadline:number,maximum:number,reserve=0){const remaining=Math.floor(deadline-Date.now()-reserve);ensure(remaining>0,'CLOUD_TIME_SLICE_ENDED',503);return Math.min(maximum,remaining);}
 export async function cloudReadText(response:Response,maximum:number,code='PROVIDER_RESPONSE_LIMIT'){
@@ -49,9 +59,9 @@ export function createCloudProviderHTTP(deadline:number){
       if(stage==='tripo-reference'){ensure(result.type==='image_to_image','PROVIDER_RESPONSE_INVALID',502);const asset=await download(result.output?.generated_image_url,'tripo','reference','image/png',6*1024*1024);ensure(['image/png','image/jpeg'].includes(asset.mime),'PROVIDER_ASSET_INVALID',502);return {assets:[{...asset,key:'reference',suffix:asset.mime==='image/jpeg'?'jpg':'png'}],cost};}
       return {assets:[{...await download(result.output?.model_url,'tripo','glb','model/gltf-binary'),key:'model'}],cost};
     }
-    ensure(!result.error,'PROVIDER_GENERATION_FAILED',502);if(!result.done)return null;
-    let world=result.response;ensure(world&&typeof world==='object','PROVIDER_RESPONSE_INVALID',502);const resultId=providerId(world.world_id);
-    if(!world.assets?.splats?.spz_urls?.['500k']||!world.assets?.imagery?.pano_url||!world.assets?.mesh)world=await json('worldlabs',`/worlds/${encodeURIComponent(resultId)}`);
+    ensure(!result.error,'PROVIDER_GENERATION_FAILED',502);ensure(typeof result.done==='boolean','PROVIDER_RESPONSE_INVALID',502);if(!result.done)return null;
+    const snapshot=completedWorld(result.response),resultId=snapshot.id;let world=snapshot.world;
+    if(!world.assets?.splats?.spz_urls?.['500k']||!world.assets?.imagery?.pano_url||!world.assets?.mesh){const latest=completedWorld(await json('worldlabs',`/worlds/${encodeURIComponent(resultId)}`));ensure(latest.id===resultId,'PROVIDER_RESPONSE_INVALID',502);world=latest.world;}
     const worldQuality=world.assets?.splats?.spz_urls?.['500k']?'500k':'100k';
     const assets=await Promise.all([download(world.assets?.splats?.spz_urls?.[worldQuality],'worldlabs','spz','application/octet-stream',25*1024*1024,worldQuality==='500k'?600000:150000).then(asset=>({...asset,key:'generated-world'})),download(world.assets?.imagery?.pano_url,'worldlabs','panorama','image/jpeg').then(asset=>({...asset,key:'panorama',suffix:asset.mime==='image/jpeg'?'jpg':asset.mime.split('/')[1]}))]);
     let colliderStatus='unavailable';const collider=world.assets?.mesh?.collider_mesh_url;

@@ -24,12 +24,13 @@ function anonymousOwner(req:Request,res:ServerResponse):string{
   if(!owner||!/^[A-Za-z0-9_-]{43}$/.test(owner)||!secretMatches(signature,sign(owner))){owner=randomBytes(32).toString('base64url');res.setHeader('Set-Cookie',`__Host-gp_instant_owner=${owner}.${sign(owner)}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=2592000`);}
   return createHmac('sha256',secret).update(`quota:${owner}`).digest('hex');
 }
-const requestActions=new Set(['status','prepare','finalize','advance','job']);
+const requestActions=new Set(['status','prepare','finalize','advance','job','world-diagnostics']);
 const requestErrorCodes=new Set(['ACTION_UNAVAILABLE','BODY_TOO_LARGE','CLOUD_NOT_CONFIGURED','CLOUD_REQUEST_FAILED','CLOUD_STORAGE_FAILED','CLOUD_TIME_SLICE_ENDED','DATABASE_REQUEST_FAILED','DATABASE_STATUS_INVALID','DEDUPE_MISMATCH','GENERATION_BUDGET','GENERATION_CONSENT_REQUIRED','GENERATION_PAUSED','GENERATION_QUOTA','GIFT_UNAVAILABLE','IMAGE_CONTENT_INVALID','INSTANT_ASSET_CONFLICT','INSTANT_ASSET_INVALID','INSTANT_INPUT_IMMUTABLE','INSTANT_INPUT_INVALID','INSTANT_LEASE_CONFLICT','INSTANT_TASK_IMMUTABLE','INSTANT_TRANSITION_INVALID','INVALID_BODY','INVALID_ID','INVALID_JSON','INVALID_TEXT','JOB_EXPIRED','JOB_UNAVAILABLE','METHOD_NOT_ALLOWED','OBJECT_IMAGE_ROLE_INVALID','ORIGIN_DENIED','PHOTO_INTENT_INVALID','PHOTO_SAFETY_BLOCKED','PHOTO_SAFETY_REQUIRED','PHOTO_SAFETY_REVIEW_REQUIRED','PHOTO_SAFETY_UNAVAILABLE','PLACE_OBJECT_IMAGE_INVALID','PLACE_OBJECT_IMAGE_ROLE_REQUIRED','PLACE_REFERENCE_TYPE_UNSUPPORTED','PROVIDER_ASSET_INVALID','PROVIDER_ASSET_ORIGIN_DENIED','PROVIDER_GENERATION_FAILED','PROVIDER_ID_INVALID','PROVIDER_REQUEST_REJECTED','PROVIDER_RESPONSE_INVALID','PROVIDER_RESPONSE_LIMIT','PROVIDER_UNAVAILABLE','PROVIDER_UPLOAD_FAILED','REQUEST_TOKEN_INVALID','STORAGE_LIMIT','SUBMISSION_ALREADY_STARTED','SUBMISSION_AMBIGUOUS','SUBMISSION_NOT_STARTED','TOTAL_IMAGE_SIZE_LIMIT','CURIOSITY_IDS_INVALID','EXAMPLE_ID_INVALID']);
 export function cloudInstantRequestFailureMetadata(action:unknown,code:unknown,status:number){
   return {event:'cloud_instant_request_error',action:typeof action==='string'&&requestActions.has(action)?action:'unknown',errorCode:typeof code==='string'&&requestErrorCodes.has(code)?code:'CLOUD_REQUEST_FAILED',httpStatus:Number.isInteger(status)&&status>=400&&status<=599?status:500};
 }
 requestErrorCodes.add('PROVIDER_INSUFFICIENT_CREDITS');
+requestErrorCodes.add('WORLD_TASK_UNAVAILABLE');
 const requestErrorCopy=(code:string)=>code==='PROVIDER_INSUFFICIENT_CREDITS'?'The generation service does not have enough credits for this gift. Your photo and story remain here.':['GENERATION_QUOTA','GENERATION_BUDGET','STORAGE_LIMIT'].includes(code)?'Gift creation could not start. Your photo and story remain here; try again when the service is available.':'The request could not be completed.';
 export function createCloudInstantHandler(service?:ReturnType<typeof cloudInstantService>,now=Date.now){return async(req:Request,res:ServerResponse)=>{
   res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
@@ -41,6 +42,7 @@ export function createCloudInstantHandler(service?:ReturnType<typeof cloudInstan
       else if(action==='finalize'){ensure(req.method==='POST','METHOD_NOT_ALLOWED',405);data=await active.finalize(requestBody(req).id,String(req.headers['x-instant-token']||''));}
       else if(action==='advance'){ensure(req.method==='POST','METHOD_NOT_ALLOWED',405);data=await active.advance(requestBody(req).id,String(req.headers['x-instant-token']||''));}
       else if(action==='job'){ensure(req.method==='GET','METHOD_NOT_ALLOWED',405);data=await active.get({id:query.get('id')||undefined,dedupeKey:query.get('dedupeKey')||undefined,token:String(req.headers['x-instant-token']||'')});}
+      else if(action==='world-diagnostics'){ensure(req.method==='GET','METHOD_NOT_ALLOWED',405);ensure([...query.keys()].every(key=>key==='action'||key==='id'),'INVALID_BODY');data=await active.diagnoseWorld(query.get('id')||'',String(req.headers['x-instant-token']||''));}
       else throw new AppError('ACTION_UNAVAILABLE',404);}
     res.statusCode=200;res.end(JSON.stringify({ok:true,data}));
   }catch(error){

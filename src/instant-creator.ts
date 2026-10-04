@@ -10,7 +10,8 @@ import { selectedCuriosities } from '../shared/gift-curiosities';
 import { INSTANT_WIZARD_STEPS, appendInstantTranscript, instantDefaultWorldPrompt, instantJobConfirmedMissing, instantWizardCanCreate, instantWizardDestination, type InstantWizardStep } from './instant-wizard';
 import { mountStoryAudio } from './story-audio';
 import { giftIcon } from './gift-icon';
-import type { CloudImageId } from '../shared/cloud-instant';
+import type { CloudImageId, CloudWorldDiagnostics } from '../shared/cloud-instant';
+import { worldDiagnosticsMessage } from './cloud-instant-service';
 import { instantJobStorageKey, instantPendingStorageKey } from './local-keepsakes';
 import { assistantSourceUrl, assistantWarningCopy, placeAssistantService, type PlaceAssistantService } from './place-assistant-client';
 import type { PlaceAssistantInput, PlaceAssistantStatus, PlaceAssistantSuggestion } from '../shared/place-assistant';
@@ -23,6 +24,7 @@ export interface InstantCreatorService {
   create(input: InstantCreateInput, signal: AbortSignal): Promise<InstantJob>;
   job(reference: InstantJobReference, signal: AbortSignal): Promise<InstantJob>;
   resumeUpload?(reference: InstantJobReference, images: InstantUploadImages, signal: AbortSignal): Promise<InstantJob>;
+  worldDiagnostics?(reference: { id: string; token: string }, signal: AbortSignal): Promise<CloudWorldDiagnostics>;
   triage?(imageDataUrl:string,signal:AbortSignal):Promise<InstantPhotoReport>;
 }
 export interface InstantCreatorOptions {
@@ -158,6 +160,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   let dead = false, submitting = false, readingSource = false, status: InstantStatus | null = null, currentJob: InstantJob | null = null;
   let statusChecking = false, statusEpoch = 0;
   let creationPause = '';
+  let worldDiagnosticsAbort: AbortController | undefined, worldDiagnosticsEpoch = 0;
   let source: File | InstantExample | null = null, placePhoto: File | null = null, previewUrl: string | null = null, placePreviewUrl: string | null = null;
   let pollTimer: number | undefined, dedupeKey = '', requestToken = '', sourceEpoch = 0;
   const intent: InstantPhotoIntent = 'place';
@@ -217,7 +220,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
           <div data-instant-transformation></div>
           <section class="instant-upload-recovery" data-instant-upload-recovery hidden aria-label="Finish uploading your gift"><p>Your gift is saved, but a photo upload was interrupted. Continue with the same photos; photos already received are kept.</p>${(['original', 'object', 'world'] as const).map(id => `<label class="instant-field" data-instant-resume-field="${id}" hidden>${id === 'original' ? 'Original gift photo' : id === 'object' ? 'Souvenir reference photo' : 'Place reference photo'}<input type="file" accept="image/jpeg,image/png,image/webp" data-instant-resume-file="${id}"/></label>`).join('')}<small>In this tab, your photo may still be available. After reopening, choose the same file again. If you used an example, save that example photo first.</small><button class="instant-primary" type="button" data-instant-resume-upload>Resume this gift</button><p class="instant-error" data-instant-upload-error role="alert" hidden></p></section>
           <section class="instant-model-preview" data-instant-model-preview hidden aria-label="Your completed 3D keepsake"><div><span>${objectIcon}<strong>Your keepsake is ready.</strong></span><button type="button" data-instant-preview-toggle>Reset 3D view ↺</button></div><p class="instant-model-load" data-instant-preview-load role="status" hidden>Opening your 3D keepsake…</p><small data-instant-preview-note>Drag to turn it. Pinch or scroll to bring it closer.</small></section>
-          <ol data-instant-provider-progress aria-label="Generation progress"><li data-instant-provider="tripo"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-tripo-label></strong><small>Tripo · 3D keepsake</small></div></li><li data-instant-provider="worldlabs"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-worldlabs-label></strong><small>World Labs · spatial world</small></div></li></ol><p class="instant-progress-status" data-instant-job-status role="status" aria-live="polite"></p><button class="instant-primary" type="button" data-instant-open hidden>${giftIcon}Open your gift <span aria-hidden="true">↗</span></button><button class="instant-secondary" type="button" data-instant-recheck hidden>Check again</button><button class="instant-secondary" type="button" data-instant-edit hidden>${giftIcon}Start a different gift</button><small data-instant-job-note>Creating a world can take a few minutes. Your original photo stays available.</small></section>
+          <ol data-instant-provider-progress aria-label="Generation progress"><li data-instant-provider="tripo"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-tripo-label></strong><small>Tripo · 3D keepsake</small></div></li><li data-instant-provider="worldlabs"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-worldlabs-label></strong><small>World Labs · spatial world</small></div></li></ol><p class="instant-progress-status" data-instant-job-status role="status" aria-live="polite"></p><button class="instant-primary" type="button" data-instant-open hidden>${giftIcon}Open your gift <span aria-hidden="true">↗</span></button><button class="instant-secondary" type="button" data-instant-recheck hidden>Check again</button><button class="instant-secondary" type="button" data-instant-world-diagnostics hidden>Check world status</button><p class="instant-progress-status" data-instant-world-diagnostics-status role="status" aria-live="polite" hidden></p><button class="instant-secondary" type="button" data-instant-edit hidden>${giftIcon}Start a different gift</button><small data-instant-job-note>Creating a world can take a few minutes. Your original photo stays available.</small></section>
         <div class="instant-unavailable" data-instant-unavailable hidden><p data-instant-unavailable-message>Live creation is taking a pause. You can still choose your photo and write your story.</p><button class="instant-secondary" type="button" data-instant-status-retry>Check availability</button>${options.onExploreExample ? `<button class="instant-secondary" type="button" data-instant-explore>${giftIcon}Step into a ready-made gift ↗</button>` : ''}</div>
       </section>
     </main>`;
@@ -634,9 +637,41 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
       }
     } finally { if (active()) { confirmingJob = false; inputs.disabled = Boolean(pendingReference); availability(); } }
   }
+  function canCheckWorld(job: InstantJob) {
+    return Boolean(service.worldDiagnostics && (job.state === 'partial' || job.state === 'failed') && job.worldlabs.state === 'failed' && job.worldlabs.taskId && /^[A-Za-z0-9_-]{1,120}$/.test(job.worldlabs.taskId));
+  }
+  function cancelWorldDiagnostics() {
+    worldDiagnosticsEpoch++; worldDiagnosticsAbort?.abort(); worldDiagnosticsAbort = undefined;
+    const button = host.querySelector<HTMLButtonElement>('[data-instant-world-diagnostics]');
+    if (button) { button.disabled = false; button.textContent = 'Check world status'; }
+    const result = host.querySelector<HTMLElement>('[data-instant-world-diagnostics-status]');
+    if (result) { result.hidden = true; result.textContent = ''; }
+  }
+  async function checkWorldStatus() {
+    const job = currentJob;
+    if (!active() || !job || !canCheckWorld(job) || worldDiagnosticsAbort || !service.worldDiagnostics) return;
+    const abort = new AbortController(), epoch = ++worldDiagnosticsEpoch;
+    worldDiagnosticsAbort = abort;
+    const close = () => abort.abort(); events.signal.addEventListener('abort', close, { once: true });
+    const current = () => active() && !abort.signal.aborted && epoch === worldDiagnosticsEpoch && currentJob?.id === job.id && currentJob?.token === job.token && currentJob?.worldlabs.taskId === job.worldlabs.taskId;
+    const button = host.querySelector<HTMLButtonElement>('[data-instant-world-diagnostics]')!, result = host.querySelector<HTMLElement>('[data-instant-world-diagnostics-status]')!;
+    button.disabled = true; button.textContent = 'Checking world status…'; result.hidden = false; result.textContent = 'Reading the status of the existing world task…';
+    try {
+      const value = await service.worldDiagnostics({ id: job.id, token: job.token }, abort.signal);
+      if (!current()) return;
+      result.textContent = `${worldDiagnosticsMessage(value)} ${instantModelReady(job) ? 'Your keepsake and story are still available.' : 'Your photo and story remain here.'}`;
+    } catch {
+      if (current()) result.textContent = 'The world status could not be checked. Your gift stays here. Try checking again.';
+    } finally {
+      events.signal.removeEventListener('abort', close);
+      if (current()) { button.disabled = false; button.textContent = 'Check world status'; }
+      if (epoch === worldDiagnosticsEpoch) worldDiagnosticsAbort = undefined;
+    }
+  }
   function showJob(job: InstantJob) {
     if (!active()) return;
     storyAudio?.stop(); pendingReference = null; confirmingJob = false;
+    if (currentJob && (currentJob.id !== job.id || currentJob.token !== job.token || currentJob.worldlabs.taskId !== job.worldlabs.taskId || !canCheckWorld(job))) cancelWorldDiagnostics();
     if (currentJob && (currentJob.id !== job.id || currentJob.assets.modelUrl !== job.assets.modelUrl)) { closeModelPreview(); attemptedModel = ''; }
     currentJob = job; remember(job); form.hidden = true; progress.hidden = false; unavailable.hidden = true;
     const uploadPending = job.uploadState === 'pending';
@@ -667,6 +702,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     open.innerHTML = `${giftIcon}${ready && !worldReady ? 'Open your keepsake' : 'Open your gift'} <span aria-hidden="true">↗</span>`;
     host.querySelector<HTMLButtonElement>('[data-instant-edit]')!.hidden = !finished;
     host.querySelector<HTMLButtonElement>('[data-instant-recheck]')!.hidden = true;
+    host.querySelector<HTMLButtonElement>('[data-instant-world-diagnostics]')!.hidden = !canCheckWorld(job);
     const worldStillCreating = !finished && (job.worldlabs.state === 'pending' || job.worldlabs.state === 'processing');
     text('[data-instant-job-status]', uploadPending ? 'Generation will start after your photos finish uploading.' : ready ? worldReady ? 'Your photo became a keepsake. Your story has a world to live in.' : 'Your 3D keepsake is ready. The world is unavailable; your photo and story remain here.' : instantFailureMessage(job) || (visual.phase === 'interrupted' ? worldStillCreating ? 'The keepsake needs attention. Your little world is still being created.' : 'This gift is unfinished. Your photo is safe; one or more parts need attention.' : 'Both parts are being made from your photo and your place.'));
     text('[data-instant-job-note]', uploadPending ? 'Your photos are never saved in browser storage. This browser keeps only the reference to your gift.' : ready ? worldReady ? 'Open it, turn the keepsake, then step into the place inside.' : 'Open it, turn the keepsake, and read your story.' : finished ? 'No automatic retry is started. You can keep these details and choose a different gift.' : 'Creating a world can take a few minutes. Returning to this creator in this browser restores the job.');
@@ -854,9 +890,10 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   }, { signal: events.signal });
   on('[data-instant-open]', () => { if (currentJob && instantGiftReady(currentJob)) options.onGiftReady(currentJob); });
   on('[data-instant-recheck]', () => { host.querySelector<HTMLButtonElement>('[data-instant-recheck]')!.hidden = true; void poll(); });
+  on('[data-instant-world-diagnostics]', () => void checkWorldStatus());
   on('[data-instant-edit]', () => {
     if (!currentJob || !instantJobFinished(currentJob)) return;
-    storyAudio?.stop(); closeModelPreview(); attemptedModel = '';
+    storyAudio?.stop(); cancelWorldDiagnostics(); closeModelPreview(); attemptedModel = '';
     currentJob = null; changeKey(); try { sessionStorage.removeItem(storageKey); } catch { /* Session remains usable. */ }
     inputs.disabled = false; progress.hidden = true; form.hidden = false; step = 'photo'; availability(); renderWizard(true);
   });
@@ -870,5 +907,5 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   if (reference) {
     pendingReference = reference; step = 'review'; inputs.disabled = true; void confirmPending();
   }
-  return { destroy() { if (dead) return; dead = true; assistantEpoch++; assistantAbort?.abort(); storyAudio?.stop(); storyAudio?.destroy(); cameraAttempt++; cameraDialog?.destroy(); cameraDialog = undefined; events.abort(); clearTimeout(pollTimer); closeModelPreview(); transformation.destroy(); releasePreview(); if (placePreviewUrl) URL.revokeObjectURL(placePreviewUrl); giftCuriosities?.destroy();giftContext.destroy(); host.replaceChildren(); } };
+  return { destroy() { if (dead) return; dead = true; cancelWorldDiagnostics(); assistantEpoch++; assistantAbort?.abort(); storyAudio?.stop(); storyAudio?.destroy(); cameraAttempt++; cameraDialog?.destroy(); cameraDialog = undefined; events.abort(); clearTimeout(pollTimer); closeModelPreview(); transformation.destroy(); releasePreview(); if (placePreviewUrl) URL.revokeObjectURL(placePreviewUrl); giftCuriosities?.destroy();giftContext.destroy(); host.replaceChildren(); } };
 }

@@ -63,6 +63,20 @@ test('interruption stays neutral, preserves completed models, and a failed refer
  state.handle.update(draft({phase:'shaping'}));assert.equal(spark.hidden,false);assert.equal(spark.disabled,false);spark.click();assert.equal(state.timers.size,1);
 }));
 
+test('an interrupted world never labels a delivered souvenir as needing attention before or after its real 3D preview opens',async()=>fixture(async state=>{
+ const title=state.find('gift-transformation-title'),detail=state.find('gift-transformation-detail'),spark=state.find('gift-transformation-pulse');
+ state.handle.update(draft({phase:'interrupted'}));assert.equal(title.textContent,'Creation needs attention.');assert.equal(state.find('gift-transformation-open').hidden,true);
+ state.handle.update(draft({phase:'interrupted',modelReady:true,modelUrl:'/synthetic/completed.glb'}));
+ assert.equal(title.textContent,'Your keepsake is ready.');assert.match(detail.textContent,/completed 3D keepsake is available to open/);
+ assert.equal(state.root.dataset.phase,'interrupted');assert.equal(spark.hidden,true);assert.equal(state.timers.size,0);
+ state.find('gift-transformation-open').click();assert.equal(state.opened,1);state.handle.setModelVisible(true);
+ assert.equal(title.textContent,'Your keepsake is ready.');assert.match(detail.textContent,/real 3D keepsake.*Drag/);assert.equal(state.handle.modelHost.inert,false);
+ assert.doesNotMatch(title.textContent+' '+detail.textContent,/needs attention|world is ready|world is still being created/i);
+ state.handle.setModelVisible(false);assert.equal(title.textContent,'Your keepsake is ready.');assert.match(detail.textContent,/completed 3D keepsake/);
+ state.handle.update(draft({jobId:'job-b',phase:'interrupted'}));assert.equal(title.textContent,'Creation needs attention.');assert.equal(state.handle.modelHost.inert,true);assert.equal(state.find('gift-transformation-open').hidden,true);
+ assert.equal(state.root.dataset.phase,'interrupted');assert.equal(spark.hidden,true);assert.equal(state.timers.size,0);assert.equal(state.network,0);
+}));
+
 test('executable or credentialed inputs remain placeholders; image values never become markup and safe local capabilities remain intact',async()=>fixture(async state=>{
  for(const photoUrl of ['javascript:alert(1)','data:text/html;base64,PGgxPg==','data:image/svg+xml;base64,PHN2Zz4=','https://user:secret@example.com/image.png','http://other.example/image.jpg','blob:https://other.example/photo',' /synthetic/image.jpg','<img src=x onerror=alert(1)>']){
   assert.equal(transformationPhotoUrl(photoUrl),undefined);state.handle.update(draft({photoUrl,referenceUrl:photoUrl,phase:'shaping'}));assert.ok(state.images().every(image=>!image.src&&image.hidden));

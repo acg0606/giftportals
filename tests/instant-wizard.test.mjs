@@ -55,7 +55,7 @@ const missing = () => Object.assign(new Error('No previous job'), { code: 'JOB_U
 async function fixture(action, settings = {}) {
   const names = ['window', 'document', 'HTMLInputElement', 'HTMLTextAreaElement', 'sessionStorage', 'URL', 'FileReader', 'fetch', 'createImageBitmap', 'matchMedia', 'navigator', '__instantWizard'];
   const previous = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const state = { current: true, creates: [], jobs: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
+  const state = { current: true, creates: [], jobs: [], diagnostics: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
   class Element extends EventTarget {
     constructor(tag = 'div', attrs = {}) {
       super(); this.tagName = tag; this.attrs = attrs; this.children = []; this.dataset = {}; this.value = attrs.value || ''; this.name = attrs.name || ''; this.type = attrs.type || ''; this.hidden = 'hidden' in attrs; this.disabled = 'disabled' in attrs; this.checked = 'checked' in attrs; this.open = false; this.isConnected = true; this.scrollLeft = 0; this.scrollWidth = 720; this.clientWidth = 350; this.scrollTop = 0; this.validityMessage = ''; this.style = {};
@@ -133,6 +133,7 @@ async function fixture(action, settings = {}) {
   state.status = { available: true, localOnly: true, generationEnabled: true, providers: { tripo: true, worldlabs: true }, maxImageBytes: 6291456, examples: [], ...settings.status };
   const service = { status: async () => { state.statusCalls++; return settings.statusHandler ? settings.statusHandler(state) : state.status; }, create: async input => { state.creates.push(input); if (settings.createError) throw settings.createError; return state.job; }, job: async reference => { state.jobs.push(reference); if (settings.jobHandler) return settings.jobHandler(reference, state); throw missing(); } };
   if (settings.resumeHandler) service.resumeUpload = async (reference, images, signal) => { state.resumes.push({ reference, images, signal }); return settings.resumeHandler(reference, images, signal, state); };
+  if (settings.diagnosticsHandler) service.worldDiagnostics = async (reference, signal) => { state.diagnostics.push({ reference, signal }); return settings.diagnosticsHandler(reference, signal, state); };
   state.job = { id: 'actual-job', token: 'capability', state: 'completed', assets: { photoUrl: '/photo', modelUrl: '/model', worldUrl: '/world' }, tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, title: 'Gift', story: '', worldPrompt: 'A quiet world', senderName: '', recipientName: '' };
   state.suggestion = { title: 'A suggested gift', story: 'A suggested memory.', worldPrompt: 'A suggested place in gentle light.', provider: 'template', photoAnalyzed: false, places: [], curiosities: [], warnings: [], locationStatus: 'not-requested', ...settings.suggestion };
   const assistantService = {
@@ -291,6 +292,93 @@ test('reopening a partial souvenir restores its usable keepsake without generati
     storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
     jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: 'partial', tripo: { state: 'completed' }, worldlabs: { state: 'failed', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
   });
+});
+
+const diagnosticReference = { id: 'diagnostic-existing-gift', token: 'private_diagnostic_capability_1234567890' };
+const diagnosticReceipt = (extra = {}) => ({ done: true, errorPresent: true, errorShape: 'object', errorEmpty: false, errorCode: 'INTERNAL', reason: 'provider-internal', reasonText: 'Predefined receipt text.', ...extra });
+const diagnosticSettings = (extra = {}) => ({
+  storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(diagnosticReference)]],
+  jobHandler: (_reference, state) => ({ ...state.job, ...diagnosticReference, state: 'partial', title: 'Our saved souvenir', story: 'Our saved memory.', tripo: { state: 'completed' }, worldlabs: { state: 'failed', taskId: 'recorded-world-task', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
+  diagnosticsHandler: () => diagnosticReceipt(),
+  ...extra,
+});
+
+test('checking a failed recorded world is explicit and preserves the ready souvenir without polling or creating', async () => {
+  await fixture(async state => {
+    const button = state.find('[data-instant-world-diagnostics]'), result = state.find('[data-instant-world-diagnostics-status]');
+    assert.equal(button.hidden, false); assert.equal(result.hidden, true); assert.equal(state.diagnostics.length, 0);
+    assert.equal(state.jobs.length, 1); assert.deepEqual(state.scheduled, []); assert.equal(state.completed.length, 1);
+    button.click(); await flush();
+    assert.deepEqual(state.diagnostics.map(call => call.reference), [diagnosticReference]);
+    assert.match(result.textContent, /internal failure.*keepsake and story are still available/);
+    assert.equal(result.hidden, false); assert.equal(button.disabled, false); assert.equal(button.textContent, 'Check world status');
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.equal(state.find('#instant-progress-heading').textContent, 'Your keepsake is ready.');
+    state.find('[data-instant-open]').click();
+    assert.equal(state.opened[0].title, 'Our saved souvenir'); assert.equal(state.opened[0].story, 'Our saved memory.');
+    assert.deepEqual(state.opened[0].assets, { photoUrl: '/photo', modelUrl: '/model' });
+    assert.equal(state.creates.length, 0); assert.equal(state.jobs.length, 1); assert.deepEqual(state.scheduled, []); assert.equal(state.completed.length, 1);
+  }, diagnosticSettings());
+});
+
+test('world diagnostics cannot run for pending jobs, missing tasks, successful worlds or an unsupported service', async () => {
+  for (const change of [
+    { state: 'processing', worldlabs: { state: 'processing', taskId: 'recorded-world-task' } },
+    { state: 'completed', worldlabs: { state: 'completed', taskId: 'recorded-world-task' } },
+    { state: 'failed', worldlabs: { state: 'failed' } },
+    { state: 'partial', worldlabs: { state: 'failed', taskId: '../invalid-task' } },
+  ]) await fixture(async state => {
+    const button = state.find('[data-instant-world-diagnostics]'); assert.equal(button.hidden, true);
+    button.dispatchEvent(new Event('click')); await flush(); assert.equal(state.diagnostics.length, 0); assert.equal(state.creates.length, 0);
+  }, diagnosticSettings({ jobHandler: (_reference, state) => ({ ...state.job, ...diagnosticReference, ...change }) }));
+  await fixture(async state => {
+    assert.equal(state.find('[data-instant-world-diagnostics]').hidden, true);
+    state.find('[data-instant-world-diagnostics]').dispatchEvent(new Event('click')); await flush(); assert.equal(state.diagnostics.length, 0);
+  }, diagnosticSettings({ diagnosticsHandler: undefined }));
+});
+
+test('world diagnostics uses human categories and never renders vendor text, codes, private capabilities or URLs', async () => {
+  const expected = { 'content-policy': /image approval restriction/, 'input-download': /could not download/, 'invalid-input': /invalid creation input/, 'insufficient-credits': /insufficient credits/, 'rate-limit': /too many requests/, timeout: /took too long/, 'provider-internal': /internal failure/, unknown: /did not return a clear reason/ };
+  for (const [reason, phrase] of Object.entries(expected)) await fixture(async state => {
+    state.find('[data-instant-world-diagnostics]').click(); await flush();
+    const result = state.find('[data-instant-world-diagnostics-status]').textContent;
+    assert.match(result, phrase); assert.doesNotMatch(result, /private_diagnostic|private\.example|vendor response|RESOURCE_EXHAUSTED|recorded-world-task/);
+    assert.doesNotMatch(state.host.innerHTML, /private_diagnostic|private\.example|vendor response|recorded-world-task/);
+    assert.equal(state.creates.length, 0); assert.equal(state.jobs.length, 1);
+  }, diagnosticSettings({ diagnosticsHandler: () => diagnosticReceipt({ reason, errorCode: 'RESOURCE_EXHAUSTED', reasonText: `vendor response ${diagnosticReference.token} https://private.example/image` }) }));
+});
+
+test('diagnostic failures remain actionable and cannot replace a ready souvenir or cause a new job request', async () => {
+  await fixture(async state => {
+    const button = state.find('[data-instant-world-diagnostics]'); button.click(); await flush();
+    assert.equal(button.disabled, false); assert.equal(button.textContent, 'Check world status');
+    assert.equal(state.find('[data-instant-world-diagnostics-status]').textContent, 'The world status could not be checked. Your gift stays here. Try checking again.');
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.match(state.find('[data-instant-job-status]').textContent, /3D keepsake is ready/);
+    button.click(); await flush(); assert.equal(state.diagnostics.length, 2, 'Another read requires another click');
+    assert.equal(state.jobs.length, 1); assert.equal(state.creates.length, 0); assert.deepEqual(state.scheduled, []);
+  }, diagnosticSettings({ diagnosticsHandler: () => { throw new Error(`provider raw response ${diagnosticReference.token} https://private.example/image`); } }));
+  await fixture(async state => {
+    assert.equal(state.find('[data-instant-world-diagnostics]').hidden, false); state.find('[data-instant-world-diagnostics]').click(); await flush();
+    assert.match(state.find('[data-instant-world-diagnostics-status]').textContent, /Your photo and story remain here/);
+    assert.doesNotMatch(state.find('[data-instant-world-diagnostics-status]').textContent, /keepsake and story are still available/);
+    assert.equal(state.find('[data-instant-open]').hidden, true); assert.equal(state.creates.length, 0);
+  }, diagnosticSettings({ jobHandler: (_reference, state) => ({ ...state.job, ...diagnosticReference, state: 'failed', tripo: { state: 'failed' }, worldlabs: { state: 'failed', taskId: 'recorded-world-task' }, assets: { photoUrl: '/photo' } }) }));
+});
+
+test('one diagnostic read stays in flight and its late reply is ignored after editing or destroying the wizard', async () => {
+  for (const close of ['edit', 'destroy']) {
+    let release;
+    await fixture(async state => {
+      const button = state.find('[data-instant-world-diagnostics]'), result = state.find('[data-instant-world-diagnostics-status]');
+      button.click(); button.dispatchEvent(new Event('click')); await flush();
+      assert.equal(state.diagnostics.length, 1); assert.equal(button.disabled, true); assert.match(result.textContent, /Reading the status/);
+      if (close === 'edit') state.find('[data-instant-edit]').click(); else state.handle.destroy();
+      assert.equal(state.diagnostics[0].signal.aborted, true);
+      release(diagnosticReceipt()); await flush();
+      assert.equal(result.hidden, true); assert.equal(result.textContent, ''); assert.equal(state.diagnostics.length, 1);
+      assert.equal(state.jobs.length, 1); assert.equal(state.creates.length, 0); assert.deepEqual(state.scheduled, []);
+      if (close === 'edit') assert.equal(state.find('[data-instant-progress]').hidden, true);
+    }, diagnosticSettings({ diagnosticsHandler: () => new Promise(resolve => { release = resolve; }) }));
+  }
 });
 
 test('anonymous legacy references migrate once without giving an account another actor\'s job', async () => {

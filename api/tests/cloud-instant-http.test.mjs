@@ -47,3 +47,36 @@ test('paid rejection logs only enum and numeric metadata while preserving ambigu
 test('provider responses reject oversized JSON, invalid envelopes and failed known tasks without accepting a fabricated ID',async()=>{const savedFetch=globalThis.fetch;try{for(const body of['x'.repeat(1024*1024+1),'{','[]',JSON.stringify({code:0,data:[]})]){globalThis.fetch=async()=>new Response(body);await assert.rejects(createCloudProviderHTTP(Date.now()+165000).json('tripo','/tasks/known-id'));}await reject(createCloudProviderHTTP(Date.now()+165000).complete('tripo',{status:'failed'}),'PROVIDER_GENERATION_FAILED');}finally{globalThis.fetch=savedFetch;}});
 test('generated asset URLs require approved HTTPS hosts before any download',async()=>{const savedFetch=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;throw new Error('must not run');};try{for(const url of['http://assets.tripo3d.ai/model.glb','https://tripo3d.ai.evil.example/model.glb','https://user:pass@assets.tripo3d.ai/model.glb','https://127.0.0.1/model.glb'])await reject(createCloudProviderHTTP(Date.now()+165000).complete('tripo',{status:'success',output:{model_url:url}}),'PROVIDER_ASSET_ORIGIN_DENIED');assert.equal(calls,0);}finally{globalThis.fetch=savedFetch;}});
 test('actual GLB/SPZ headers, decompressed splat limits and numerical semantics are verified',async()=>{const savedFetch=globalThis.fetch;const glb=Buffer.alloc(12);glb.write('glTF');glb.writeUInt32LE(2,4);glb.writeUInt32LE(12,8);const png=Buffer.from([137,80,78,71,13,10,26,10,1]);const decoded=Buffer.alloc(16);decoded.write('NGSP');decoded.writeUInt32LE(500000,8);const spz=gzipSync(decoded);const world={world_id:'world-1',assets:{splats:{spz_urls:{'500k':'https://assets.worldlabs.ai/world.spz'},semantics_metadata:{metric_scale_factor:2.9049978,ground_plane_offset:1.6893421,private:'not exported'}},imagery:{pano_url:'https://assets.worldlabs.ai/pano.png'},mesh:{collider_mesh_url:'https://assets.worldlabs.ai/collider.glb'}}};try{globalThis.fetch=async url=>new Response(String(url).endsWith('.spz')?spz:String(url).endsWith('.png')?png:glb);const complete=await createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done:true,response:world});assert.deepEqual(complete.worldSemantics,{metricScaleFactor:2.9049978,groundPlaneOffset:1.6893421});assert.equal(complete.worldQuality,'500k');assert.equal(complete.colliderStatus,'available');assert.deepEqual(complete.assets.map(a=>a.key),['generated-world','panorama','collider']);decoded.writeUInt32LE(600001,8);globalThis.fetch=async()=>new Response(gzipSync(decoded));await reject(createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done:true,response:world}),'PROVIDER_ASSET_INVALID');globalThis.fetch=async()=>new Response('not a GLB');await reject(createCloudProviderHTTP(Date.now()+165000).complete('tripo',{status:'success',output:{model_url:'https://assets.tripo3d.ai/model.glb'}}),'PROVIDER_ASSET_INVALID');}finally{globalThis.fetch=savedFetch;}});
+
+test('World Labs accepts the reference and quickstart world envelopes using GET only and the same world identity',async()=>{
+  const savedFetch=globalThis.fetch,decoded=Buffer.alloc(16);decoded.write('NGSP');decoded.writeUInt32LE(500000,8);
+  const spz=gzipSync(decoded),png=Buffer.from([137,80,78,71,13,10,26,10,1]);
+  const assets={splats:{spz_urls:{'500k':'https://assets.worldlabs.ai/world.spz'}},imagery:{pano_url:'https://assets.worldlabs.ai/pano.png'},mesh:{}};
+  const worlds=[{world_id:'same-world',assets},{id:'same-world',assets},{world:{id:'same-world',assets}}];
+  try{
+    for(const world of worlds){
+      const calls=[];globalThis.fetch=async(url,init)=>{calls.push([String(url),init?.method||'GET']);return new Response(String(url).endsWith('.spz')?spz:png);};
+      const complete=await createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done:true,error:null,response:world,cost:{total_credits:1580}});
+      assert.equal(complete.resultId,'same-world');assert.equal(complete.cost,1580);assert.equal(complete.colliderStatus,'unavailable');assert.deepEqual(complete.assets.map(asset=>asset.key),['generated-world','panorama']);
+      assert.deepEqual(calls.map(([,method])=>method),['GET','GET']);assert.ok(calls.every(([url])=>url.startsWith('https://assets.worldlabs.ai/')));
+    }
+    for(const world of worlds){
+      const calls=[];globalThis.fetch=async(url,init)=>{calls.push([String(url),init?.method||'GET']);return new Response(String(url).includes('/worlds/')?JSON.stringify(world):String(url).endsWith('.spz')?spz:png);};
+      const complete=await createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done:true,error:null,response:{id:'same-world'}});
+      assert.equal(complete.resultId,'same-world');assert.equal(calls[0][0],'https://api.worldlabs.ai/marble/v1/worlds/same-world');assert.deepEqual(calls.map(([,method])=>method),['GET','GET','GET']);
+    }
+    let downloads=0;globalThis.fetch=async()=>{downloads++;return new Response(JSON.stringify({world:{id:'another-world',assets}}));};
+    await reject(createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done:true,error:null,response:{world_id:'same-world'}}),'PROVIDER_RESPONSE_INVALID');assert.equal(downloads,1);
+    downloads=0;await reject(createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done:true,error:null,response:{world_id:'same-world',id:'another-world',assets}}),'PROVIDER_RESPONSE_INVALID');assert.equal(downloads,0);
+  }finally{globalThis.fetch=savedFetch;}
+});
+
+test('World Labs pending operations and null errors remain pending; any documented error object stops before assets',async()=>{
+  const savedFetch=globalThis.fetch;let requests=0;globalThis.fetch=async()=>{requests++;throw Error('No network is needed for an operation error or pending status');};
+  try{
+    for(const error of [undefined,null])assert.equal(await createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done:false,error,metadata:{progress:{status:'IN_PROGRESS'}}}),null);
+    for(const error of [{code:13,message:'upstream generation failure'},{},{code:null,message:null}])await reject(createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done:true,error,response:{world_id:'ignored-world'}}),'PROVIDER_GENERATION_FAILED');
+    for(const done of [undefined,'true',1])await reject(createCloudProviderHTTP(Date.now()+165000).complete('worldlabs',{done,error:null,response:{id:'ignored-world'}}),'PROVIDER_RESPONSE_INVALID');
+    assert.equal(requests,0);
+  }finally{globalThis.fetch=savedFetch;}
+});

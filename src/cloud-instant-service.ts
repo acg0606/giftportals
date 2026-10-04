@@ -1,6 +1,6 @@
 import type { InstantCreateInput, InstantJob, InstantStatus } from './instant-creator-state';
 import type { InstantCreatorService, InstantJobReference, InstantUploadImages } from './instant-creator';
-import type { CloudImageDeclaration, CloudImageId, CloudPrepareInput, CloudPreparedJob, CloudUploadPlan } from '../shared/cloud-instant';
+import type { CloudImageDeclaration, CloudImageId, CloudPrepareInput, CloudPreparedJob, CloudUploadPlan, CloudWorldDiagnostics, WorldDiagnosticErrorCode, WorldDiagnosticReason } from '../shared/cloud-instant';
 
 export function cloudCreatorOrigin(hostname: string): boolean {
   return Boolean(hostname) && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname.toLowerCase());
@@ -12,6 +12,39 @@ const capacityErrors: Record<string, string> = {
   STORAGE_LIMIT: 'The photo could not be stored right now. Your photo and words remain here. Check availability again.',
   PROVIDER_INSUFFICIENT_CREDITS: 'The generation service does not have enough credits for this creation. Your photo and words remain here.',
 };
+
+const diagnosticReasons: Record<WorldDiagnosticReason, string> = {
+  'content-policy': 'The world service reported an image approval restriction.',
+  'input-download': 'The world service could not download its input image.',
+  'invalid-input': 'The world service reported an invalid creation input.',
+  'insufficient-credits': 'The world service reported insufficient credits for this creation.',
+  'rate-limit': 'The world service reported too many requests.',
+  'timeout': 'The world service reported that this creation took too long.',
+  'provider-internal': 'The world service reported an internal failure.',
+  unknown: 'The world service did not return a clear reason for this failure.',
+};
+const diagnosticCodes = new Set<WorldDiagnosticErrorCode>(['OK','CANCELLED','UNKNOWN','INVALID_ARGUMENT','DEADLINE_EXCEEDED','NOT_FOUND','ALREADY_EXISTS','PERMISSION_DENIED','RESOURCE_EXHAUSTED','FAILED_PRECONDITION','ABORTED','OUT_OF_RANGE','UNIMPLEMENTED','INTERNAL','UNAVAILABLE','DATA_LOSS','UNAUTHENTICATED']);
+export function worldDiagnosticsMessage(value: CloudWorldDiagnostics): string {
+  if (Object.hasOwn(diagnosticReasons, value.reason) && value.reason !== 'unknown') return diagnosticReasons[value.reason];
+  if (value.done === false) return 'The world service reports that this task is still processing.';
+  if (value.done === true && !value.errorPresent) return 'The world service reports that this task finished without a failure reason. An available world has not been confirmed.';
+  return diagnosticReasons.unknown;
+}
+function readWorldDiagnostics(value: unknown): CloudWorldDiagnostics {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('The world status could not be checked. Please try again.');
+  const record = value as Record<string, unknown>;
+  if (!(typeof record.done === 'boolean' || record.done === null) || typeof record.errorPresent !== 'boolean') throw new Error('The world status could not be checked. Please try again.');
+  const reason = typeof record.reason === 'string' && Object.hasOwn(diagnosticReasons, record.reason) ? record.reason as WorldDiagnosticReason : 'unknown';
+  const diagnostic: CloudWorldDiagnostics = {
+    done: record.done, errorPresent: record.errorPresent,
+    errorShape: ['absent','null','object','array','string','number','boolean','other'].includes(String(record.errorShape)) ? record.errorShape as CloudWorldDiagnostics['errorShape'] : 'other',
+    errorEmpty: typeof record.errorEmpty === 'boolean' ? record.errorEmpty : null,
+    errorCode: typeof record.errorCode === 'number' && Number.isInteger(record.errorCode) && record.errorCode >= 0 && record.errorCode <= 999999 ? record.errorCode : typeof record.errorCode === 'string' && diagnosticCodes.has(record.errorCode as WorldDiagnosticErrorCode) ? record.errorCode as WorldDiagnosticErrorCode : null,
+    reason, reasonText: '',
+  };
+  diagnostic.reasonText = worldDiagnosticsMessage(diagnostic);
+  return diagnostic;
+}
 
 /** Decode locally; JSON API requests contain declarations rather than photos. */
 export async function cloudImageBytes(dataUrl: string): Promise<{ declaration: CloudImageDeclaration; bytes: Uint8Array }> {
@@ -109,6 +142,11 @@ export function createCloudInstantService(fetcher: typeof fetch = fetch): Instan
   }
   return {
     status,
+    async worldDiagnostics(reference: { id: string; token: string }, signal: AbortSignal) {
+      checkOpen(signal);
+      if (!/^[A-Za-z0-9_-]{8,120}$/.test(reference.id) || !/^[A-Za-z0-9_-]{16,160}$/.test(reference.token)) throw new Error('This world status could not be checked. Reopen the gift and try again.');
+      return readWorldDiagnostics(await request<unknown>('world-diagnostics', signal, undefined, reference));
+    },
     async create(input: InstantCreateInput, signal: AbortSignal) {
       if (!verifiedStatus) await status(signal);
       if (!verifiedStatus?.available || input.consent !== true) throw new Error('Live creation is not ready yet. Your photo stays with you.');

@@ -107,7 +107,7 @@ export function mountGiftTransformation(host: HTMLElement, options: GiftTransfor
 
  function copy() {
   if (!current) return;
-  title.textContent = current.phase === 'ready' && !current.modelReady ? 'Checking your keepsake.' : phaseNames[current.phase];
+  title.textContent = current.phase === 'interrupted' && current.modelReady ? phaseNames.ready : current.phase === 'ready' && !current.modelReady ? 'Checking your keepsake.' : phaseNames[current.phase];
   if (visibleModel) detail.textContent = current.phase === 'world' ? 'Your real 3D keepsake. Your world is still being created.' : 'Your real 3D keepsake. Drag to explore.';
   else if (current.phase === 'interrupted') detail.textContent = current.modelReady ? 'Your completed 3D keepsake is available to open.' : 'This moment needs a little care. See the generation details below.';
   else if (current.modelReady) detail.textContent = `${displayedReference ? 'Reference image' : 'Original photo'} shown. ${current.phase === 'world' ? 'Your 3D keepsake is ready; the world is still being created.' : 'Open your real 3D keepsake.'}`;

@@ -2,7 +2,7 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { AppError, ensure, text, giftHash, hasMagic, uuid } from './rules.js';
 import { INSTANT_EXAMPLES } from '../../shared/instant-examples.js';
 import { selectedCuriosities } from '../../shared/gift-curiosities.js';
-import type { CloudPrepareInput, CloudInstantJobDTO, CloudPreparedJob, CloudUploadPlan } from '../../shared/cloud-instant.js';
+import type { CloudPrepareInput, CloudInstantJobDTO, CloudPreparedJob, CloudUploadPlan, CloudWorldDiagnostics, WorldDiagnosticErrorCode } from '../../shared/cloud-instant.js';
 import type { CloudInstantRepository, CloudJob, CloudStoredAsset, CloudSafetyImage, CloudSafetyReport, CloudStageName } from './cloud-instant-types.js';
 import { cloudSouvenirPrompt, cloudWorldPrompt, WORLD_ART_PROMPT_VERSION, SOUVENIR_ART_PROMPT_VERSION } from './cloud-instant-recipes.js';
 
@@ -12,6 +12,35 @@ export const CLOUD_PRIVATE_BUCKET = 'gp-instant-private';
 export const CLOUD_GENERATED_BUCKET = 'gp-instant-generated';
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 const extension = (mime: string) => mime === 'image/jpeg' ? 'jpg' : mime.split('/')[1];
+const worldDiagnosticCodes = new Set(['OK','CANCELLED','UNKNOWN','INVALID_ARGUMENT','DEADLINE_EXCEEDED','NOT_FOUND','ALREADY_EXISTS','PERMISSION_DENIED','RESOURCE_EXHAUSTED','FAILED_PRECONDITION','ABORTED','OUT_OF_RANGE','UNIMPLEMENTED','INTERNAL','UNAVAILABLE','DATA_LOSS','UNAUTHENTICATED']);
+const worldDiagnosticReasons = {
+  'content-policy':'The provider message indicates a content policy restriction.',
+  'input-download':'The provider message indicates that the input could not be downloaded.',
+  'invalid-input':'The provider message indicates an invalid generation input.',
+  'insufficient-credits':'The provider message indicates insufficient provider credits.',
+  'rate-limit':'The provider message indicates a provider rate limit.',
+  'timeout':'The provider message indicates a timeout.',
+  'provider-internal':'The provider message indicates an internal provider failure.',
+  'unknown':'The provider did not return a recognized failure reason.',
+} as const;
+/** Never expose operation identifiers, provider messages, URLs or response bodies. */
+export function cloudWorldDiagnostics(result:Record<string,unknown>):CloudWorldDiagnostics {
+  const hasError=Object.prototype.hasOwnProperty.call(result,'error'),error=result.error,errorPresent=hasError&&error!==null&&error!==undefined;
+  const errorShape=!hasError?'absent':error===null?'null':Array.isArray(error)?'array':typeof error==='object'?'object':typeof error==='string'?'string':typeof error==='number'?'number':typeof error==='boolean'?'boolean':'other';
+  const errorEmpty=!hasError?null:error===null?true:Array.isArray(error)?error.length===0:typeof error==='string'?error.trim().length===0:typeof error==='object'?Object.keys(error).length===0:null;
+  const detail=error&&typeof error==='object'&&!Array.isArray(error)?error as Record<string,unknown>:undefined,code=detail?.code;
+  const errorCode=typeof code==='number'&&Number.isInteger(code)&&code>=0&&code<=999999?code:typeof code==='string'&&worldDiagnosticCodes.has(code)?code as WorldDiagnosticErrorCode:null;
+  const message=typeof detail?.message==='string'?detail.message.slice(0,8192).toLowerCase():'';
+  let reason:keyof typeof worldDiagnosticReasons='unknown';
+  if(/content.{0,30}policy|safety.{0,30}(?:filter|restrict|block)|moderation|unsafe content|prohibited content/.test(message))reason='content-policy';
+  else if(/(?:insufficient|not enough|out of|exhausted).{0,40}(?:credit|balance)|(?:credit|balance).{0,40}(?:insufficient|exhausted)/.test(message))reason='insufficient-credits';
+  else if(/rate.?limit|too many requests|request quota/.test(message))reason='rate-limit';
+  else if(/timeout|timed out|deadline exceeded/.test(message))reason='timeout';
+  else if(/(?:download|fetch|retrieve).{0,80}(?:input|image|media|url|asset)|(?:input|image|media|url|asset).{0,80}(?:download|fetch|retrieve)|(?:signed|input).{0,30}url.{0,30}expired/.test(message))reason='input-download';
+  else if(/invalid.{0,40}(?:input|argument|image|prompt|parameter)|unsupported.{0,40}(?:input|image|format)|malformed.{0,40}(?:input|image|request)/.test(message))reason='invalid-input';
+  else if(/internal.{0,30}(?:error|failure|server)|unexpected.{0,30}(?:error|failure)|provider.{0,30}(?:error|failure)/.test(message))reason='provider-internal';
+  return {done:typeof result.done==='boolean'?result.done:null,errorPresent,errorShape,errorEmpty,errorCode,reason,reasonText:worldDiagnosticReasons[reason]};
+}
 export function cloudRequestHash(token: string, dedupeKey: unknown, secret: string): string {
   ensure(typeof dedupeKey === 'string' && /^[A-Za-z0-9_-]{8,120}$/.test(dedupeKey), 'REQUEST_TOKEN_INVALID');
   ensure(secret.length >= 32, 'CLOUD_NOT_CONFIGURED', 503);
@@ -102,6 +131,13 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     return dto(await repo.finalize(job.id,giftHash(token),assets),token);
   };
   const get=async(reference:{id?:string;dedupeKey?:string;token:string})=>dto(reference.id?await repo.get(uuid(reference.id),giftHash(reference.token)):await repo.lookup(cloudRequestHash(reference.token,reference.dedupeKey,deps.settings().dedupeSecret),giftHash(reference.token)),reference.token);
+  const diagnoseWorld=async(id:string,token:string)=>{
+    const job=await repo.get(uuid(id),giftHash(token)),expiry=job.expires_at?Date.parse(job.expires_at):NaN;
+    ensure(job.state!=='expired'&&Number.isFinite(expiry)&&expiry>now(),'JOB_UNAVAILABLE',404);
+    const taskId=job.stages.worldlabs?.taskId;
+    ensure(typeof taskId==='string'&&/^[A-Za-z0-9_-]{1,120}$/.test(taskId),'WORLD_TASK_UNAVAILABLE',404);
+    return cloudWorldDiagnostics(await deps.providers.poll('worldlabs',taskId));
+  };
   const outcome=(job:CloudJob):CloudJob['state']=>{
     if(Object.values(job.stages).some(stage=>stage?.state==='submission_uncertain'))return 'submission_uncertain';
     const stages=[job.stages.tripo||(job.document.stageFailures?.tripo?{state:'failed'}:undefined),job.stages.worldlabs||(job.document.stageFailures?.worldlabs?{state:'failed'}:undefined)];if(stages.every(stage=>stage?.state==='completed'))return 'completed';
@@ -147,7 +183,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
         job.stages[selected]={...stage,state:'processing',taskId,progress:0};await save(job);return {processed:true,state:'processing'};
       }
       ensure(stage.taskId&&/^[A-Za-z0-9_-]{1,120}$/.test(stage.taskId),'SUBMISSION_AMBIGUOUS',409);ensure((stage.polls||0)<720,'JOB_EXPIRED',408);
-      const result=await deps.providers.poll(selected,stage.taskId);stage={...stage,polls:(stage.polls||0)+1,progress:typeof result.progress==='number'&&Number.isFinite(result.progress)?Math.max(stage.progress||0,Math.min(100,Math.max(0,result.progress))):stage.progress};job.stages[selected]=stage;
+      const result=await deps.providers.poll(selected,stage.taskId);if(selected==='worldlabs'&&result.error!=null)console.error(JSON.stringify({event:'cloud_world_operation_failed',...cloudWorldDiagnostics(result)}));stage={...stage,polls:(stage.polls||0)+1,progress:typeof result.progress==='number'&&Number.isFinite(result.progress)?Math.max(stage.progress||0,Math.min(100,Math.max(0,result.progress))):stage.progress};job.stages[selected]=stage;
       const completed=await deps.providers.complete(selected,result);if(!completed){await save(job);return {processed:true,state:'processing'};}
       if(selected==='tripo-reference'){
         const reference=completed.assets.find(asset=>asset.key==='reference');ensure(reference,'PROVIDER_ASSET_INVALID',502);const image={id:'object' as const,mime:reference.mime,bytes:reference.bytes,sha256:reference.sha256,source:{id:'object',path:`${job.id}/moderation/${reference.sha256}.${extension(reference.mime)}`,mime:reference.mime,bytes:reference.bytes.length,sha256:reference.sha256},quarantine:true};const report=await deps.moderator.screen([image]);verifyCloudSafety(report,[image]);job.document={...job.document,objectSafety:report};
@@ -181,5 +217,5 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     }
   }
   const advance=async(id:string,token:string)=>{const validated=await repo.get(uuid(id),giftHash(token));if(['queued','processing','submission_uncertain'].includes(validated.state))await tick(randomUUID(),validated.id);return get({id:validated.id,token});};
-  return {status,prepare,finalize,get,advance,tick};
+  return {status,prepare,finalize,get,diagnoseWorld,advance,tick};
 }
