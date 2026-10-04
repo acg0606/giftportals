@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import test from 'node:test';
 import * as Three from 'three';
+import { OrbitControls as NativeOrbitControls } from 'three/addons/controls/OrbitControls.js';
 import ts from 'typescript';
 
 // Execute the actual scene and frame gate with real Three geometry/materials.
@@ -45,7 +46,7 @@ async function fixture(action, settings = {}) {
   const geometry = new Three.BoxGeometry(...(settings.modelSize || [2, 2, 1]));
   model.add(new Three.Mesh(geometry, [standard, physical, basic]));
   const photoBytes = Uint8Array.of(0xff, 0xd8, 0x50, 0x48, 0x4f, 0x54, 0x4f, 0xff, 0xd9);
-  const state = { model, standard, physical, basic, texture, pending, media, document, browserWindow, frames: [], disposed: false, parsed: false, orbitUpdates: [], requests: [], bitmapCalls: [], bitmapClosed: 0, geometryDisposed: 0, modelTextureDisposed: 0, photoBytes, focused:0 };
+  const state = { model, standard, physical, basic, texture, pending, media, document, browserWindow, frames: [], disposed: false, parsed: false, orbitUpdates: [], requests: [], bitmapCalls: [], bitmapClosed: 0, geometryDisposed: 0, modelTextureDisposed: 0, photoBytes, focused:0, captures:0, releases:0 };
   geometry.addEventListener('dispose', () => state.geometryDisposed++);
   texture.addEventListener('dispose', () => state.modelTextureDisposed++);
   const bitmap = { width: 1600, height: 900, close() { state.bitmapClosed++; } };
@@ -54,19 +55,23 @@ async function fixture(action, settings = {}) {
   state.bitmap = bitmap;
   class Renderer {
     shadowMap={enabled:false,type:null};
-    domElement = Object.assign(new EventTarget(), { setAttribute() {}, focus() {state.focused++;}, remove() {}, tabIndex: -1 });
+    domElement = Object.assign(new EventTarget(), { setAttribute() {}, focus() {state.focused++;}, remove() {}, tabIndex: -1, style:{}, ownerDocument:document, getRootNode(){return document;}, clientWidth:settings.width||700, clientHeight:settings.height||500, setPointerCapture(){state.captures++;}, releasePointerCapture(){state.releases++;} });
     setPixelRatio() {} setSize() {}
     render(scene, camera) { state.frames.push({ scene, camera: camera.clone() }); }
     dispose() { state.disposed = true; } forceContextLoss() {}
   }
   class Controls extends Three.EventDispatcher {
     target = new Three.Vector3(); autoRotate = false; autoRotateSpeed = 0; enableDamping = false;
+    constructor(camera,element){super();state.controls=this;state.camera=camera;state.canvas=element;}
     update(delta) { if (this.autoRotate) state.orbitUpdates.push(delta); return false; }
     dispose() {}
   }
   class Loader { async parseAsync() { state.parsed = true; return { scene: model }; } }
+  class GestureControls extends NativeOrbitControls {
+    constructor(camera,element){super(camera,element);state.controls=this;state.camera=camera;state.canvas=element;}
+  }
   const values = {
-    __sceneFixture: { Renderer, Controls, Loader }, matchMedia: () => media,
+    __sceneFixture: { Renderer, Controls:settings.nativeControls?GestureControls:Controls, Loader }, matchMedia: () => media,
     requestAnimationFrame: callback => { const id = ++sequence; pending.set(id, callback); return id; },
     cancelAnimationFrame: id => pending.delete(id),
     ResizeObserver: class { observe() {} disconnect() {} },
@@ -215,4 +220,65 @@ test('studio lighting creates no geometry, fog or idle animation and restores th
     state.visible(false);assert.equal(state.pending.size,0);state.visible(true);state.run(10000);assert.equal(state.pending.size,0);
     state.viewer.destroy();state.viewer.destroy();assert.equal(lighting.parent,null);assert.equal(state.geometryDisposed,1);assert.equal(state.modelTextureDisposed,1);
   },{options:{unboxing:true,theme:'dusk'}});
+});
+
+test('detail zoom is derived from the actual model, stays outside its near plane while orbiting and preserves zoom-out and reset',async()=>{
+  for(const modelSize of [[2,2,1],[2,1,.3],[.25,2,.25],[2,2,2]])await fixture(async state=>{
+    await state.loaded();state.run(100);
+    const focus=state.controls.target.clone(),home=state.camera.position.clone(),bounds=new Three.Box3().setFromObject(state.model),sphere=bounds.getBoundingSphere(new Three.Sphere());
+    assert.equal(state.controls.maxDistance,13);
+    assert.ok(state.controls.minDistance<2.11,'The normalized gift permits substantially closer inspection than the previous 3.8 limit');
+    assert.ok(state.controls.minDistance>=sphere.radius+state.camera.near,'The closest orbit remains outside the whole model');
+    for(let step=0;step<24;step++)state.viewer.zoom(-.5);state.run(140);
+    assert.ok(Math.abs(state.camera.position.distanceTo(focus)-state.controls.minDistance)<1e-6);
+    assert.ok(home.distanceTo(focus)/state.camera.position.distanceTo(focus)>2.2,'Normal opening view can approach more than twice as closely where bounds permit');
+    for(let orbit=0;orbit<12;orbit++){
+      state.viewer.rotate(Math.PI/6);state.run(180+orbit*40);const camera=state.frames.at(-1).camera;camera.lookAt(focus);camera.updateMatrixWorld(true);
+      for(const x of[bounds.min.x,bounds.max.x])for(const y of[bounds.min.y,bounds.max.y])for(const z of[bounds.min.z,bounds.max.z]){
+        const point=new Three.Vector3(x,y,z).applyMatrix4(camera.matrixWorldInverse);assert.ok(-point.z>camera.near,'No corner intersects the near plane at maximum detail zoom');
+      }
+      assert.ok(Math.abs(camera.position.distanceTo(focus)-state.controls.minDistance)<1e-6);
+    }
+    for(let step=0;step<24;step++)state.viewer.zoom(.5);state.run(800);assert.ok(Math.abs(state.camera.position.distanceTo(focus)-13)<1e-6);
+    state.viewer.reset();state.run(840);assert.ok(state.camera.position.equals(home));assert.equal(state.controls.maxDistance,13);
+  },{modelSize,options:{theme:'dusk',unboxing:false}});
+});
+
+test('keyboard and explicit gift controls share the closer limit and ignore invalid zoom input',async()=>{
+  await fixture(async state=>{
+    await state.loaded();state.run(100);const focus=state.controls.target.clone();
+    for(let step=0;step<40;step++){const event=new Event('keydown',{cancelable:true});Object.defineProperty(event,'key',{value:'+'});state.canvas.dispatchEvent(event);assert.equal(event.defaultPrevented,true);}state.run(140);
+    assert.ok(Math.abs(state.camera.position.distanceTo(focus)-state.controls.minDistance)<1e-6);
+    const close=state.camera.position.clone();for(const value of[NaN,Infinity,-Infinity])state.viewer.zoom(value);assert.ok(state.camera.position.equals(close));
+    const reset=new Event('keydown',{cancelable:true});Object.defineProperty(reset,'key',{value:'r'});state.canvas.dispatchEvent(reset);state.run(180);assert.equal(reset.defaultPrevented,true);assert.ok(state.camera.position.distanceTo(focus)>state.controls.minDistance*2);
+  },{options:{theme:'dusk'}});
+});
+
+test('revealed gifts keep the model-based detail zoom after portrait fitting while wrapped gifts retain their original bound',async()=>{
+  for(const width of[390,900])await fixture(async state=>{
+    await state.loaded();state.run(100);assert.equal(state.controls.minDistance,3.8);
+    state.media.matches=true;state.media.dispatchEvent(new Event('change'));state.run(140);
+    for(let step=0;step<3;step++){state.viewer.advanceUnboxing();state.run(180+step*40);}
+    assert.equal(state.viewer.getUnboxingState(),'revealed');assert.ok(state.controls.minDistance<2.11);
+    const limit=state.controls.minDistance,focus=state.controls.target.clone();for(let step=0;step<24;step++)state.viewer.zoom(-.5);state.run(320);assert.ok(Math.abs(state.camera.position.distanceTo(focus)-limit)<1e-6);
+    state.viewer.reset();state.run(360);assert.equal(state.controls.minDistance,limit);assert.equal(state.controls.maxDistance,13);
+  },{width,options:{theme:'dusk',unboxing:true}});
+});
+
+test('actual OrbitControls wheel and touch pinch use the same safe detail bounds without enabling pan',async()=>{
+  await fixture(async state=>{
+    await state.loaded();state.run(100);state.media.matches=true;state.media.dispatchEvent(new Event('change'));state.run(140);
+    const focus=state.controls.target.clone(),limit=state.controls.minDistance;
+    assert.equal(state.controls.enablePan,false);assert.equal(state.canvas.style.touchAction,'none');
+    const wheel=(deltaY)=>{const event=new Event('wheel',{cancelable:true});Object.defineProperties(event,{deltaY:{value:deltaY},deltaMode:{value:0},clientX:{value:195},clientY:{value:290},ctrlKey:{value:false}});state.canvas.dispatchEvent(event);return event;};
+    for(let step=0;step<30;step++)assert.equal(wheel(-120).defaultPrevented,true);state.run(180);assert.ok(Math.abs(state.camera.position.distanceTo(focus)-limit)<1e-6);
+    for(let step=0;step<50;step++)wheel(120);state.run(220);assert.ok(Math.abs(state.camera.position.distanceTo(focus)-13)<1e-6);
+    state.viewer.reset();state.run(260);
+    const touch=(type,id,x,target)=>{const event=new Event(type,{cancelable:true});Object.defineProperties(event,{pointerId:{value:id},pointerType:{value:'touch'},pageX:{value:x},pageY:{value:250},clientX:{value:x},clientY:{value:250},button:{value:0}});target.dispatchEvent(event);};
+    touch('pointerdown',1,20,state.canvas);touch('pointerdown',2,120,state.canvas);touch('pointermove',2,360,state.document);state.run(300);
+    assert.ok(Math.abs(state.camera.position.distanceTo(focus)-limit)<1e-6,'A two-finger spread reaches the same protected detail distance');
+    assert.ok(state.controls.target.equals(focus),'Pinch never pans the model outside its guarded orbit');
+    touch('pointerup',2,360,state.document);touch('pointerup',1,20,state.document);assert.equal(state.captures,1);assert.equal(state.releases,1);
+    const before=state.camera.position.clone();state.viewer.destroy();assert.equal(wheel(-120).defaultPrevented,false);assert.ok(state.camera.position.equals(before),'Disposed native controls cannot change the retired viewer');
+  },{width:390,height:580,nativeControls:true,options:{theme:'dusk'}});
 });

@@ -44,11 +44,13 @@ export function createGiftWalkScenes(id: string, gift: GeneratedGiftData): reado
   if (profile) return profile.viewpoints.map((viewpoint, index) => ({
     id: viewpoint.id || `${id}-${index}`, name: viewpoint.name, title: profile.title, intro: profile.intro, story,
     world, collider, panorama: profile.panorama || gift.panoramaUrl, metricScale: profile.scale, groundOffset: profile.offset,
+    mediaExpiresAt: gift.mediaExpiresAt,
     spawn: [...viewpoint.at] as [number, number, number], yaw: viewpoint.yaw, pitch: id === 'paris-example' ? .18 : .04,
     maxRadius: 20, walkSpeed: 1.6, livingGarden: false, gardenRoutes: profile.routes.map(route => ({ ...route, start: [...route.start] as [number, number], end: [...route.end] as [number, number] })), groundProbeY: profile.probeY, journalMode: profile.mode,
   }));
   const semantics = readGiftWorldSemantics(gift.worldSemantics);
   return [{ id: 'your-place', name: 'Your place', title: gift.title, intro: 'Walk into your memory. Look around. Take your time.', story,
     world, collider, panorama: gift.panoramaUrl, metricScale: semantics?.metricScaleFactor, groundOffset: semantics?.groundPlaneOffset,
+    mediaExpiresAt: gift.mediaExpiresAt,
     yaw: gift.initialYaw || 0, pitch: gift.initialPitch || .04, maxRadius: 20, walkSpeed: 1.6, livingGarden: false, autoCalibrate: true, journalMode: 'book' }];
 }

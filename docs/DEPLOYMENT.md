@@ -25,8 +25,10 @@ Provider requests are short asynchronous starts. Persistent jobs contain owner, 
 
 Never delete a provider task merely because a polling request fails. Use the existing task ID; manual reconciliation is required after an unknown start. Rotate exposed credentials and revoke leaked gift links through normal platform controls.
 
-## Current checkpoint
+## Deployment history and current configuration
 
-The local review preview includes actual completed Tripo and World Labs assets. Vercel CLI authentication and Supabase sign-in still require the user's account step. A portal draft exists, but no production URL, cloud migration receipt, end-to-end persistence receipt or successful hackathon submission exists at this checkpoint. The review package records the checks actually executed; cloud-only acceptance checks remain pending.
+The production application is hosted at [giftportals.vercel.app](https://giftportals.vercel.app). Private instant gifting uses configured Supabase storage, provider jobs, expiry and capability checks. Readback receipts for migrations 004–007, completed world recovery and the deployed 10.2.2 release are recorded in [world recovery](WORLD-RECOVERY-2026-10-04.md) and [10.2 validation](V10_2-VALIDATION.md). The selected 10.3 desk was verified in its protected Vercel preview before production publication; [release readiness](RELEASE-10.3-READINESS.md) records the latest release checks.
+
+The legacy authenticated-account API is separately gated. Its public status currently reports account/demo/signup availability as disabled; this is distinct from the configured private instant creator. Check `/api/instant-cloud?action=status` for that creator's provider and moderation availability, and `/api/giftportals?action=status` for account availability. Anonymous requests to the private account world API must return `SIGN_IN_REQUIRED`. No successful hackathon submission receipt is asserted.
 
 Source: [Supabase hosted cron](https://supabase.com/docs/guides/cron), [pg_net](https://supabase.com/docs/guides/database/extensions/pg_net).
