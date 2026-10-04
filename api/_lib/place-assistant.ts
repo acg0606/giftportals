@@ -71,6 +71,7 @@ export function classifyGatewayFailure(status:number,value?:unknown):NonNullable
  if(status!==403)return 'PROVIDER_REJECTED';
  const error=value&&typeof value==='object'?(value as {error?:unknown}).error:undefined;
  const fields=error&&typeof error==='object'?error as {code?:unknown;type?:unknown;message?:unknown}:{};
+ if(fields.code==='customer_verification_required'||fields.type==='customer_verification_required')return 'CUSTOMER_VERIFICATION_REQUIRED';
  const text=[fields.code,fields.type,fields.message].filter(v=>typeof v==='string').join(' ').slice(0,1800).toLowerCase();
  if(/free[ -]?tier|paid[ -]?tier|model.{0,100}(not (?:available|allowed|eligible|supported)|access denied)|(?:not (?:available|allowed|eligible)|denied).{0,100}model/.test(text))return 'MODEL_ACCESS_DENIED';
  if(/(?:invalid|expired|missing).{0,60}(?:token|credential|authentication)|unauthenticated|unauthori[sz]ed|jwt/.test(text))return 'AUTH_UNAVAILABLE';

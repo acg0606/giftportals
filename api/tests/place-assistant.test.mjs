@@ -155,4 +155,12 @@ test('403 diagnostics distinguish model/account/auth denials without exposing th
   const result=await failing.suggest({imageDataUrl:photo,photoConsent:true});assert.deepEqual(result.generationFailure,{code,status:403});assert.equal(result.photoAnalyzed,false);assert.ok(!JSON.stringify(result).includes(secret));assert.ok(!JSON.stringify(result).includes(message));
  }
  assert.equal(a.classifyGatewayFailure(401,{error:{message:'Model denied'}}),'AUTH_UNAVAILABLE');
+ for(const field of ['type','code']){
+  const sensitive='synthetic-provider-private-details';
+  const failed=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async()=>new Response(JSON.stringify({error:{[field]:'customer_verification_required',message:sensitive,requestData:photo}}),{status:403})});
+  const result=await failed.suggest({imageDataUrl:photo,photoConsent:true});
+  assert.deepEqual(result.generationFailure,{code:'CUSTOMER_VERIFICATION_REQUIRED',status:403});
+  assert.equal(result.photoAnalyzed,false);assert.equal(result.provider,'template');
+  assert.ok(!JSON.stringify(result).includes(sensitive));assert.ok(!JSON.stringify(result).includes(photo));assert.ok(!JSON.stringify(result).includes('synthetic-token'));
+ }
 });
