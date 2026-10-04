@@ -290,6 +290,10 @@
 }
 
 .instant-review-photo > img[data-instant-review-miniature] { background: #f2e9d8; object-fit: contain; }
+.instant-world-retry { margin-top: 18px; padding: 16px; border: 1px solid var(--instant-line); border-radius: 15px; }
+.instant-world-retry > p { color: var(--instant-muted); font-size: 12px; line-height: 1.7; }
+.instant-world-retry .instant-secondary { margin: 8px 0 0; }
+.instant-world-retry[hidden] { display: none; }
 
 .instant-assistant-photo,.instant-assistant-place,.instant-assistant-story { display: grid; gap: 12px; margin-top: 18px; padding: 15px; border: 1px solid var(--instant-line); border-radius: 15px; background: #edf4f533; }
 .instant-assistant-photo > p,.instant-assistant-place > p,.instant-assistant-story > p { color: var(--instant-muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }

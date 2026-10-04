@@ -26,7 +26,8 @@ import { mountMemoryTrail } from './trail';
 import { mountRioSouvenir } from './rio-souvenir';
 import { mountRioCreator } from './rio-creator';
 import { decodeRioCreatorDraft, newRioCreatorDraft, type RioCreatorDraft } from './rio-creator-state';
-import { mountInstantCreator, type InstantJob } from './instant-creator';
+import { mountInstantCreator, instantCreatorService, type InstantJob } from './instant-creator';
+import { instantWorldRetryStorageKey, readInstantWorldRetryReference } from './instant-wizard';
 import { instantGiftReady, instantWorldReady, readInstantJobReference } from './instant-creator-state';
 import { mountGeneratedGift, type GeneratedGiftData } from './generated-gift';
 import { giftIcon } from './gift-icon';
@@ -203,7 +204,7 @@ function instantCreatorPage(epoch: number) {
   const generation = sessionGeneration();
   app.innerHTML = '<main id="instant-creator-root"></main>';
   const creator = mountInstantCreator(app.querySelector<HTMLElement>('#instant-creator-root')!, {
-    isCurrent: () => epoch === renderId,
+    isCurrent: () => epoch === renderId && generation === sessionGeneration(),
     storageScope: keepsakeScope(),
     onHome: () => navigate('home'),
     onGiftCompleted: job => { if (epoch === renderId && generation === sessionGeneration()) rememberKeepsake(job); },
@@ -283,6 +284,7 @@ async function readGeneratedGift(id: string, signal: AbortSignal): Promise<Gener
       worldSemantics: readGiftWorldSemantics(job.generation?.worldlabs?.worldSemantics) } : {}),
     photoIntent: job.photoIntent, objectRepresentation: job.objectRepresentation, modelYaw: job.modelYaw,
     keepsakeImageUrl: job.assets.tripoInputUrl,
+    worldRetry: job.worldRetry,
   };
 }
 function generatedGiftPath(id: string) {
@@ -306,19 +308,49 @@ async function generatedWalkPage(id: string, epoch: number) {
   catch (error) { if (epoch === renderId && !abort.signal.aborted) { app.innerHTML = '<main class="generated-loading"><h1>Your gift is still here.</h1><p>' + esc(errorMessage(error)) + '</p><a class="dusk-start" href="#/' + esc(generatedGiftPath(id)) + '">Return to the keepsake</a></main>'; } }
 }
 async function generatedGiftPage(id: string, epoch: number) {
+  const generation = sessionGeneration(), storageKey = instantJobStorageKey(keepsakeScope());
+  const worldRetryStorageKey = instantWorldRetryStorageKey(storageKey);
+  const reference = { id, token: routeParams().get('key') || '' };
+  let retryReference: ReturnType<typeof readInstantWorldRetryReference> = null;
+  try { retryReference = readInstantWorldRetryReference(sessionStorage.getItem(worldRetryStorageKey)); } catch { /* In-place recovery remains available. */ }
+  if (retryReference?.id !== reference.id || retryReference.token !== reference.token) retryReference = null;
   const abort = new AbortController(); cleanup = () => abort.abort();
   app.innerHTML = '<main class="generated-loading" role="status">Opening your keepsake…</main>';
   try {
     const gift = await readGeneratedGift(id, abort.signal);
-    if (epoch !== renderId || abort.signal.aborted) return;
+    if (epoch !== renderId || generation !== sessionGeneration() || abort.signal.aborted) return;
     const walking = createGiftWalkScenes(id, gift).length > 0;
     if (walking && routeParams().get('view') === 'world') { await mountGiftWalk(id, gift, epoch, abort); return; }
     app.innerHTML = '<main id="generated-gift-root"></main>';
     const journeyPath = generatedGiftPath(id).replace(/^generated\//, 'walk/');
     const viewer = mountGeneratedGift(app.querySelector<HTMLElement>('#generated-gift-root')!, {
       gift, shareScope: ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'local' : 'cloud', initialView: routeParams().get('view') === 'world' && gift.worldUrl ? 'world' : 'object',
-      isCurrent: () => epoch === renderId, onExit: () => navigate('collection'),
+      isCurrent: () => epoch === renderId && generation === sessionGeneration(), onExit: () => navigate('collection'),
       onCollection: () => navigate('collection'),
+      ...(instantCreatorService.retryWorld && (gift.worldRetry?.available || retryReference) ? {
+        worldRetryPending: Boolean(retryReference),
+        onRetryWorld: async (signal: AbortSignal) => {
+          if (epoch !== renderId || generation !== sessionGeneration() || signal.aborted || abort.signal.aborted) return;
+          retryReference ??= { ...reference, retryKey: crypto.randomUUID() };
+          try { sessionStorage.setItem(worldRetryStorageKey, JSON.stringify(retryReference)); sessionStorage.setItem(storageKey, JSON.stringify(reference)); } catch { /* This tab keeps its exact retry key. */ }
+          let job: InstantJob;
+          try { job = await instantCreatorService.retryWorld!(reference, retryReference.retryKey, signal); }
+          catch (cause) {
+            if (epoch !== renderId || generation !== sessionGeneration() || signal.aborted || abort.signal.aborted) return;
+            if (typeof cause === 'object' && cause !== null && 'code' in cause && ['WORLD_RETRY_UNAVAILABLE', 'JOB_UNAVAILABLE'].includes(String(cause.code))) {
+              retryReference = null;
+              try { sessionStorage.removeItem(worldRetryStorageKey); } catch { /* The server rejected this request definitively. */ }
+              throw Object.assign(new Error('A world retry is unavailable for this gift right now. Reopen the gift to check its status.'), { worldRetryUnavailable: true });
+            }
+            throw cause;
+          }
+          if (epoch !== renderId || generation !== sessionGeneration() || signal.aborted || abort.signal.aborted) return;
+          if (job.id !== reference.id || job.token !== reference.token) throw new Error('The world retry could not be verified.');
+          retryReference = null;
+          try { sessionStorage.removeItem(worldRetryStorageKey); sessionStorage.setItem(storageKey, JSON.stringify(reference)); } catch { /* The existing job remains available in this tab. */ }
+          rememberKeepsake(job); navigate('make');
+        },
+      } : {}),
       ...(walking ? { onJourney: () => navigate(journeyPath), journeyLabel: 'Walk inside' } : {}),
       onShare: async () => {
         try { await navigator.clipboard.writeText(location.href); toast(['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'Local gift link copied. Opens on this device while the preview is running.' : 'Gift link copied. Anyone with this link can open the gift until it expires.'); }

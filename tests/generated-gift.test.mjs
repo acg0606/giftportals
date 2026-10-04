@@ -73,6 +73,7 @@ async function fixture(action, settings = {}) {
     getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; }
     removeAttribute(name) { this.attributes.delete(name); if (name === 'hidden') this.hidden = false; if (name === 'disabled') this.disabled = false; }
     append(...children) { for (const child of children) { child.remove(); child.parentElement = this; this.children.push(child); } }
+    after(child) { const parent = this.parentElement; if (!parent) return; child.remove(); child.parentElement = parent; parent.children.splice(parent.children.indexOf(this) + 1, 0, child); }
     replaceChildren(...children) { for (const child of this.children) child.parentElement = null; this.children = []; this.text = ''; this.append(...children); }
     remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this); this.parentElement = null; this.connected = false; }
     contains(child) { return child === this || this.children.some(candidate => candidate.contains(child)); }
@@ -196,7 +197,7 @@ async function fixture(action, settings = {}) {
   let portal;
   try {
     const { mountGeneratedGift } = await import(`${moduleUrl}#fixture-${++sequence}`);
-    portal = mountGeneratedGift(host, { gift, isCurrent: () => current, onExit: () => { exits++; }, ...(settings.share ? { onShare: () => shares++ } : {}), ...(settings.shareScope ? { shareScope: settings.shareScope } : {}), ...(settings.initialView ? { initialView: settings.initialView } : {}), ...(settings.onCollection ? { onCollection: settings.onCollection } : {}), ...(settings.onJourney ? { onJourney: settings.onJourney } : {}) });
+    portal = mountGeneratedGift(host, { gift, isCurrent: () => current, onExit: () => { exits++; }, ...(settings.share ? { onShare: () => shares++ } : {}), ...(settings.shareScope ? { shareScope: settings.shareScope } : {}), ...(settings.initialView ? { initialView: settings.initialView } : {}), ...(settings.onCollection ? { onCollection: settings.onCollection } : {}), ...(settings.onJourney ? { onJourney: settings.onJourney } : {}), ...(settings.onRetryWorld ? { onRetryWorld: settings.onRetryWorld, worldRetryPending: settings.worldRetryPending } : {}) });
     const state = { host, opener, document, gift, imports, viewers, panels, xrPanels, events, actions, portal,
       dialog: () => dialogs[0], element: name => dialogs[0].querySelector(`[data-gg-${name}]`), selector: selector => dialogs[0].querySelector(selector),
       exitCount: () => exits, shareCount: () => shares, invalidate: () => current = false,
@@ -284,6 +285,38 @@ test('a souvenir without a delivered world opens its real model and story while 
     assert.equal(state.xrPanels[0].options.worldUrl, '');assert.equal(state.xrPanels[0].options.modelUrl, object.source);
     assert.equal(state.imports.world.length, 0);assert.equal(state.events.includes('mount:world'), false);
   }, { initialView, gift: { worldUrl: undefined, keepsakeImageUrl: '/synthetic/miniature.png', panoramaUrl: '/synthetic/leftover-panorama.png' } });
+});
+
+test('a saved souvenir retries only its world after a click while its renderer and readable story remain available', async () => {
+  const calls = []; let release;
+  await fixture(async state => {
+    const button = state.element('world-retry'); assert.ok(button); assert.equal(calls.length, 0);
+    await state.resolve('object'); const object = state.viewers[0]; object.callbacks.onReady();
+    button.click(); button.dispatchEvent(new Event('click')); await flush(); assert.equal(calls.length, 1); assert.equal(button.disabled, true);
+    assert.equal(object.destroyed, false); assert.ok(state.selector('.gg-original-story')); assert.match(state.dialog().innerHTML, /We watched the last ferry/);
+    assert.equal(state.imports.world.length, 0); assert.match(state.element('world-retry-status').textContent, /only the world/);
+    release(); await flush(); assert.equal(button.disabled, false); assert.equal(object.destroyed, false);
+  }, { gift: { worldUrl: undefined }, onRetryWorld: signal => { calls.push(signal); return new Promise(resolve => { release = resolve; }); } });
+});
+
+test('a lost world retry remains explicitly recoverable, while closing or retiring the view ignores late errors', async () => {
+  for (const retire of ['recover', 'close', 'account']) {
+    let reject; const calls = [];
+    await fixture(async state => {
+      const button = state.element('world-retry'); assert.equal(button.textContent, '', 'Initial text lives in the template in this fixture');
+      button.click(); await flush();
+      if (retire === 'close') state.element('exit').click(); else if (retire === 'account') state.invalidate();
+      reject(new TypeError('A lost provider response')); await flush();
+      if (retire === 'recover') { assert.equal(button.disabled, false); assert.equal(button.textContent, 'Check world retry'); assert.match(state.element('world-retry-status').textContent, /same attempt/); }
+      if (retire === 'close') assert.equal(calls[0].aborted, true);
+      if (retire !== 'recover') assert.doesNotMatch(state.element('world-retry-status').textContent, /could not confirm/);
+      assert.equal(calls.length, 1); assert.equal(state.imports.world.length, 0);
+    }, { gift: { worldUrl: undefined }, worldRetryPending: true, onRetryWorld: signal => { calls.push(signal); return new Promise((_resolve, decline) => { reject = decline; }); } });
+  }
+});
+
+test('normal recipients, delivered worlds and expired souvenirs show no generation retry action', async () => {
+  for (const settings of [{ gift: { worldUrl: undefined } }, { onRetryWorld: async () => { throw new Error('Must not retry'); } }, { gift: { worldUrl: undefined, mediaExpiresAt: 1 }, onRetryWorld: async () => { throw new Error('Must not retry'); } }]) await fixture(async state => { assert.equal(state.element('world-retry'), null); }, settings);
 });
 
 test('switching before object import resolves ignores the obsolete import and late callbacks', async () => {

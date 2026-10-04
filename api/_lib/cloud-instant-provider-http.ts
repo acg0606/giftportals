@@ -4,6 +4,15 @@ import { AppError,ensure,hasMagic,providerAssetUrl } from './rules.js';
 import { providerId } from './providers.js';
 type Provider='tripo'|'worldlabs';
 const BASE={tripo:'https://openapi.tripo3d.ai/v3',worldlabs:'https://api.worldlabs.ai/marble/v1'};
+const providerErrorCodes=new Set(['OK','CANCELLED','UNKNOWN','INVALID_ARGUMENT','DEADLINE_EXCEEDED','NOT_FOUND','ALREADY_EXISTS','PERMISSION_DENIED','RESOURCE_EXHAUSTED','FAILED_PRECONDITION','ABORTED','OUT_OF_RANGE','UNIMPLEMENTED','INTERNAL','UNAVAILABLE','DATA_LOSS','UNAUTHENTICATED']);
+const safeProviderCode=(value:unknown)=>typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=999999?value:typeof value==='string'&&providerErrorCodes.has(value)?value:null;
+// Request IDs are useful to provider support. Accept only recognizable trace
+// formats; arbitrary provider strings may contain user data or credentials.
+const safeRequestId=(value:unknown)=>typeof value==='string'&&value.length<=96&&(/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(value)||/^req_[A-Za-z0-9]{8,80}$/.test(value))?value:null;
+export function cloudProviderFailureMetadata(value:unknown,headers?:Headers){
+  const body=value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,any>:undefined;
+  return {providerCode:safeProviderCode(body?.code??body?.error?.code),requestId:[headers?.get('x-request-id'),headers?.get('request-id'),body?.request_id].map(safeRequestId).find(Boolean)??null};
+}
 function completedWorld(value:unknown){
   ensure(value&&typeof value==='object'&&!Array.isArray(value),'PROVIDER_RESPONSE_INVALID',502);
   const envelope=value as Record<string,any>,world=envelope.world===undefined?envelope:envelope.world;
@@ -25,19 +34,21 @@ export function createCloudProviderHTTP(deadline:number){
   async function json(provider:Provider,path:string,method:'GET'|'POST'='GET',body?:Record<string,any>,maximum=15000):Promise<Record<string,any>>{
     const key=provider==='tripo'?process.env.TRIPO_API_KEY:process.env.WORLD_LABS_API_KEY;ensure(key,'PROVIDER_UNAVAILABLE',503);
     const paid=method==='POST'&&(path.startsWith('/generation/')||path==='/worlds:generate');
-    let response:Response|undefined,providerCode:number|null=null;const started=Date.now();
+    let response:Response|undefined,providerCode:number|string|null=null,requestId:string|null=null;const started=Date.now();
     try {
     try{response=await fetch(BASE[provider]+path,{method,headers:{...(provider==='tripo'?{Authorization:`Bearer ${key}`}:{'WLT-Api-Key':key}),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(cloudRemaining(deadline,maximum,20000)),redirect:'error'});}catch(error){if(error instanceof AppError)throw error;throw new AppError(paid?'SUBMISSION_AMBIGUOUS':'PROVIDER_NETWORK',502);}
-    if(!response.ok&&paid&&provider==='tripo'){
-      // Capture only the numeric provider code. Never log messages, inputs or URLs.
-      try{const value=JSON.parse(await cloudReadText(response,65536));if(Number.isInteger(value?.code)&&value.code>=0&&value.code<=999999)providerCode=value.code;}catch{/* The rejection remains closed even if its body is unavailable. */}
+    requestId=cloudProviderFailureMetadata(undefined,response.headers).requestId;
+    if(!response.ok){
+      // Only bounded codes and validated trace identifiers leave this reader.
+      try{const metadata=cloudProviderFailureMetadata(JSON.parse(await cloudReadText(response,65536)),response.headers);providerCode=metadata.providerCode;requestId=metadata.requestId;}catch{/* The rejection remains closed even if its body is unavailable. */}
     }
     ensure(response.ok,'PROVIDER_REQUEST_REJECTED',502);let raw:string;try{raw=await cloudReadText(response,1024*1024);}catch(error){if(error instanceof AppError)throw error;throw new AppError(paid?'SUBMISSION_AMBIGUOUS':'PROVIDER_NETWORK',502);}
     let value:any;try{value=JSON.parse(raw);}catch{throw new AppError(paid?'SUBMISSION_AMBIGUOUS':'PROVIDER_RESPONSE_INVALID',502);}
     ensure(value&&typeof value==='object'&&!Array.isArray(value),'PROVIDER_RESPONSE_INVALID',502);
-    if(provider==='tripo'){if(Number.isInteger(value.code)&&value.code>=0&&value.code<=999999)providerCode=value.code;ensure(value.code===0,'PROVIDER_REQUEST_REJECTED',502);ensure(value.data&&typeof value.data==='object'&&!Array.isArray(value.data),'PROVIDER_RESPONSE_INVALID',502);return value.data;}return value;
+    const metadata=cloudProviderFailureMetadata(value,response.headers);providerCode=metadata.providerCode;requestId=metadata.requestId;
+    if(provider==='tripo'){ensure(value.code===0,'PROVIDER_REQUEST_REJECTED',502);ensure(value.data&&typeof value.data==='object'&&!Array.isArray(value.data),'PROVIDER_RESPONSE_INVALID',502);return value.data;}return value;
     } catch(error) {
-      if(paid){const stage=path==='/generation/image-to-image'?'tripo-reference':path==='/generation/image-to-model'?'tripo':path==='/worlds:generate'?'worldlabs':'other';const allowed=['SUBMISSION_AMBIGUOUS','PROVIDER_REQUEST_REJECTED','PROVIDER_RESPONSE_INVALID','PROVIDER_RESPONSE_LIMIT','CLOUD_TIME_SLICE_ENDED'];const errorCode=error instanceof AppError&&allowed.includes(error.code)?error.code:'PROVIDER_NETWORK';const trace=response?.headers.get('x-tripo-trace-id');console.error(JSON.stringify({event:'cloud_provider_submission_error',provider,stage,httpStatus:response?.status??null,providerCode,errorCode,durationMs:Math.max(0,Date.now()-started),traceId:trace&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(trace)?trace:null}));}
+      const stage=path==='/generation/image-to-image'?'tripo-reference':path==='/generation/image-to-model'?'tripo':provider==='worldlabs'?'worldlabs':'other';const allowed=['SUBMISSION_AMBIGUOUS','PROVIDER_REQUEST_REJECTED','PROVIDER_RESPONSE_INVALID','PROVIDER_RESPONSE_LIMIT','CLOUD_TIME_SLICE_ENDED'];const errorCode=error instanceof AppError&&allowed.includes(error.code)?error.code:'PROVIDER_NETWORK';const trace=response?.headers.get('x-tripo-trace-id');console.error(JSON.stringify({event:paid?'cloud_provider_submission_error':'cloud_provider_request_error',provider,stage,httpStatus:response?.status??null,providerCode,errorCode,durationMs:Math.max(0,Date.now()-started),traceId:safeRequestId(trace),requestId}));
       throw error;
     }
   }
@@ -59,7 +70,14 @@ export function createCloudProviderHTTP(deadline:number){
       if(stage==='tripo-reference'){ensure(result.type==='image_to_image','PROVIDER_RESPONSE_INVALID',502);const asset=await download(result.output?.generated_image_url,'tripo','reference','image/png',6*1024*1024);ensure(['image/png','image/jpeg'].includes(asset.mime),'PROVIDER_ASSET_INVALID',502);return {assets:[{...asset,key:'reference',suffix:asset.mime==='image/jpeg'?'jpg':'png'}],cost};}
       return {assets:[{...await download(result.output?.model_url,'tripo','glb','model/gltf-binary'),key:'model'}],cost};
     }
-    ensure(!result.error,'PROVIDER_GENERATION_FAILED',502);ensure(typeof result.done==='boolean','PROVIDER_RESPONSE_INVALID',502);if(!result.done)return null;
+    ensure(typeof result.done==='boolean','PROVIDER_RESPONSE_INVALID',502);
+    if(result.error!==undefined&&result.error!==null){
+      ensure(typeof result.error==='object'&&!Array.isArray(result.error),'PROVIDER_RESPONSE_INVALID',502);
+      // Some pending responses contain the default empty error placeholder.
+      // A terminal response with any error object remains a failed generation.
+      ensure(!result.done&&Object.keys(result.error).length===0,'PROVIDER_GENERATION_FAILED',502);
+    }
+    if(!result.done)return null;
     const snapshot=completedWorld(result.response),resultId=snapshot.id;let world=snapshot.world;
     if(!world.assets?.splats?.spz_urls?.['500k']||!world.assets?.imagery?.pano_url||!world.assets?.mesh){const latest=completedWorld(await json('worldlabs',`/worlds/${encodeURIComponent(resultId)}`));ensure(latest.id===resultId,'PROVIDER_RESPONSE_INVALID',502);world=latest.world;}
     const worldQuality=world.assets?.splats?.spz_urls?.['500k']?'500k':'100k';

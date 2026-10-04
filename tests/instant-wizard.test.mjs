@@ -55,7 +55,7 @@ const missing = () => Object.assign(new Error('No previous job'), { code: 'JOB_U
 async function fixture(action, settings = {}) {
   const names = ['window', 'document', 'HTMLInputElement', 'HTMLTextAreaElement', 'sessionStorage', 'URL', 'FileReader', 'fetch', 'createImageBitmap', 'matchMedia', 'navigator', '__instantWizard'];
   const previous = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const state = { current: true, creates: [], jobs: [], diagnostics: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
+  const state = { current: true, creates: [], jobs: [], diagnostics: [], retries: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
   class Element extends EventTarget {
     constructor(tag = 'div', attrs = {}) {
       super(); this.tagName = tag; this.attrs = attrs; this.children = []; this.dataset = {}; this.value = attrs.value || ''; this.name = attrs.name || ''; this.type = attrs.type || ''; this.hidden = 'hidden' in attrs; this.disabled = 'disabled' in attrs; this.checked = 'checked' in attrs; this.open = false; this.isConnected = true; this.scrollLeft = 0; this.scrollWidth = 720; this.clientWidth = 350; this.scrollTop = 0; this.validityMessage = ''; this.style = {};
@@ -134,6 +134,7 @@ async function fixture(action, settings = {}) {
   const service = { status: async () => { state.statusCalls++; return settings.statusHandler ? settings.statusHandler(state) : state.status; }, create: async input => { state.creates.push(input); if (settings.createError) throw settings.createError; return state.job; }, job: async reference => { state.jobs.push(reference); if (settings.jobHandler) return settings.jobHandler(reference, state); throw missing(); } };
   if (settings.resumeHandler) service.resumeUpload = async (reference, images, signal) => { state.resumes.push({ reference, images, signal }); return settings.resumeHandler(reference, images, signal, state); };
   if (settings.diagnosticsHandler) service.worldDiagnostics = async (reference, signal) => { state.diagnostics.push({ reference, signal }); return settings.diagnosticsHandler(reference, signal, state); };
+  if (settings.retryHandler) service.retryWorld = async (reference, retryKey, signal) => { state.retries.push({ reference, retryKey, signal }); return settings.retryHandler(reference, retryKey, signal, state); };
   state.job = { id: 'actual-job', token: 'capability', state: 'completed', assets: { photoUrl: '/photo', modelUrl: '/model', worldUrl: '/world' }, tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, title: 'Gift', story: '', worldPrompt: 'A quiet world', senderName: '', recipientName: '' };
   state.suggestion = { title: 'A suggested gift', story: 'A suggested memory.', worldPrompt: 'A suggested place in gentle light.', provider: 'template', photoAnalyzed: false, places: [], curiosities: [], warnings: [], locationStatus: 'not-requested', ...settings.suggestion };
   const assistantService = {
@@ -301,6 +302,99 @@ const diagnosticSettings = (extra = {}) => ({
   jobHandler: (_reference, state) => ({ ...state.job, ...diagnosticReference, state: 'partial', title: 'Our saved souvenir', story: 'Our saved memory.', tripo: { state: 'completed' }, worldlabs: { state: 'failed', taskId: 'recorded-world-task', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
   diagnosticsHandler: () => diagnosticReceipt(),
   ...extra,
+});
+
+const retryStorageKey = 'giftportals.instant.job.v2:anonymous:world-retry';
+const retryJob = (state, extra = {}) => ({ ...state.job, ...diagnosticReference, state: 'partial', title: 'Our saved souvenir', story: 'Our saved memory.', tripo: { state: 'completed', taskId: 'existing-souvenir' }, worldlabs: { state: 'failed', taskId: 'failed-world-task', errorCode: 'PROVIDER_GENERATION_FAILED' }, worldRetry: { available: true, attempts: 0 }, assets: { photoUrl: '/photo', modelUrl: '/model' }, ...extra });
+const retrySettings = (extra = {}) => ({
+  storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(diagnosticReference)]],
+  jobHandler: (_reference, state) => retryJob(state),
+  retryHandler: (_reference, _retryKey, _signal, state) => retryJob(state, { state: 'processing', worldlabs: { state: 'processing', taskId: 'new-world-task' }, worldRetry: { available: false, attempts: 1 } }),
+  ...extra,
+});
+
+test('world retry requires an explicit click, submits once and keeps the souvenir open through processing and delivery', async () => {
+  let release;
+  await fixture(async state => {
+    const button = state.find('[data-instant-world-retry-button]');
+    assert.equal(state.find('[data-instant-world-retry]').hidden, false); assert.equal(state.retries.length, 0); assert.deepEqual(state.scheduled, []);
+    button.click(); button.dispatchEvent(new Event('click')); await flush();
+    assert.equal(state.retries.length, 1); assert.deepEqual(state.retries[0].reference, diagnosticReference); assert.equal(button.disabled, true);
+    state.find('[data-instant-open]').click(); assert.equal(state.opened[0].assets.modelUrl, '/model');
+    release(retryJob(state, { state: 'processing', worldlabs: { state: 'processing', taskId: 'new-world-task' }, worldRetry: { available: false, attempts: 1 } })); await flush();
+    assert.equal(state.find('[data-instant-world-retry]').hidden, true); assert.equal(state.find('[data-instant-open]').hidden, false);
+    assert.match(state.find('[data-instant-job-status]').textContent, /keepsake is ready.*world is being created again/);
+    assert.equal(state.scheduled.length, 1); assert.equal(state.completed.length, 1);
+    state.find('[data-instant-open]').click(); assert.equal(state.opened[1].state, 'processing'); assert.equal(state.opened[1].tripo.taskId, 'existing-souvenir'); assert.equal(state.opened[1].story, 'Our saved memory.');
+    state.scheduled[0].callback(); await flush();
+    assert.equal(state.completed.length, 2); assert.equal(state.completed[1].worldlabs.state, 'completed'); assert.equal(state.completed[1].assets.modelUrl, '/model');
+    assert.equal(state.retries.length, 1); assert.equal(state.creates.length, 0); assert.equal(state.storage.has(retryStorageKey), false);
+  }, retrySettings({ retryHandler: () => new Promise(resolve => { release = resolve; }), jobHandler: (_reference, state) => state.jobs.length === 1 ? retryJob(state) : retryJob(state, { state: 'completed', worldlabs: { state: 'completed', taskId: 'new-world-task' }, worldRetry: { available: false, attempts: 1 }, assets: { photoUrl: '/photo', modelUrl: '/model', worldUrl: '/new-world' } }) }));
+});
+
+test('lost retry response preserves an opaque idempotent reference; another explicit click recovers the same attempt', async () => {
+  await fixture(async state => {
+    const button = state.find('[data-instant-world-retry-button]'); button.click(); await flush();
+    assert.equal(button.disabled, false); assert.equal(button.textContent, 'Check world retry');
+    assert.match(state.find('[data-instant-world-retry-status]').textContent, /same attempt without starting another/);
+    const saved = JSON.parse(state.storage.get(retryStorageKey));
+    assert.deepEqual(Object.keys(saved).sort(), ['id', 'retryKey', 'token']); assert.equal(saved.retryKey, state.retries[0].retryKey);
+    button.click(); await flush(); assert.equal(state.retries.length, 2); assert.equal(state.retries[0].retryKey, state.retries[1].retryKey);
+    assert.equal(state.storage.has(retryStorageKey), false); assert.equal(state.creates.length, 0); assert.equal(state.find('[data-instant-open]').hidden, false);
+  }, retrySettings({ retryHandler: (_reference, _key, _signal, state) => { if (state.retries.length === 1) throw new TypeError('Lost response'); return retryJob(state, { state: 'processing', worldlabs: { state: 'processing' }, worldRetry: { available: false, attempts: 1 } }); } }));
+});
+
+test('reloading an uncertain retry makes no paid request and recovers the saved key only after a click', async () => {
+  const pending = { ...diagnosticReference, retryKey: 'existing-attempt-key' };
+  await fixture(async state => {
+    assert.equal(state.retries.length, 0); assert.equal(state.find('[data-instant-world-retry-button]').textContent, 'Check world retry');
+    state.find('[data-instant-world-retry-button]').click(); await flush(); assert.equal(state.retries[0].retryKey, pending.retryKey); assert.equal(state.creates.length, 0);
+  }, retrySettings({ storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(diagnosticReference)], [retryStorageKey, JSON.stringify(pending)]] }));
+  for (const raw of [null, '{}', JSON.stringify({ ...pending, id: undefined }), JSON.stringify({ ...pending, retryKey: '../invalid' }), JSON.stringify({ ...pending, token: 'short' })]) assert.equal(wizard.readInstantWorldRetryReference(raw), null);
+});
+
+test('a definite server rejection keeps the souvenir available and offers a fresh status read instead of repeated retry', async () => {
+  for (const code of ['WORLD_RETRY_UNAVAILABLE', 'JOB_UNAVAILABLE']) await fixture(async state => {
+    state.find('[data-instant-world-retry-button]').click(); await flush();
+    assert.match(state.find('[data-instant-job-status]').textContent, /retry is unavailable/);
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.equal(state.find('[data-instant-recheck]').hidden, false);
+    assert.equal(state.find('[data-instant-world-retry]').hidden, true); assert.equal(state.storage.has(retryStorageKey), false); assert.equal(state.creates.length, 0);
+  }, retrySettings({ retryHandler: () => { throw Object.assign(new Error('Rejected'), { code }); } }));
+});
+
+test('ineligible worlds, expired media and services without world retry never submit', async () => {
+  for (const change of [{ worldRetry: { available: false, attempts: 0 } }, { state: 'processing', worldlabs: { state: 'processing' } }, { state: 'completed', worldlabs: { state: 'completed' } }, { mediaExpiresAt: 1 }, { worldlabs: { state: 'failed', errorCode: 'SUBMISSION_AMBIGUOUS' } }, { uploadState: 'pending' }]) await fixture(async state => {
+    assert.equal(state.find('[data-instant-world-retry]').hidden, true); state.find('[data-instant-world-retry-button]').dispatchEvent(new Event('click')); await flush(); assert.equal(state.retries.length, 0); assert.equal(state.creates.length, 0);
+  }, retrySettings({ jobHandler: (_ref, state) => retryJob(state, change) }));
+  await fixture(async state => { assert.equal(state.find('[data-instant-world-retry]').hidden, true); }, retrySettings({ retryHandler: undefined }));
+});
+
+test('retiring a world retry ignores its late reply and retains its key for safe recovery', async () => {
+  for (const retire of ['edit', 'destroy', 'account']) {
+    let release;
+    await fixture(async state => {
+      state.find('[data-instant-world-retry-button]').click(); await flush();
+      const result = state.find('[data-instant-world-retry-status]');
+      if (retire === 'edit') state.find('[data-instant-edit]').click(); else if (retire === 'destroy') state.handle.destroy(); else state.current = false;
+      if (retire !== 'account') assert.equal(state.retries[0].signal.aborted, true);
+      release(retryJob(state, { state: 'completed', worldlabs: { state: 'completed' }, worldRetry: { available: false, attempts: 1 }, assets: { photoUrl: '/photo', modelUrl: '/model', worldUrl: '/late-world' } })); await flush();
+      assert.equal(state.completed.length, 1); assert.equal(state.storage.has(retryStorageKey), true); assert.equal(state.creates.length, 0); assert.deepEqual(state.scheduled, []);
+      if (retire !== 'account') assert.equal(result.textContent, '');
+    }, retrySettings({ retryHandler: () => new Promise(resolve => { release = resolve; }) }));
+  }
+});
+
+test('a status read begun before world retry cannot replace its newer processing state', async () => {
+  let release;
+  await fixture(async state => {
+    state.find('[data-instant-recheck]').dispatchEvent(new Event('click')); await flush();
+    assert.equal(state.jobs.length, 2);
+    state.find('[data-instant-world-retry-button]').click(); await flush();
+    assert.match(state.find('[data-instant-job-status]').textContent, /world is being created again/);
+    release(retryJob(state)); await flush();
+    assert.match(state.find('[data-instant-job-status]').textContent, /world is being created again/);
+    assert.equal(state.find('[data-instant-world-retry]').hidden, true); assert.equal(state.retries.length, 1); assert.equal(state.find('[data-instant-open]').hidden, false);
+  }, retrySettings({ jobHandler: (_reference, state) => state.jobs.length === 1 ? retryJob(state) : new Promise(resolve => { release = resolve; }) }));
 });
 
 test('checking a failed recorded world is explicit and preserves the ready souvenir without polling or creating', async () => {

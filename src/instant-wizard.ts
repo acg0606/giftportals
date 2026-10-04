@@ -24,3 +24,13 @@ export function appendInstantTranscript(story: string, transcript: string): { st
 export function instantJobConfirmedMissing(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'JOB_UNAVAILABLE';
 }
+
+export const instantWorldRetryStorageKey = (jobStorageKey: string) => `${jobStorageKey}:world-retry`;
+/** Keep the same idempotency key after an interrupted response or page reload. */
+export function readInstantWorldRetryReference(raw: string | null): { id: string; token: string; retryKey: string } | null {
+  try {
+    const value = JSON.parse(raw || 'null');
+    return value && typeof value.id === 'string' && typeof value.token === 'string' && typeof value.retryKey === 'string' && /^[A-Za-z0-9_-]{8,120}$/.test(value.id) && /^[A-Za-z0-9_-]{16,160}$/.test(value.token) && /^[A-Za-z0-9_-]{8,120}$/.test(value.retryKey)
+      ? { id: value.id, token: value.token, retryKey: value.retryKey } : null;
+  } catch { return null; }
+}

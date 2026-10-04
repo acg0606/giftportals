@@ -8,7 +8,7 @@ import type { CloudProviderAdapter } from './cloud-instant-service.js';
 import type { CloudRetentionRepository } from './cloud-instant-retention.js';
 const hash=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 const bucketFor=(asset:CloudStoredAsset)=>['original','object','world'].includes(asset.id)?'gp-instant-private':'gp-instant-generated';
-const databaseCodes=['CLOUD_NOT_CONFIGURED','JOB_UNAVAILABLE','JOB_EXPIRED','DEDUPE_MISMATCH','GENERATION_QUOTA','GENERATION_BUDGET','STORAGE_LIMIT','PHOTO_SAFETY_REQUIRED','SUBMISSION_AMBIGUOUS','SUBMISSION_ALREADY_STARTED','INSTANT_LEASE_CONFLICT','INSTANT_ASSET_CONFLICT','INSTANT_TRANSITION_INVALID','INSTANT_INPUT_INVALID','INSTANT_INPUT_IMMUTABLE','INSTANT_TASK_IMMUTABLE','INSTANT_ASSET_INVALID','SUBMISSION_NOT_STARTED'];
+const databaseCodes=['CLOUD_NOT_CONFIGURED','JOB_UNAVAILABLE','JOB_EXPIRED','DEDUPE_MISMATCH','GENERATION_QUOTA','GENERATION_BUDGET','STORAGE_LIMIT','PHOTO_SAFETY_REQUIRED','SUBMISSION_AMBIGUOUS','SUBMISSION_ALREADY_STARTED','INSTANT_LEASE_CONFLICT','INSTANT_ASSET_CONFLICT','INSTANT_TRANSITION_INVALID','INSTANT_INPUT_INVALID','INSTANT_INPUT_IMMUTABLE','INSTANT_TASK_IMMUTABLE','INSTANT_ASSET_INVALID','SUBMISSION_NOT_STARTED','WORLD_RETRY_UNAVAILABLE'];
 type CloudDatabaseError={message?:string;code?:string;status?:number|string;statusCode?:number|string};
 export function cloudDatabaseFailureMetadata(error:CloudDatabaseError,operation:string,responseStatus?:number){
   const value=responseStatus??Number(error.status??error.statusCode);
@@ -29,6 +29,8 @@ export function createCloudInstantRepository(deadline=Date.now()+165000):CloudIn
     finalize:(id,tokenHash,assets)=>rpc('gp_instant_finalize_uploads',{p_id:id,p_token_hash:tokenHash,p_assets:assets}) as any,
     claim:async(workerId,id)=>{const result=await client().rpc('gp_instant_claim',{p_worker_id:workerId,p_lease_seconds:240,p_id:id||null});if(result.error)unwrap(result,'gp_instant_claim');return result.data as any;},
     begin:(job,stage)=>rpc('gp_instant_begin_submission',{p_id:job.id,p_lease_id:job.lease_id,p_revision:job.revision,p_stage:stage}) as any,
+    retryWorld:(id,tokenHash,ownerHash,requestKeyHash,recipeOverride,diagnostics)=>rpc('gp_instant_retry_world',{p_id:id,p_token_hash:tokenHash,p_owner_hash:ownerHash,p_request_key_hash:requestKeyHash,p_recipe_override:recipeOverride,p_previous_diagnostics:diagnostics||null}) as any,
+    worldRetryOwner:(id,tokenHash,ownerHash)=>rpc('gp_instant_world_retry_owner',{p_id:id,p_token_hash:tokenHash,p_owner_hash:ownerHash}) as any,
     update:(job,v)=>rpc('gp_instant_update',{p_id:job.id,p_lease_id:job.lease_id,p_revision:job.revision,p_state:v.state,p_document:v.document,p_stages:v.stages,p_assets:v.assets,p_release_lease:v.releaseLease!==false}) as any,
     signUpload:async asset=>{ensure(bucketFor(asset)==='gp-instant-private','INSTANT_ASSET_INVALID');return unwrap(await client().storage.from(bucketFor(asset)).createSignedUploadUrl(asset.path,{upsert:false}),'storage-sign-upload').signedUrl;},
     inputExists:async asset=>{ensure(bucketFor(asset)==='gp-instant-private'&&/^[a-f0-9-]{36}\/input\/(?:original|object|world)-[a-f0-9]{64}\.(?:jpg|png|webp)$/.test(asset.path),'INSTANT_ASSET_INVALID');const split=asset.path.lastIndexOf('/'),name=asset.path.slice(split+1);const rows=unwrap(await client().storage.from('gp-instant-private').list(asset.path.slice(0,split),{search:name,limit:100,offset:0}),'storage-input-exists');ensure(Array.isArray(rows),'CLOUD_STORAGE_FAILED',502);return rows.some(row=>row.name===name&&typeof row.id==='string');},
@@ -97,6 +99,9 @@ async function uploadImage(provider:'tripo'|'worldlabs',bytes:Buffer,mime:string
   ensure(url.protocol==='https:'&&!url.username&&!url.password&&(!url.port||url.port==='443')&&['worldlabs.ai','googleapis.com'].some(domain=>url.hostname===domain||url.hostname.endsWith(`.${domain}`)),'PROVIDER_ASSET_ORIGIN_DENIED',502);
   ensure(info.required_headers===undefined||info.required_headers===null||(info.required_headers&&typeof info.required_headers==='object'&&!Array.isArray(info.required_headers)),'PROVIDER_RESPONSE_INVALID',502);
   const headers:Record<string,string>={};for(const[name,value]of Object.entries(info.required_headers||{})){ensure(typeof value==='string'&&!/authorization|cookie|api-key/i.test(name),'PROVIDER_RESPONSE_INVALID',502);headers[name]=value;}
+  // Signed headers are authoritative, including their casing and exact value.
+  // A Uint8Array body otherwise carries no MIME type for the uploaded image.
+  if(!Object.keys(headers).some(name=>name.toLowerCase()==='content-type'))headers['Content-Type']=mime;
   const response=await fetch(url,{method:'PUT',body:new Uint8Array(bytes),headers,redirect:'error',signal:AbortSignal.timeout(cloudRemaining(deadline,30000,20000))});ensure(response.ok,'PROVIDER_UPLOAD_FAILED',502);return id;
 }
 export function createCloudProviderAdapter(deadline=Date.now()+165000):CloudProviderAdapter{const http=createCloudProviderHTTP(deadline);return {
@@ -104,8 +109,13 @@ export function createCloudProviderAdapter(deadline=Date.now()+165000):CloudProv
   submit:async(stage,job,input)=>{
     if(stage==='tripo-reference'){const {promptVersion,...recipe}=job.document.generation.tripoReference!;return providerId((await http.json('tripo','/generation/image-to-image','POST',{input,...recipe},120000)).task_id);}
     if(stage==='tripo')return providerId((await http.json('tripo','/generation/image-to-model','POST',{input,...job.document.generation.tripo})).task_id);
-    const worldPrompt=input?{type:'image',text_prompt:job.document.generation.worldlabs.textPrompt,is_pano:false,disable_recaption:true,image_prompt:{source:'media_asset',media_asset_id:input}}:{type:'text',text_prompt:job.document.generation.worldlabs.textPrompt};
-    return providerId((await http.json('worldlabs','/worlds:generate','POST',{display_name:job.document.title.slice(0,64),model:'marble-1.1',permission:{public:false},world_prompt:worldPrompt})).operation_id);
+    const recipe:Record<string,unknown>={...job.document.generation.worldlabs,...job.document.worldRetry?.recipeOverride};
+    const model=recipe.model??'marble-1.1',isPano=recipe.isPano??false,disableRecaption=recipe.disableRecaption??true;
+    ensure(['marble-1.0-draft','marble-1.0','marble-1.1','marble-1.1-plus'].includes(model as string),'INSTANT_INPUT_INVALID');
+    ensure(typeof recipe.textPrompt==='string'&&recipe.textPrompt.trim().length>0&&recipe.textPrompt.length<=16000,'INSTANT_INPUT_INVALID');
+    ensure(typeof isPano==='boolean'||isPano==='auto','INSTANT_INPUT_INVALID');ensure(typeof disableRecaption==='boolean','INSTANT_INPUT_INVALID');
+    const worldPrompt=input?{type:'image',text_prompt:recipe.textPrompt,is_pano:isPano,disable_recaption:disableRecaption,image_prompt:{source:'media_asset',media_asset_id:input}}:{type:'text',text_prompt:recipe.textPrompt};
+    return providerId((await http.json('worldlabs','/worlds:generate','POST',{display_name:job.document.title.slice(0,64),model,permission:{public:false},world_prompt:worldPrompt})).operation_id);
   },
   poll:async(stage,taskId)=>{const provider=stage==='worldlabs'?'worldlabs':'tripo',result=await http.json(provider,`${provider==='tripo'?'/tasks/':'/operations/'}${encodeURIComponent(providerId(taskId))}`);if(provider==='tripo')ensure(result.task_id===taskId,'PROVIDER_RESPONSE_INVALID',502);return result;},
   complete:http.complete,
