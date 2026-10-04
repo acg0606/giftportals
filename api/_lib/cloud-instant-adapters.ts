@@ -9,21 +9,29 @@ import type { CloudRetentionRepository } from './cloud-instant-retention.js';
 const hash=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 const bucketFor=(asset:CloudStoredAsset)=>['original','object','world'].includes(asset.id)?'gp-instant-private':'gp-instant-generated';
 const databaseCodes=['JOB_UNAVAILABLE','JOB_EXPIRED','DEDUPE_MISMATCH','GENERATION_QUOTA','GENERATION_BUDGET','STORAGE_LIMIT','PHOTO_SAFETY_REQUIRED','SUBMISSION_AMBIGUOUS','SUBMISSION_ALREADY_STARTED','INSTANT_LEASE_CONFLICT','INSTANT_ASSET_CONFLICT','INSTANT_TRANSITION_INVALID','INSTANT_INPUT_INVALID','INSTANT_INPUT_IMMUTABLE','INSTANT_TASK_IMMUTABLE','INSTANT_ASSET_INVALID','SUBMISSION_NOT_STARTED'];
+type CloudDatabaseError={message?:string;code?:string;status?:number|string;statusCode?:number|string};
+export function cloudDatabaseFailureMetadata(error:CloudDatabaseError,operation:string,responseStatus?:number){
+  const value=responseStatus??Number(error.status??error.statusCode);
+  const safeOperation=/^(?:gp_instant_[a-z_]{1,50}|storage-sign-upload|storage-sign-read|storage-sign-moderation|storage-download|status-limits|status-budgets)$/.test(operation)?operation:'database';
+  const sqlstate=typeof error.code==='string'&&/^(?:[A-Z0-9]{5}|PGRST[0-9]{3})$/.test(error.code)?error.code:null,message=typeof error.message==='string'?error.message:'';
+  const failureClass=/fetch failed|failed to fetch|network request failed/i.test(message)?'fetch-failed':/timeout|timed out|aborterror|signal is aborted/i.test(message)?'connection-timeout':['PGRST202','PGRST203','42883'].includes(sqlstate||'')||/could not find the function|no function matches|function .* does not exist/i.test(message)?'function-resolution':['42P01','42703','PGRST204','PGRST205'].includes(sqlstate||'')?'schema':'unknown';
+  return {event:safeOperation.startsWith('gp_instant_')?'cloud_rpc_error':'cloud_operation_error',operation:safeOperation,sqlstate,httpStatus:Number.isInteger(value)&&value>=0&&value<=599?value:null,failureClass};
+}
 export function cloudInstantConfigured(){return Boolean(process.env.SUPABASE_URL&&process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.GIFTPORTALS_CLOUD_ORIGIN&&process.env.CLOUD_DEDUPE_SECRET&&process.env.CRON_SECRET);}
 export function createCloudInstantRepository(deadline=Date.now()+165000):CloudInstantRepository {
   const client=()=>{ensure(process.env.SUPABASE_URL&&process.env.SUPABASE_SERVICE_ROLE_KEY,'CLOUD_NOT_CONFIGURED',503);return createClient(process.env.SUPABASE_URL!,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:(input,init)=>fetch(input,{...init,signal:AbortSignal.timeout(cloudRemaining(deadline,30000))})}});};
-  const unwrap=<T>(result:{data:T|null;error:{message?:string}|null}):T=>{if(result.error){const code=databaseCodes.find(code=>result.error!.message===code)||'DATABASE_REQUEST_FAILED';throw new AppError(code,code==='JOB_UNAVAILABLE'?404:code==='GENERATION_QUOTA'||code==='GENERATION_BUDGET'||code==='STORAGE_LIMIT'?429:409);}ensure(result.data!==null,'JOB_UNAVAILABLE',404);return result.data;};
-  const rpc=async(name:string,values:Record<string,unknown>)=>unwrap(await client().rpc(name,values));
+  const unwrap=<T>(result:{data:T|null;error:CloudDatabaseError|null;status?:number},operation='database'):T=>{if(result.error){const domain=databaseCodes.find(code=>result.error!.message===code),code=domain||'DATABASE_REQUEST_FAILED';if(!domain)console.error(JSON.stringify(cloudDatabaseFailureMetadata(result.error,operation,result.status)));throw new AppError(code,code==='JOB_UNAVAILABLE'?404:code==='GENERATION_QUOTA'||code==='GENERATION_BUDGET'||code==='STORAGE_LIMIT'?429:409);}ensure(result.data!==null,'JOB_UNAVAILABLE',404);return result.data;};
+  const rpc=async(name:string,values:Record<string,unknown>)=>unwrap(await client().rpc(name,values),name);
   return {
     prepare:v=>rpc('gp_instant_prepare',{p_id:v.id,p_token_hash:v.tokenHash,p_owner_hash:v.ownerHash,p_request_key_hash:v.requestKeyHash,p_input_hash:v.inputHash,p_document:v.document,p_storage_bytes:v.storageBytes}) as any,
     get:(id,tokenHash)=>rpc('gp_instant_get',{p_id:id,p_token_hash:tokenHash}) as any,
     lookup:(requestKeyHash,tokenHash)=>rpc('gp_instant_lookup',{p_request_key_hash:requestKeyHash,p_token_hash:tokenHash}) as any,
     finalize:(id,tokenHash,assets)=>rpc('gp_instant_finalize_uploads',{p_id:id,p_token_hash:tokenHash,p_assets:assets}) as any,
-    claim:async(workerId,id)=>{const result=await client().rpc('gp_instant_claim',{p_worker_id:workerId,p_lease_seconds:240,p_id:id||null});if(result.error)unwrap(result);return result.data as any;},
+    claim:async(workerId,id)=>{const result=await client().rpc('gp_instant_claim',{p_worker_id:workerId,p_lease_seconds:240,p_id:id||null});if(result.error)unwrap(result,'gp_instant_claim');return result.data as any;},
     begin:(job,stage)=>rpc('gp_instant_begin_submission',{p_id:job.id,p_lease_id:job.lease_id,p_revision:job.revision,p_stage:stage}) as any,
     update:(job,v)=>rpc('gp_instant_update',{p_id:job.id,p_lease_id:job.lease_id,p_revision:job.revision,p_state:v.state,p_document:v.document,p_stages:v.stages,p_assets:v.assets,p_release_lease:v.releaseLease!==false}) as any,
-    signUpload:async asset=>{ensure(bucketFor(asset)==='gp-instant-private','INSTANT_ASSET_INVALID');return unwrap(await client().storage.from(bucketFor(asset)).createSignedUploadUrl(asset.path,{upsert:false})).signedUrl;},
-    signRead:async asset=>unwrap(await client().storage.from(bucketFor(asset)).createSignedUrl(asset.path,3600)).signedUrl,
+    signUpload:async asset=>{ensure(bucketFor(asset)==='gp-instant-private','INSTANT_ASSET_INVALID');return unwrap(await client().storage.from(bucketFor(asset)).createSignedUploadUrl(asset.path,{upsert:false}),'storage-sign-upload').signedUrl;},
+    signRead:async asset=>unwrap(await client().storage.from(bucketFor(asset)).createSignedUrl(asset.path,3600),'storage-sign-read').signedUrl,
     signModerationRead:async image=>{
       const asset=image.source;ensure(asset&&['original','object','world'].includes(asset.id)&&asset.mime===image.mime&&asset.bytes===image.bytes.length&&asset.sha256===image.sha256&&hash(image.bytes)===image.sha256&&hasMagic(image.bytes,image.mime)&&image.bytes.length<=6*1024*1024,'IMAGE_CONTENT_INVALID');
       ensure(/^[a-f0-9-]{36}\/(?:input|moderation)\/[a-z0-9-]+\.(?:png|jpg|webp)$/.test(asset.path),'INSTANT_ASSET_INVALID');
@@ -33,16 +41,16 @@ export function createCloudInstantRepository(deadline=Date.now()+165000):CloudIn
         const stored=await storage.upload(asset.path,image.bytes,{contentType:image.mime,upsert:false,cacheControl:'0'});
         if(stored.error){const existing=await storage.download(asset.path);ensure(!existing.error&&existing.data,'CLOUD_STORAGE_FAILED',502);const prior=Buffer.from(await existing.data.arrayBuffer());ensure(prior.length===asset.bytes&&hash(prior)===asset.sha256,'INSTANT_ASSET_CONFLICT',409);}
       }else ensure(asset.path.includes('/input/'),'INSTANT_ASSET_INVALID');
-      return unwrap(await storage.createSignedUrl(asset.path,120)).signedUrl;
+      return unwrap(await storage.createSignedUrl(asset.path,120),'storage-sign-moderation').signedUrl;
     },
-    download:async asset=>{const blob=unwrap(await client().storage.from(bucketFor(asset)).download(asset.path));ensure(blob.size===asset.bytes&&blob.size<=25*1024*1024,'IMAGE_CONTENT_INVALID');return Buffer.from(await blob.arrayBuffer());},
+    download:async asset=>{const blob=unwrap(await client().storage.from(bucketFor(asset)).download(asset.path),'storage-download');ensure(blob.size===asset.bytes&&blob.size<=25*1024*1024,'IMAGE_CONTENT_INVALID');return Buffer.from(await blob.arrayBuffer());},
     upload:async(asset:CloudStoredAsset,bytes:Buffer)=>{
       ensure(bucketFor(asset)==='gp-instant-generated','INSTANT_ASSET_INVALID');const result=await client().storage.from(bucketFor(asset)).upload(asset.path,bytes,{contentType:asset.mime,upsert:false,cacheControl:'0'});
       if(result.error){const old=await client().storage.from(bucketFor(asset)).download(asset.path);if(old.error||!old.data)throw new AppError('CLOUD_STORAGE_FAILED',502);const prior=Buffer.from(await old.data.arrayBuffer());ensure(prior.length===asset.bytes&&hash(prior)===asset.sha256,'INSTANT_ASSET_CONFLICT',409);}
     },
     status:async()=>{
       const service=client();const [limits,budgets]=await Promise.all([service.from('gp_instant_limits').select('storage_reserved_bytes,storage_limit_bytes').single(),service.from('gp_instant_budgets').select('provider,credit_limit,reserved_credits,reservation_per_job')]);
-      const l=unwrap(limits),rows=unwrap(budgets);const budget=Object.fromEntries(rows.map(row=>[row.provider,{cap:row.credit_limit,committed:row.reserved_credits,remaining:Math.max(0,row.credit_limit-row.reserved_credits),nextReservation:row.reservation_per_job}]));
+      const l=unwrap(limits,'status-limits'),rows=unwrap(budgets,'status-budgets');const budget=Object.fromEntries(rows.map(row=>[row.provider,{cap:row.credit_limit,committed:row.reserved_credits,remaining:Math.max(0,row.credit_limit-row.reserved_credits),nextReservation:row.reservation_per_job}]));
       return {budget,canCreate:rows.length===2&&rows.every(row=>row.credit_limit>0&&row.credit_limit-row.reserved_credits>=row.reservation_per_job)&&l.storage_limit_bytes-l.storage_reserved_bytes>=118*1024*1024};
     },
   };
