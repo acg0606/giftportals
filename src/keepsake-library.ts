@@ -46,7 +46,7 @@ export function storedKeepsakeReferences(storage: KeepsakeStorage | undefined, s
   return values;
 }
 
-/** Save only a fully delivered creator gift, preserving its server retention deadline. */
+/** Save a delivered 3D keepsake, even when its world failed, preserving the server retention deadline. */
 export function rememberCreatedKeepsake(storage: KeepsakeStorage | undefined, scope: string, job: InstantJob, now = Date.now() / 1000): KeepsakeReference | undefined {
   if (!instantGiftReady(job)) return undefined;
   const reference = readInstantJobReference(JSON.stringify({ id: job.id, token: job.token }));

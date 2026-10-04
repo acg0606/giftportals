@@ -1,4 +1,4 @@
-import { instantGiftReady, type InstantJob } from './instant-creator-state';
+import { instantGiftReady, instantWorldReady, type InstantJob } from './instant-creator-state';
 import type { CollectionRoomItem } from './collection-types';
 export { instantJobStorageKey, instantPendingStorageKey } from './keepsake-library';
 
@@ -10,7 +10,8 @@ export function createdSessionKeepsake(job: InstantJob): CollectionRoomItem | un
   return {
     id: `session:${job.id}`, title: job.title, subtitle: 'Created by you · saved on this device', createdAt: job.createdAt,
     story: job.story || job.worldPrompt, imageUrl: job.objectRepresentation === 'framed-postcard' ? job.assets.photoUrl : job.assets.tripoInputUrl || job.assets.photoUrl, originalImageUrl: job.assets.photoUrl,
-    modelUrl: job.assets.modelUrl, mediaExpiresAt: job.mediaExpiresAt, openPath: path, worldPath: `${path}&view=world`,
+    modelUrl: job.assets.modelUrl, mediaExpiresAt: job.mediaExpiresAt, openPath: path,
+    ...(instantWorldReady(job) ? { worldPath: `${path}&view=world` } : {}),
     // The room looks along +Z; the keepsake viewer uses the native +X front.
     // This room-only default leaves the job and its viewer orientation intact.
     photoIntent: job.photoIntent, objectRepresentation: job.objectRepresentation, modelYaw: job.modelYaw ?? (job.objectRepresentation === 'souvenir-miniature' ? -Math.PI / 2 : undefined), kind: 'generated', demo: false,

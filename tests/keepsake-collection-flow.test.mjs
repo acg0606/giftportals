@@ -20,18 +20,19 @@ const source = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8'
 const parsed = ts.createSourceFile('main.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
 // Run the actual route/controller functions. Rendering/GPU and network are injected;
 // no user account, private file, browser or generation service is contacted.
-const names = ['errorMessage', 'rememberKeepsake', 'resetKeepsakeSession', 'currentKeepsakes', 'hydrateKeepsakes', 'keepsakeCard', 'instantCreatorPage', 'collectionPage', 'galleryList'];
+const names = ['errorMessage', 'rememberKeepsake', 'resetKeepsakeSession', 'currentKeepsakes', 'hydrateKeepsakes', 'keepsakeCard', 'instantCreatorPage', 'collectionPage', 'galleryList', 'readGeneratedGift'];
 const functions = parsed.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text)).map(node => node.getText(parsed)).join('\n')
   .replaceAll("import('./collection-room')", 'Promise.resolve(roomModule)').replaceAll("import('./collection-state')", 'Promise.resolve(stateModule)');
 const variables = parsed.statements.filter(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => ['esc', 'keepsakeScope', 'keepsakeStorage'].includes(declaration.name.getText(parsed)))).map(node => node.getText(parsed)).join('\n');
 const controller = `export function makeController(deps) {
- const {storage:localStorage,tabStorage:sessionStorage,app,roomModule,stateModule,readKeepsakeJob,mountInstantCreator,ensureWorld,createdSessionKeepsake,instantGiftReady,readInstantJobReference,clearKeepsakeScope,forgetKeepsakeReference,instantJobStorageKey,rememberCreatedKeepsake,storedKeepsakeReferences} = deps;
- const location = {hostname:'giftportals.vercel.app'}, icon = ()=>'→', miniArt = ()=>'<span>Gift</span>', header = ()=>'', footer = ()=>'', notice = ()=>'', memoryCard = ()=>'', scopedPath = path=>path, bindCommon = ()=>{}, toast = ()=>{}, render = ()=>{}, missing = message=>{throw Error(message)};
+ const {storage:localStorage,tabStorage:sessionStorage,app,roomModule,stateModule,readKeepsakeJob,mountInstantCreator,ensureWorld,createdSessionKeepsake,instantGiftReady,instantWorldReady,readInstantJobReference,clearKeepsakeScope,forgetKeepsakeReference,instantJobStorageKey,rememberCreatedKeepsake,storedKeepsakeReferences} = deps;
+ const location = {hostname:deps.hostname || 'giftportals.vercel.app'}, icon = ()=>'→', miniArt = ()=>'<span>Gift</span>', header = ()=>'', footer = ()=>'', notice = ()=>'', memoryCard = ()=>'', scopedPath = path=>path, bindCommon = ()=>{}, toast = ()=>{}, render = ()=>{}, missing = message=>{throw Error(message)};
  let actor = deps.actor || null, generation = 0, renderId = 1, cleanup;
  const session = ()=>actor, sessionGeneration = ()=>generation, demoScope = ()=>deps.demoScope || null, navigate = deps.navigate;
+ const routeParams = ()=>new URLSearchParams({key:deps.routeKey || 'a'.repeat(43)}), readGiftWorldSemantics = value=>value;
  const sessionKeepsakes = new Map(), keepsakeReadAt = new Map(); let activeKeepsakeScope = actor && !actor.user.demo ? 'owner:'+actor.user.id : 'anonymous'; const setTimeout = deps.setTimeout || globalThis.setTimeout, clearTimeout = deps.clearTimeout || globalThis.clearTimeout;
  ${variables}\n${functions}
- return {instantCreatorPage,collectionPage,galleryList,items:currentKeepsakes,clearMemory(){sessionKeepsakes.clear();keepsakeReadAt.clear()},switchAccount(next){actor=next;generation++;renderId++;resetKeepsakeSession()},destroy(){cleanup?.()}};
+ return {instantCreatorPage,collectionPage,galleryList,readGeneratedGift,items:currentKeepsakes,clearMemory(){sessionKeepsakes.clear();keepsakeReadAt.clear()},switchAccount(next){actor=next;generation++;renderId++;resetKeepsakeSession()},destroy(){cleanup?.()}};
 }`;
 const compiled = ts.transpileModule(controller, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const { makeController } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
@@ -44,7 +45,7 @@ function harness(extra = {}) {
   const app = { innerHTML:'', querySelector(selector){ if(selector==='#gallery-grid') return grid; if(selector.includes('input[type="search"]')) return inputs.search; if(selector.includes('input[type="month"]')) return inputs.month; if(selector==='.world-heading .eyebrow') return label; if(selector==='.service-note') return {remove(){}}; return {}; }, querySelectorAll(selector){ return selector==='[data-filter]' ? buttons : selector==='.gallery-filters input' ? Object.values(inputs) : []; } };
   const captures = {creator:null,room:null,navigation:[],reads:[]};
   const publicWorld = {user:{id:'demo',displayName:'Maya',demo:true},memories:[],sent:[],received:[],discoveries:[],jobs:[]};
-  const deps = { ...library, ...state, ...projection, storage,tabStorage,app, actor:extra.actor, demoScope:extra.demoScope, setTimeout:extra.setTimeout, clearTimeout:extra.clearTimeout,
+  const deps = { ...library, ...state, ...projection, storage,tabStorage,app, actor:extra.actor, demoScope:extra.demoScope, hostname:extra.hostname, routeKey:extra.routeKey, setTimeout:extra.setTimeout, clearTimeout:extra.clearTimeout,
     navigate:path=>captures.navigation.push(path), ensureWorld:async()=>publicWorld,
     readKeepsakeJob:extra.readKeepsakeJob || (async reference=>{ captures.reads.push(reference.id); return (extra.jobs || new Map([[gift().id,gift()],[gift('synthetic-gift-b').id,gift('synthetic-gift-b')]])).get(reference.id); }),
     mountInstantCreator(_host,options){captures.creator=options;return {destroy(){}}},
@@ -72,6 +73,34 @@ test('completion saves automatically before Open gift; desk and memories retain 
   reopened.inputs.search.value='caneco'; reopened.inputs.search.oninput(); assert.match(reopened.grid.innerHTML,/Caneco/);
   await reopened.buttons.find(button=>button.dataset.filter==='received').onclick(); assert.doesNotMatch(reopened.grid.innerHTML,/Caneco/);
   await reopened.buttons.find(button=>button.dataset.filter==='self').onclick(); assert.match(reopened.grid.innerHTML,/Caneco/);
+  first.controller.destroy(); reopened.controller.destroy();
+});
+
+test('a partial gift with a completed souvenir saves automatically, survives reload, and reopens read-only without a world', async () => {
+  const partial = gift('synthetic-partial', { state:'partial', title:'Kyoto souvenir', objectRepresentation:'souvenir-miniature',
+    worldlabs:{state:'failed',errorCode:'PROVIDER_FAILED'},
+    assets:{photoUrl:'/kyoto.jpg',tripoInputUrl:'/souvenir.png',modelUrl:'/souvenir.glb',worldUrl:'/stale.spz',panoramaUrl:'/stale.jpg',colliderUrl:'/stale.glb'},
+    generation:{worldlabs:{worldSemantics:{metricScaleFactor:100,groundPlaneOffset:5}}} });
+  const first=harness({jobs:new Map([[partial.id,partial]])}); first.controller.instantCreatorPage(1);
+  first.captures.creator.onGiftCompleted(partial);
+  assert.deepEqual(first.captures.navigation, [], 'Saving the delivered souvenir does not require opening it');
+  await first.controller.collectionPage(1);
+  assert.equal(first.captures.room.items[0].modelUrl, '/souvenir.glb'); assert.equal(first.captures.room.items[0].worldPath, undefined);
+  first.controller.instantCreatorPage(1); first.captures.creator.onGiftReady(partial);
+  assert.equal(first.captures.navigation[0], `generated/${partial.id}?key=${partial.token}`);
+  const requests=[];
+  const reopened=harness({storage:first.storage,tabStorage:first.tabStorage,hostname:'localhost',
+    readKeepsakeJob:(reference,signal,hostname)=>library.readKeepsakeJob(reference,signal,hostname,async(url,options)=>{
+      requests.push({url,options}); return new Response(JSON.stringify({ok:true,data:partial}),{headers:{'Content-Type':'application/json'}});
+    })});
+  await reopened.controller.collectionPage(1); await reopened.controller.galleryList(1);
+  assert.equal(reopened.captures.room.items.length,1); assert.equal(reopened.captures.room.items[0].worldPath, undefined);
+  assert.match(reopened.grid.innerHTML,/Kyoto souvenir/);
+  const restored=await reopened.controller.readGeneratedGift(partial.id,new AbortController().signal);
+  assert.equal(restored.modelUrl,'/souvenir.glb'); assert.equal(restored.keepsakeImageUrl,'/souvenir.png'); assert.equal(restored.originalUrl,'/kyoto.jpg'); assert.equal(restored.story,partial.story);
+  for(const key of ['worldUrl','panoramaUrl','collisionUrl','worldSemantics'])assert.equal(Object.hasOwn(restored,key),false, `${key} cannot appear for a failed world stage`);
+  assert.equal(requests.length,2, 'One collection hydration and one gift reopen read the persisted job');
+  for(const request of requests){assert.match(request.url,/^\/api\/instant\?action=snapshot&id=/);assert.equal(request.options.method,'GET');assert.equal(request.options.headers['X-Instant-Token'],partial.token)}
   first.controller.destroy(); reopened.controller.destroy();
 });
 

@@ -26,8 +26,8 @@ import { mountMemoryTrail } from './trail';
 import { mountRioSouvenir } from './rio-souvenir';
 import { mountRioCreator } from './rio-creator';
 import { decodeRioCreatorDraft, newRioCreatorDraft, type RioCreatorDraft } from './rio-creator-state';
-import { mountInstantCreator, instantCreatorService, type InstantJob } from './instant-creator';
-import { instantGiftReady, readInstantJobReference } from './instant-creator-state';
+import { mountInstantCreator, type InstantJob } from './instant-creator';
+import { instantGiftReady, instantWorldReady, readInstantJobReference } from './instant-creator-state';
 import { mountGeneratedGift, type GeneratedGiftData } from './generated-gift';
 import { giftIcon } from './gift-icon';
 import { createGiftWalkScenes, readGiftWorldSemantics } from './gift-walk-catalog';
@@ -272,16 +272,17 @@ async function readGeneratedGift(id: string, signal: AbortSignal): Promise<Gener
     if (!response.ok) throw new Error('This example could not open. Return to your collection and try again.');
     return await response.json() as GeneratedGiftData;
   }
-  const job = await instantCreatorService.job({ id, token: routeParams().get('key') || '' }, signal);
+  const job = await readKeepsakeJob({ id, token: routeParams().get('key') || '' }, signal, location.hostname);
   if (!instantGiftReady(job)) throw new Error('Your gift is still taking shape. Reopen the creator to check its progress.');
+  const worldReady = instantWorldReady(job);
   return {
     title: job.title, senderName: job.senderName, recipientName: job.recipientName,
     dedication: job.dedication, story: job.story || job.worldPrompt, curiosities: job.curiosities,
     originalUrl: job.assets.photoUrl, modelUrl: job.assets.modelUrl, mediaExpiresAt: job.mediaExpiresAt,
-    worldUrl: job.assets.worldUrl, panoramaUrl: job.assets.panoramaUrl,
-    collisionUrl: job.assets.colliderUrl, photoIntent: job.photoIntent, objectRepresentation: job.objectRepresentation, modelYaw: job.modelYaw,
+    ...(worldReady ? { worldUrl: job.assets.worldUrl, panoramaUrl: job.assets.panoramaUrl, collisionUrl: job.assets.colliderUrl,
+      worldSemantics: readGiftWorldSemantics(job.generation?.worldlabs?.worldSemantics) } : {}),
+    photoIntent: job.photoIntent, objectRepresentation: job.objectRepresentation, modelYaw: job.modelYaw,
     keepsakeImageUrl: job.assets.tripoInputUrl,
-    worldSemantics: readGiftWorldSemantics(job.generation?.worldlabs?.worldSemantics),
   };
 }
 function generatedGiftPath(id: string) {
@@ -306,7 +307,7 @@ async function generatedWalkPage(id: string, epoch: number) {
 }
 async function generatedGiftPage(id: string, epoch: number) {
   const abort = new AbortController(); cleanup = () => abort.abort();
-  app.innerHTML = '<main class="generated-loading" role="status">Opening your little world…</main>';
+  app.innerHTML = '<main class="generated-loading" role="status">Opening your keepsake…</main>';
   try {
     const gift = await readGeneratedGift(id, abort.signal);
     if (epoch !== renderId || abort.signal.aborted) return;
@@ -315,7 +316,7 @@ async function generatedGiftPage(id: string, epoch: number) {
     app.innerHTML = '<main id="generated-gift-root"></main>';
     const journeyPath = generatedGiftPath(id).replace(/^generated\//, 'walk/');
     const viewer = mountGeneratedGift(app.querySelector<HTMLElement>('#generated-gift-root')!, {
-      gift, shareScope: ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'local' : 'cloud', initialView: routeParams().get('view') === 'world' ? 'world' : 'object',
+      gift, shareScope: ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'local' : 'cloud', initialView: routeParams().get('view') === 'world' && gift.worldUrl ? 'world' : 'object',
       isCurrent: () => epoch === renderId, onExit: () => navigate('collection'),
       onCollection: () => navigate('collection'),
       ...(walking ? { onJourney: () => navigate(journeyPath), journeyLabel: 'Walk inside' } : {}),

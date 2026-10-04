@@ -27,7 +27,7 @@ async function fixture(action,settings={}){
  const names=['document','window','navigator','location','isSecureContext','fetch',...(settings.fakeTimers?['setTimeout','clearTimeout']:[])],previous=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
  const state={current:true,runtimeLoads:0,gpus:0,fetches:0,requests:0,started:0,exits:0,models:[],renderers:[],sessions:[],worlds:[],worldFetches:[],worldLoads:[]};
  class Element extends EventTarget{isConnected=true;disabled=false;hidden=false;textContent='';clientWidth=360;clientHeight=240;children=[];setAttribute(){}append(value){this.children.push(value);}remove(){this.isConnected=false;}click(){if(!this.disabled)this.dispatchEvent(new Event('click'));}}
- class Panel extends Element{elements=new Map();set innerHTML(html){for(const[,name,attrs]of html.matchAll(/<\w+\b[^>]*?(data-kx-[\w-]+)([^>]*)>/g)){const item=new Element();item.hidden=attrs.includes('hidden');item.disabled=attrs.includes('disabled');this.elements.set('['+name+']',item);}}querySelector(selector){return this.elements.get(selector);}}
+ class Panel extends Element{elements=new Map();get innerHTML(){return this.html||'';}set innerHTML(html){this.html=html;for(const[,name,attrs]of html.matchAll(/<\w+\b[^>]*?(data-kx-[\w-]+)([^>]*)>/g)){const item=new Element();item.hidden=attrs.includes('hidden');item.disabled=attrs.includes('disabled');this.elements.set('['+name+']',item);}}querySelector(selector){return this.elements.get(selector);}}
  class Session extends EventTarget{visibilityState='visible';ended=0;async end(){this.ended++;this.dispatchEvent(new Event('end'));}async requestReferenceSpace(type){if(settings.noFloor&&type==='local-floor')throw new Error('no floor');return{};}}
  state.newSession=()=>{const session=new Session();state.sessions.push(session);return session;};
  const host=new Element(),document={createElement:()=>state.panel=new Panel()},window=new EventTarget();
@@ -51,6 +51,15 @@ async function fixture(action,settings={}){
 test('unsupported and insecure browsers allocate no GPU, fetch, runtime or XR permission request',async()=>{
  for(const settings of[{supported:false},{noXR:true},{insecure:true}])await fixture(async state=>{assert.equal(state.element('enter').disabled,true);assert.match(state.element('status').textContent,/ordinary 3D gift/);assert.equal(state.requests+state.gpus+state.fetches+state.runtimeLoads,0);assert.equal(state.started+state.exits,0);},settings);
 });
+test('a keepsake without a world offers only its real souvenir in VR and never promises or loads a World Labs memory',async()=>fixture(async state=>{
+ assert.match(state.panel.innerHTML,/Hold your keepsake in VR/);assert.match(state.panel.innerHTML,/A world is unavailable for this gift/);
+ assert.doesNotMatch(state.panel.innerHTML,/second opens its World Labs|Real Tripo and World Labs assets/);
+ assert.equal(state.element('portal').hidden,true);state.element('enter').click();await flush();await flush();
+ assert.equal(state.models.length,1);assert.equal(state.worldFetches.length,0);assert.equal(state.worldLoads.length,0);assert.equal(state.element('portal').hidden,true);
+ const renderer=state.renderers[0];renderer.controllers[1].dispatchEvent({type:'select'});state.element('portal').click();await flush();
+ assert.equal(state.worldFetches.length,0);assert.equal(state.worldLoads.length,0);assert.equal(state.requests,1);
+ state.element('exit').click();assert.equal(state.exits,1);assert.equal(renderer.disposed,1);
+}));
 test('accepted explicit click loads and displays the actual GLB, controller ray turns only a hit, XR hide pauses draws, cleanup once',async()=>fixture(async state=>{
  assert.equal(state.requests,0);state.element('enter').click();state.element('enter').click();await flush();await flush();assert.equal(state.requests,1);assert.equal(state.gpus,1);assert.equal(state.fetches,1);assert.equal(state.started,1);assert.equal(state.models.length,1);assert.match(state.element('status').textContent,/Look around/);
  const renderer=state.renderers[0];renderer.loop();const scene=renderer.lastScene,room=scene.children.find(value=>value instanceof THREE.Group),gift=room.children.find(value=>value instanceof THREE.Group);assert.ok(gift);assert.equal(new THREE.Box3().setFromObject(gift).getSize(new THREE.Vector3()).y.toFixed(2),'0.42');

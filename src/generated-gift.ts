@@ -94,7 +94,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   const gift = options.gift, instance = ++sequence, points = storyPoints(gift), curiosities = giftCuriosities(gift);
   const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const dialog = document.createElement('dialog'); dialog.className = 'generated-gift'; dialog.setAttribute('aria-labelledby', `generated-gift-title-${instance}`);
-  let dead = false, version = 0, phase: Phase = options.initialView === 'world' ? 'world' : 'object', viewer: ObjectHandle | GeneratedWorldHandle | undefined;
+  let dead = false, version = 0, phase: Phase = options.initialView === 'world' && hasWorld() ? 'world' : 'object', viewer: ObjectHandle | GeneratedWorldHandle | undefined;
   let selected: string | undefined, hovered: string | undefined, projectedPoints: ProjectedWorldPoint[] = [];
   let pendingFocus: string | undefined;
   let tour: GeneratedWorldTourState | undefined;
@@ -114,8 +114,10 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   const events = new AbortController(); let viewEvents = new AbortController();
   let scrolling: Array<{ style: CSSStyleDeclaration; value: string; priority: string }> | undefined;
   const active = () => !dead && options.isCurrent() && host.isConnected && dialog.isConnected && dialog.open && host.contains(dialog);
-  const expired = () => typeof gift.mediaExpiresAt === 'number' && gift.mediaExpiresAt > 0 && gift.mediaExpiresAt <= Date.now() / 1000;
+  function expired() { return typeof gift.mediaExpiresAt === 'number' && gift.mediaExpiresAt > 0 && gift.mediaExpiresAt <= Date.now() / 1000; }
   function mediaUrl(value?: string) { if (!value || expired()) return ''; try { return viewerAssetUrl(value, location.origin).href; } catch { return ''; } }
+  function hasWorld() { return Boolean(mediaUrl(gift.worldUrl)); }
+  function canEnterWorld() { return hasWorld() || Boolean(options.onJourney && !expired()); }
   function destroyXR() { xrEpoch++; xrPending = false; xrOwnsViewer = false; const panel = xrPanel; xrPanel = undefined; panel?.destroy(); }
   function restoreObjectViewer() {
     if (!active() || phase !== 'object') return;
@@ -194,7 +196,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
     if (!active()) return;
     const world = phase === 'world', poster = mediaUrl(world ? gift.panoramaUrl || gift.originalUrl : gift.keepsakeImageUrl || gift.originalUrl), original = mediaUrl(gift.originalUrl), keepsake = mediaUrl(gift.keepsakeImageUrl || gift.originalUrl);
     dialog.classList.toggle('is-world', world);
-    const modebar = `<nav class="gg-modebar" aria-label="Gift views"><button type="button" data-gg-mode="object" aria-pressed="${!world}">${icon('gift')}<span>Keepsake</span></button><button type="button" data-gg-mode="world" aria-pressed="${world}">${icon('globe')}<span>World</span></button>${world ? `<button type="button" data-gg-show-story aria-expanded="false">${icon('book')}<span>Stories</span></button><button type="button" data-gg-tour-start aria-pressed="false" disabled>${icon('tour')}<span data-gg-tour-start-label>Guided tour</span></button>` : ''}</nav>`;
+    const modebar = `<nav class="gg-modebar" aria-label="Gift views"><button type="button" data-gg-mode="object" aria-pressed="${!world}">${icon('gift')}<span>Keepsake</span></button><button type="button" data-gg-mode="world" aria-pressed="${world}" ${canEnterWorld() ? '' : 'disabled aria-disabled="true"'}>${icon('globe')}<span>${canEnterWorld() ? 'World' : 'World unavailable'}</span></button>${world ? `<button type="button" data-gg-show-story aria-expanded="false">${icon('book')}<span>Stories</span></button><button type="button" data-gg-tour-start aria-pressed="false" disabled>${icon('tour')}<span data-gg-tour-start-label>Guided tour</span></button>` : ''}</nav>`;
     const controls = world
       ? `${iconButton('left', 'lookLeft', 'Look left')}${iconButton('right', 'lookRight', 'Look right')}<span class="gg-control-divider"></span>${iconButton('forward', 'forward', 'Move closer', 'data-gg-offset')}${iconButton('backward', 'backward', 'Move back', 'data-gg-offset')}${iconButton('walk', 'walk', 'Walk in this world', 'data-gg-walk disabled aria-pressed="false"')}<div class="gg-walk-controls" data-gg-walk-controls hidden>${iconButton('move-left', 'left', 'Walk left')}${iconButton('move-forward', 'forward', 'Walk forward')}${iconButton('move-right', 'right', 'Walk right')}${iconButton('move-back', 'backward', 'Walk backward')}</div>`
       : `${iconButton('left', 'rotateLeft', 'Rotate keepsake left')}${iconButton('right', 'rotateRight', 'Rotate keepsake right')}<span class="gg-control-divider"></span>${iconButton('in', 'plus', 'Zoom in')}${iconButton('out', 'minus', 'Zoom out')}`;
@@ -212,7 +214,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
         <div class="gg-loading" role="status" data-gg-status>${world ? 'Opening the world inside…' : 'Opening your 3D keepsake…'}</div>
         ${tourPanel}
         ${world ? `<aside class="gg-story" data-gg-story data-gg-obstacle hidden aria-labelledby="gg-point-title-${instance}">${chapters}<div data-gg-point-reader></div></aside><div class="gg-tour-reader" data-gg-tour-reader data-gg-obstacle hidden></div>` : ''}
-      </div>${world ? '' : `<section class="gg-copy"><span class="gg-kicker">${gift.recipientName ? `FOR ${escape(gift.recipientName)}` : 'A LITTLE WORLD FOR YOU'}</span><h1 id="generated-gift-title-${instance}" tabindex="-1">${escape(gift.title)}</h1><p class="gg-dedication">${escape(gift.dedication || 'A photo. A place. A moment to return to.')}</p>${gift.senderName ? `<span class="gg-signature">From ${escape(gift.senderName)}</span>` : ''}${options.onJourney ? `<button class="gg-primary" type="button" data-gg-journey>${icon('walk')}<span>${escape(options.journeyLabel || 'Walk inside')}</span>${icon('arrow')}</button>` : `<button class="gg-primary" type="button" data-gg-enter>${icon('globe')}<span>Step inside</span>${icon('arrow')}</button>`}${mediaUrl(gift.modelUrl) ? `<div class="gg-keepsake-actions"><button class="gg-print-link gg-quiet" type="button" data-gg-print>${icon('printer')}<span>Print a keepsake</span></button><button class="gg-print-link gg-quiet" type="button" data-gg-xr>${icon('headset')}<span>View in VR</span></button></div><div class="gg-xr-holder" data-gg-xr-host hidden><button class="gg-quiet gg-xr-close" type="button" data-gg-xr-close>${icon('close')}<span>Close VR panel</span></button></div>` : ''}<details class="gg-original-story"><summary>${icon('book')}Read the story</summary><p>${escape(gift.story || 'No story text is attached to this gift.')}</p></details>${contextCards}</section>`}</div>
+      </div>${world ? '' : `<section class="gg-copy"><span class="gg-kicker">${gift.recipientName ? `FOR ${escape(gift.recipientName)}` : canEnterWorld() ? 'A LITTLE WORLD FOR YOU' : 'A KEEPSAKE FOR YOU'}</span><h1 id="generated-gift-title-${instance}" tabindex="-1">${escape(gift.title)}</h1><p class="gg-dedication">${escape(gift.dedication || 'A photo. A place. A moment to return to.')}</p>${gift.senderName ? `<span class="gg-signature">From ${escape(gift.senderName)}</span>` : ''}${canEnterWorld() ? options.onJourney ? `<button class="gg-primary" type="button" data-gg-journey>${icon('walk')}<span>${escape(options.journeyLabel || 'Walk inside')}</span>${icon('arrow')}</button>` : `<button class="gg-primary" type="button" data-gg-enter>${icon('globe')}<span>Step inside</span>${icon('arrow')}</button>` : '<p class="gg-world-unavailable" data-gg-world-unavailable>The world is unavailable. Your keepsake and story are here.</p>'}${mediaUrl(gift.modelUrl) ? `<div class="gg-keepsake-actions"><button class="gg-print-link gg-quiet" type="button" data-gg-print>${icon('printer')}<span>Print a keepsake</span></button><button class="gg-print-link gg-quiet" type="button" data-gg-xr>${icon('headset')}<span>View in VR</span></button></div><div class="gg-xr-holder" data-gg-xr-host hidden><button class="gg-quiet gg-xr-close" type="button" data-gg-xr-close>${icon('close')}<span>Close VR panel</span></button></div>` : ''}<details class="gg-original-story"><summary>${icon('book')}Read the story</summary><p>${escape(gift.story || 'No story text is attached to this gift.')}</p></details>${contextCards}</section>`}</div>
       <footer class="gg-footer"><div class="gg-toolbar">${modebar}<div class="gg-controls" data-gg-controls hidden>${controls}${iconButton('reset', 'reset', world ? 'Return to the starting view' : 'Reset keepsake view')}</div></div><p class="gg-caption" data-gg-caption>${world ? 'World Labs artistic scene · preparing 3D' : 'Tripo keepsake · preparing 3D'}</p>${options.onShare ? `<small class="gg-local-note">${options.shareScope === 'cloud' ? gift.mediaExpiresAt ? 'Private gift link · original photos and generated gifts expire after 7 days.' : 'Gift link · opens this keepsake online.' : 'Local preview link · available while this preview is running.'}</small>` : ''}</footer>
     </div>`;
     if (world) {
@@ -278,7 +280,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
       if (restore && phase === 'object') restoreObjectViewer();
     });
     listen('[data-gg-collection]', () => { if (active() && options.onCollection) { destroy(); options.onCollection(); } });
-    const switchView = (next: Phase) => { if (!active() || next === phase) return; if (next === 'world' && options.onJourney) { destroy(); options.onJourney(); return; } phase = next; selected = undefined; render(); dialog.querySelector<HTMLElement>(next === 'world' ? '[data-gg-mode="world"]' : '[data-gg-enter]')?.focus({ preventScroll: true }); };
+    const switchView = (next: Phase) => { if (!active() || next === phase || next === 'world' && !canEnterWorld()) return; if (next === 'world' && options.onJourney) { destroy(); options.onJourney(); return; } phase = next; selected = undefined; render(); dialog.querySelector<HTMLElement>(next === 'world' ? '[data-gg-mode="world"]' : '[data-gg-enter]')?.focus({ preventScroll: true }); };
     listen('[data-gg-enter]', () => switchView('world'));
     listen('[data-gg-journey]', () => { if (active() && options.onJourney) { destroy(); options.onJourney(); } });
     listen('[data-gg-return]', () => switchView('object'));
@@ -401,7 +403,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   try {
     dialog.showModal(); scrolling = [document.documentElement.style, document.body.style].map(style => ({ style, value: style.getPropertyValue('overflow'), priority: style.getPropertyPriority('overflow') }));
     for (const saved of scrolling) saved.style.setProperty('overflow', 'hidden');
-    render(); dialog.querySelector<HTMLElement>(phase === 'world' ? '[data-gg-mode="world"]' : '[data-gg-enter]')?.focus({ preventScroll: true });
+    render(); (dialog.querySelector<HTMLElement>(phase === 'world' ? '[data-gg-mode="world"]' : '[data-gg-enter],[data-gg-journey]') || dialog.querySelector<HTMLElement>(`[id="generated-gift-title-${instance}"]`))?.focus({ preventScroll: true });
   } catch { destroy(); if (options.isCurrent()) options.onExit(); }
   return { destroy };
 }

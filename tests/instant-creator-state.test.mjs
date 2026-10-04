@@ -7,25 +7,35 @@ const compilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.
 const catalog = ts.transpileModule(await readFile(new URL('../shared/instant-examples.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText;
 const catalogUrl = `data:text/javascript;base64,${Buffer.from(catalog).toString('base64')}`;
 const compiled = ts.transpileModule(await readFile(new URL('../src/instant-creator-state.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText.replaceAll("'../shared/instant-examples'", JSON.stringify(catalogUrl));
-const { validateInstantPhoto, instantFailureMessage, instantGiftReady, instantJobFinished, instantModelReady, instantProviderLabel, readInstantJobReference, readInstantPendingReference, instantImagePlan, instantIntentExamples, instantPostcardLayout, addInstantSpark, INSTANT_EXAMPLES } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { validateInstantPhoto, instantFailureMessage, instantGiftReady, instantJobFinished, instantModelReady, instantProviderLabel, instantWorldReady, readInstantJobReference, readInstantPendingReference, instantImagePlan, instantIntentExamples, instantPostcardLayout, addInstantSpark, INSTANT_EXAMPLES } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const complete = { state: 'completed', tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb', worldUrl: '/place.spz' } };
 
-test('a photo and a panorama cannot substitute for either real provider output', () => {
+test('a usable gift requires a terminal creation and a real completed keepsake; a photo or world cannot substitute for its model', () => {
   assert.equal(instantGiftReady(complete), true);
   for (const job of [
     { ...complete, state: 'processing' },
     { ...complete, tripo: { state: 'processing' } },
-    { ...complete, worldlabs: { state: 'failed' } },
+    { ...complete, state: 'failed' },
     { ...complete, assets: { ...complete.assets, modelUrl: undefined } },
-    { ...complete, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb', panoramaUrl: '/panorama.png' } },
+    { ...complete, assets: { photoUrl: '/photo.png', worldUrl: '/place.spz', panoramaUrl: '/panorama.png' } },
   ]) assert.equal(instantGiftReady(job), false);
 });
 
-test('partial and failed jobs stop polling without becoming complete gifts', () => {
+test('a partial keepsake stays usable when the world fails, without making a failed or missing world ready', () => {
+  const partial = { ...complete, state: 'partial', worldlabs: { state: 'failed', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb' } };
+  assert.equal(instantGiftReady(partial), true);assert.equal(instantModelReady(partial), true);assert.equal(instantWorldReady(partial), false);
+  assert.equal(instantWorldReady({ ...partial, assets: { ...partial.assets, worldUrl: '/stale-world.spz' } }), false, 'Failed-world stale URLs do not make a world available');
+  assert.equal(instantGiftReady({ ...partial, tripo: { state: 'failed' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo.png', worldUrl: '/place.spz' } }), false);
+  assert.equal(instantGiftReady({ ...partial, assets: { photoUrl: '/photo.png', panoramaUrl: '/panorama.png' } }), false);
+  assert.equal(instantWorldReady({ ...complete, assets: { modelUrl: '/gift.glb' } }), false);
+  assert.equal(instantGiftReady({ ...complete, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb' } }), true, 'A delivered souvenir remains usable without a world asset');
+});
+
+test('partial and failed jobs stop polling; only a partial with a delivered keepsake can open', () => {
   for (const state of ['partial', 'failed']) {
     const job = { ...complete, state };
     assert.equal(instantJobFinished(job), true);
-    assert.equal(instantGiftReady(job), false);
+    assert.equal(instantGiftReady(job), state === 'partial');
   }
   assert.equal(instantJobFinished({ ...complete, state: 'processing' }), false);
   assert.match(instantProviderLabel('worldlabs', 'failed'), /could not/);

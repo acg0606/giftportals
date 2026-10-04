@@ -267,6 +267,25 @@ test('per-gift GLB controls lead to real per-gift SPZ, projected story points, a
   });
 });
 
+test('a souvenir without a delivered world opens its real model and story while World stays unavailable, including a legacy world link', async () => {
+  for (const initialView of ['object', 'world']) await fixture(async state => {
+    assert.equal(state.dialog().classList.contains('is-world'), false);assert.equal(state.imports.world.length, 0);
+    assert.equal(state.element('enter'), null);assert.equal(state.element('journey'), null);
+    const world = state.selector('[data-gg-mode="world"]');assert.equal(world.disabled, true);assert.equal(world.getAttribute('aria-disabled'), 'true');
+    assert.match(state.dialog().innerHTML, /World unavailable/);assert.match(state.dialog().innerHTML, /The world is unavailable/);
+    assert.match(state.dialog().innerHTML, /Read the story/);assert.match(state.dialog().innerHTML, /We watched the last ferry cross the bay/);
+    const poster = state.selector('[data-gg-poster] img');assert.equal(poster.getAttribute('src'), 'http://127.0.0.1:4323/synthetic/miniature.png');
+    assert.notEqual(poster.getAttribute('src'), state.gift.panoramaUrl, 'A panorama cannot substitute for a failed world');
+    await state.resolve('object');const object = state.viewers[0];object.callbacks.onReady();
+    assert.equal(object.source, 'http://127.0.0.1:4323/synthetic/gift.glb');
+    state.selector('[data-gg-control="left"]').click();assert.deepEqual(state.actions.at(-1), ['rotate', 'object', .2]);
+    world.click();assert.equal(state.imports.world.length, 0);assert.equal(object.destroyed, false);assert.equal(state.dialog().classList.contains('is-world'), false);
+    assert.ok(state.element('print'));state.element('xr').click();await state.resolve('xr');
+    assert.equal(state.xrPanels[0].options.worldUrl, '');assert.equal(state.xrPanels[0].options.modelUrl, object.source);
+    assert.equal(state.imports.world.length, 0);assert.equal(state.events.includes('mount:world'), false);
+  }, { initialView, gift: { worldUrl: undefined, keepsakeImageUrl: '/synthetic/miniature.png', panoramaUrl: '/synthetic/leftover-panorama.png' } });
+});
+
 test('switching before object import resolves ignores the obsolete import and late callbacks', async () => {
   await fixture(async state => {
     state.element('enter').click(); await state.resolve('world'); await state.resolve('object');
@@ -296,7 +315,8 @@ test('synchronous renderer initialization failure disposes the returned handle a
 test('expired assets never mount and close-to-refresh exits without fabricating refreshed access', async () => {
   await fixture(async state => {
     assert.equal(state.imports.object.length, 0); assert.match(state.element('status').innerHTML, /Media access has expired/);
-    state.element('enter').click(); assert.equal(state.imports.world.length, 0); state.element('show-story').click(); assert.equal(state.element('point-text').textContent, state.gift.dedication);
+    assert.equal(state.element('enter'), null);assert.equal(state.selector('[data-gg-mode="world"]').disabled, true);
+    state.selector('[data-gg-mode="world"]').click();assert.equal(state.imports.world.length, 0);assert.match(state.dialog().innerHTML, /Read the story/);assert.match(state.dialog().innerHTML, /We watched the last ferry/);
     state.element('retry').click(); assert.equal(state.exitCount(), 1); assert.equal(state.host.children.length, 0);
   }, { gift: { mediaExpiresAt: 1 } });
 });
@@ -304,7 +324,8 @@ test('expired assets never mount and close-to-refresh exits without fabricating 
 test('unsafe asset URLs remain image-and-story fallback with no viewer imports', async () => {
   await fixture(async state => {
     assert.equal(state.imports.object.length, 0); assert.equal(state.selector('[data-gg-poster] img'), null);
-    state.element('enter').click(); assert.equal(state.imports.world.length, 0); assert.match(state.element('caption').textContent, /spatial 3D unavailable/);
+    assert.equal(state.element('enter'), null);assert.equal(state.selector('[data-gg-mode="world"]').disabled, true);state.selector('[data-gg-mode="world"]').click();
+    assert.equal(state.imports.world.length, 0); assert.match(state.element('caption').textContent, /3D object unavailable/);
   }, { gift: { modelUrl: 'javascript:alert(1)', worldUrl: 'http://other-origin.invalid/scene.spz', originalUrl: 'https://user:password@invalid.test/a.png', panoramaUrl: 'data:image/png;base64,invalid' } });
 });
 

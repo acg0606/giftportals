@@ -68,6 +68,7 @@ async function fixture(action, settings = {}) {
     addEventListener(type, cb, options) { if (options?.signal) setMaxListeners(0, options.signal); super.addEventListener(type, cb, options); }
     append(...children) { for (const child of children) { child.parent = this; this.children.push(child); } }
     replaceChildren(...children) { this.children = []; this.append(...children); }
+    get innerHTML() { return this.html || ''; }
     set innerHTML(html) {
       this.html = html; this.children = []; const stack = [this], voidTags = new Set(['img', 'input', 'br']);
       for (const token of html.matchAll(/<\/?[A-Za-z][^>]*>/g)) {
@@ -253,6 +254,42 @@ test('a completed polled gift registers once per id while repeated replies never
   }, {
     storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
     jobHandler: (_reference, state) => state.jobs.length === 1 ? { ...state.job, ...reference, state: 'processing', assets: { photoUrl: '/photo' }, tripo: { state: 'processing' }, worldlabs: { state: 'processing' } } : { ...state.job, ...reference },
+  });
+});
+
+test('a delivered partial souvenir registers once and opens while its failed world stays unavailable with no resubmission', async () => {
+  const reference = { id: 'partial-souvenir', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.equal(state.completed.length, 0);assert.equal(state.scheduled.length, 1);
+    const scheduled = state.scheduled[0];scheduled.callback();await flush();
+    assert.equal(state.completed.length, 1);assert.equal(state.completed[0].id, reference.id);assert.equal(state.completed[0].state, 'partial');
+    assert.equal(state.scheduled.length, 1, 'Terminal partial jobs do not schedule another provider poll');
+    assert.equal(state.find('[data-instant-open]').hidden, false);assert.match(state.find('[data-instant-open]').innerHTML, /Open your keepsake/);
+    assert.equal(state.find('#instant-progress-heading').textContent, 'Your keepsake is ready.');
+    assert.equal(state.find('[data-instant-edit]').hidden, false);assert.equal(state.find('[data-instant-recheck]').hidden, true);
+    assert.match(state.find('[data-instant-job-status]').textContent, /3D keepsake is ready.*world is unavailable/);
+    assert.doesNotMatch(state.find('[data-instant-job-status]').textContent, /story has a world|still being created/);
+    assert.doesNotMatch(state.find('[data-instant-job-note]').textContent, /step into/);
+    assert.equal(state.find('[data-instant-provider="tripo"]').dataset.state, 'completed');assert.equal(state.find('[data-instant-provider="worldlabs"]').dataset.state, 'failed');
+    assert.match(state.find('[data-instant-worldlabs-label]').textContent, /could not be built/);
+    scheduled.callback();await flush();assert.equal(state.completed.length, 1, 'Repeated replies never duplicate the saved keepsake');
+    state.find('[data-instant-open]').click();assert.equal(state.opened.length, 1);assert.equal(state.opened[0].assets.modelUrl, '/model');assert.equal(state.opened[0].assets.worldUrl, undefined);
+    assert.equal(state.creates.length, 0);assert.equal(state.opened[0].worldlabs.errorCode, 'PROVIDER_GENERATION_FAILED');
+  }, {
+    storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
+    jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: state.jobs.length === 1 ? 'processing' : 'partial', tripo: { state: 'completed' }, worldlabs: { state: state.jobs.length === 1 ? 'processing' : 'failed', errorCode: state.jobs.length === 1 ? undefined : 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
+  });
+});
+
+test('reopening a partial souvenir restores its usable keepsake without generating or claiming a world', async () => {
+  const reference = { id: 'restored-partial-souvenir', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.equal(state.completed.length, 1);assert.equal(state.find('[data-instant-open]').hidden, false);assert.deepEqual(state.scheduled, []);
+    state.find('[data-instant-open]').click();assert.equal(state.opened[0].id, reference.id);assert.equal(state.creates.length, 0);
+    assert.match(state.find('[data-instant-job-status]').textContent, /world is unavailable/);
+  }, {
+    storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
+    jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: 'partial', tripo: { state: 'completed' }, worldlabs: { state: 'failed', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
   });
 });
 

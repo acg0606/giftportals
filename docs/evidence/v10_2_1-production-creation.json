@@ -1,0 +1,58 @@
+{
+  "checkedAt": "2026-10-04T18:34:38.283Z",
+  "label": "PRODUCTION — public synthetic photo; real provider tasks",
+  "releaseSource": "5005419af146f42089c7b72de873f6cc3bc5456a",
+  "deployment": "dpl_F5fXNWHfbt91WptCqR6wehpmQpc7",
+  "state": "partial",
+  "assets": [
+    {
+      "kind": "model",
+      "mime": "model/gltf-binary",
+      "bytes": 15566644,
+      "sha256": "684aba3696041a73fc17d9f36aef1913a064185ab49335548ad332fe7ad1a342"
+    },
+    {
+      "kind": "original",
+      "mime": "image/jpeg",
+      "bytes": 406899,
+      "sha256": "68b28842b4aea9affbb24eca1c478962584dc1608835442b450990afab113b62"
+    },
+    {
+      "kind": "reference",
+      "mime": "image/png",
+      "bytes": 1938039,
+      "sha256": "cd9628f4d1d8e7da420a3f2388ff1c70e43b0430857704dac88de1ff1411b658"
+    }
+  ],
+  "stageMetadata": {
+    "tripo": {
+      "state": "completed",
+      "progress": 100,
+      "errorCode": null,
+      "taskRecorded": true
+    },
+    "worldlabs": {
+      "state": "failed",
+      "progress": 0,
+      "errorCode": "PROVIDER_GENERATION_FAILED",
+      "taskRecorded": true
+    },
+    "tripo-reference": {
+      "state": "completed",
+      "progress": 100,
+      "errorCode": null,
+      "taskRecorded": true
+    }
+  },
+  "originalModeration": "allow",
+  "referenceModeration": "allow",
+  "sameBrowserCreatedJobsToday": 2,
+  "browserVerification": {
+    "registrationAfterPartialPatch": "pending",
+    "reloadRestore": "pending",
+    "keepsakeOpen": "pending",
+    "webglRendering": "not verified; cloud browser reports GL_VENDOR and GL_RENDERER Disabled"
+  },
+  "billingChanges": false,
+  "privateIdsOrCapabilitiesIncluded": false
+}

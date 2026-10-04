@@ -98,14 +98,18 @@ export function validateInstantPhoto(file: { type: string; size: number }, maxBy
   return null;
 }
 
-/** A job becomes a complete gift only when both providers have delivered usable assets. */
+/** A terminal gift can open as soon as its real keepsake has been delivered,
+ * including a partial creation whose world could not be made. */
 export function instantGiftReady(job: InstantJob): boolean {
-  return job.state === 'completed' && job.tripo.state === 'completed' && job.worldlabs.state === 'completed'
-    && Boolean(job.assets.modelUrl) && Boolean(job.assets.worldUrl);
+  return (job.state === 'completed' || job.state === 'partial') && instantModelReady(job);
 }
 
 export function instantModelReady(job: InstantJob): boolean {
   return job.tripo.state === 'completed' && Boolean(job.assets.modelUrl);
+}
+
+export function instantWorldReady(job: InstantJob): boolean {
+  return job.worldlabs.state === 'completed' && Boolean(job.assets.worldUrl);
 }
 
 export function instantJobFinished(job: InstantJob): boolean {

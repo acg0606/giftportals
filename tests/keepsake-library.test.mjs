@@ -60,7 +60,7 @@ test('expiry follows the server deadline, removes stale capabilities and never e
 
 test('unfinished and invalid records are rejected; storage failures do not interrupt a ready gift', () => {
   const storage = memoryStorage();
-  assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job('synthetic-gift-a', { state: 'partial' }), now), undefined);
+  assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job('synthetic-gift-a', { state: 'partial', tripo: { state: 'failed' } }), now), undefined);
   assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job('invalid/token'), now), undefined);
   assert.deepEqual(library.readKeepsakeReferences(JSON.stringify([{ id: 'synthetic-gift-a', token: 'short', expiresAt: now + 10 }]), now), []);
   assert.equal(library.readKeepsakeReferences(JSON.stringify(Array.from({ length: 101 }, () => ({ id: 'synthetic-gift-a', token: 'a'.repeat(43), expiresAt: now + 10 }))), now).length, 1, 'Large repeated records are deduplicated instead of discarding the library');
@@ -71,6 +71,16 @@ test('unfinished and invalid records are rejected; storage failures do not inter
   for (let i = 0; i < 105; i++) library.rememberCreatedKeepsake(storage, 'anonymous', job(`synthetic-gift-${i}`), now);
   assert.equal(library.storedKeepsakeReferences(storage, 'anonymous', now).length, 105);
   assert.equal(library.storedKeepsakeReferences(storage, 'anonymous', now)[0].id, 'synthetic-gift-0');
+});
+
+test('a completed model with a failed world stores only its capability and keeps the server expiry', () => {
+  const storage = memoryStorage();
+  const partial = job('synthetic-partial', { state: 'partial', worldlabs: { state: 'failed', errorCode: 'PROVIDER_FAILED' }, assets: { photoUrl: '/private.jpg', modelUrl: '/private.glb' } });
+  const reference = library.rememberCreatedKeepsake(storage, 'anonymous', partial, now);
+  assert.equal(reference.id, partial.id); assert.equal(reference.expiresAt, partial.mediaExpiresAt);
+  assert.deepEqual(JSON.parse(storage.getItem(library.keepsakeLibraryKey('anonymous'))), [reference]);
+  assert.deepEqual(Object.keys(reference).sort(), ['expiresAt', 'id', 'token']);
+  assert.deepEqual(library.storedKeepsakeReferences(storage, 'anonymous', now + 600), []);
 });
 
 test('large libraries preserve every unexpired reference beyond earlier count and serialized-size caps', () => {

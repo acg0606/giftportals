@@ -21,8 +21,16 @@ const completed = {
   title: 'A gift', story: 'Our memory.', worldPrompt: 'An imagined place.', photoIntent: 'place',
   assets: { photoUrl: '/photo.jpg', modelUrl: '/model.glb', worldUrl: '/world.spz' },
 };
-test('only complete creator results form session keepsakes; pending or partial work cannot enter the room', () => {
-  for (const job of [{ ...completed, state: 'partial' }, { ...completed, token: '' }, { ...completed, tripo: { state: 'processing' } }, { ...completed, assets: { photoUrl: '/photo.jpg', modelUrl: '/model.glb' } }]) assert.equal(createdSessionKeepsake(job), undefined);
+test('only a completed 3D model can enter the room; pending or failed sculpting cannot', () => {
+  for (const job of [{ ...completed, state: 'processing' }, { ...completed, token: '' }, { ...completed, tripo: { state: 'processing' } }, { ...completed, state: 'partial', tripo: { state: 'failed' } }, { ...completed, assets: { photoUrl: '/photo.jpg', worldUrl: '/world.spz' } }]) assert.equal(createdSessionKeepsake(job), undefined);
+});
+test('a completed souvenir survives world failure and has no world action or fabricated world route', () => {
+  const partial = { ...completed, state: 'partial', worldlabs: { state: 'failed', errorCode: 'PROVIDER_FAILED' }, assets: { photoUrl: '/photo.jpg', modelUrl: '/model.glb' } };
+  const item = createdSessionKeepsake(partial);
+  assert.equal(item.modelUrl, '/model.glb'); assert.equal(item.originalImageUrl, '/photo.jpg'); assert.equal(item.story, completed.story);
+  assert.equal(item.openPath, `generated/${encodeURIComponent(partial.id)}?key=${encodeURIComponent(partial.token)}`);
+  assert.equal(item.worldPath, undefined);
+  assert.equal(createdSessionKeepsake({ ...partial, assets: { ...partial.assets, worldUrl: '/stale.spz' } }).worldPath, undefined, 'A failed stage cannot advertise a world even if a stale URL exists');
 });
 test('session keepsake preserves the original and uses encoded private routes without mutating the source', () => {
   const item = createdSessionKeepsake(completed);
@@ -47,4 +55,3 @@ test('a miniature uses its own reference thumbnail and preserves original, repre
   assert.equal(createdSessionKeepsake({ ...job, modelYaw: 0 }).modelYaw, 0, 'An explicit cache or job orientation remains authoritative');
   assert.equal(createdSessionKeepsake(completed).modelYaw, undefined, 'Ordinary objects retain their prior orientation');
 });
-
