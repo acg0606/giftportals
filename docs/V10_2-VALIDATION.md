@@ -22,7 +22,7 @@ The existing production configuration contained Tripo and World Labs credentials
 
 ## Verification
 
-The complete automated suite passed: **820 tests, zero failures**, using `node --test --test-concurrency=1 tests/*.test.mjs api/tests/*.test.mjs` (41.2 seconds). Frontend and strict server TypeScript checks and the production Vite build passed. Follow-up regression checks also cover request-scoped Vercel runtime OIDC tokens and replacing or clearing catalog defaults through the author's explicit suggestion controls.
+The complete automated suite passed: **823 tests, zero failures**, using `node --test --test-concurrency=1 tests/*.test.mjs api/tests/*.test.mjs` (44.4 seconds). Frontend and strict server TypeScript checks and the production Vite build passed. Follow-up regression checks also cover request-scoped Vercel runtime OIDC tokens and replacing or clearing catalog defaults through the author's explicit suggestion controls.
 
 - TypeScript checks for frontend and server, and a production Vite build.
 - Automated tests covering completion, restoration, owner isolation, direct opening, place maps, consent, stale requests, edited fields and sourced details.
@@ -37,4 +37,12 @@ The first photo smoke identified that Vercel supplies a function's OIDC credenti
 
 Physical XR, printing and sponsor-hardware validation retain their prior limits in `V10-SPONSOR-AUDIT.md`.
 
-A second publication (`7ca4e4c9374bf2f1b3b7b94647d9f094e11b63c1`) reached READY. The runtime correctly exposed OIDC availability, but the live image call received a Gateway 403. This is not recorded as successful photo interpretation. The browser can still use place templates and sourced curiosities. The final adapter compatibility check is recorded below when complete.
+A second publication (`7ca4e4c9374bf2f1b3b7b94647d9f094e11b63c1`) reached READY. The runtime correctly exposed OIDC availability, but the live image call received a Gateway 403. This is not recorded as successful photo interpretation. The browser can still use place templates and sourced curiosities. The compatibility follow-up (`39f3c5772d0f3a2a1829cffeb59404c0b6c49812`) also reached READY and supplied the official SDK's `ai-gateway-auth-method: oidc` header. Its synthetic photo smoke still received HTTP 403. A bounded private classifier returns only a safe enum and HTTP status; no upstream error text, credential or photo is returned to the browser. Thirteen focused backend tests passed after this follow-up.
+
+The production browser confirmed that Use these words replaces the automatic Paris catalog story with the named São Paulo square suggestion. Add to my story appends the reviewed municipal curiosity with its source link. These checks used public examples and names, did not access real GPS, and did not start 3D generation.
+
+The diagnostic publication (`2adb1d019e761bcae7414b7c5a9348f775f7eead`) reached READY. A synthetic image call returned **HTTP 403 `CUSTOMER_VERIFICATION_REQUIRED`**, `provider: template`, and `photoAnalyzed: false`. This is the confirmed production blocker, not a successful image interpretation. Vercel's [AI Gateway FAQ](https://vercel.com/docs/ai-gateway/faq) says this exact error requires a valid payment method on the team before free credits can be used. No credentials, payment method, credit purchase, billing setting or model allowlist was changed. Further live image calls were stopped after identifying the account gate.
+
+The photo interpretation adapter is implemented and type-checked, but live photo interpretation remains pending account verification and a new successful smoke. Place-only suggestions, nearby candidates, sourced curiosities and manual story editing do not depend on that account gate. A denied account/access/credit response disables only further photo interpretation in the current creator session and shows a clear unavailable message; it does not prevent choosing another photo or completing the gift.
+
+Final verification after the refusal UI patch: **823/823 tests passed**, frontend and strict server TypeScript passed, and the production Vite build passed. Focused wizard/validation tests passed 34/34; Gateway tests passed 13/13. These tests include preserving the selected photo and manual words, refusing repeated account-blocked photo requests after a source change, maintaining place-only refresh and gift creation, and leaving transient failures retryable.

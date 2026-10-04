@@ -169,6 +169,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   const assistantWords = new Map<string, string>();
   const automaticPlaceWords = new Map<string, string>();
   let assistantStatus: PlaceAssistantStatus | undefined, suggestion: PlaceAssistantSuggestion | undefined;
+  let photoAnalysisUnavailable = '';
   let assistantAbort: AbortController | undefined, assistantEpoch = 0, assistantBusy = false, lookupKey = '';
   let suggestionUsesLocation = false;
   let confirmedPlaceLabel = '', suggestionTarget = '';
@@ -280,13 +281,14 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   const providerName = () => assistantStatus?.provider === 'openai' ? 'OpenAI' : assistantStatus?.provider === 'gemini' ? 'Google Gemini' : assistantStatus?.provider === 'vercel' ? 'Vercel AI Gateway' : 'the photo interpretation service';
   function assistantAvailability() {
     host.querySelector<HTMLElement>('[data-assistant-photo]')!.hidden = !source;
-    const canAnalyze = Boolean(assistantStatus?.photoAnalysisAvailable);
+    const canAnalyze = !photoAnalysisUnavailable && Boolean(assistantStatus?.photoAnalysisAvailable);
     host.querySelector<HTMLElement>('[data-assistant-photo-consent-label]')!.hidden = !canAnalyze;
-    text('[data-assistant-photo-availability]', assistantStatus ? canAnalyze ? 'Interpret the scene and get a starting point for your memory.' : 'Photo interpretation is unavailable right now. Place suggestions and your own words still work.' : 'Photo interpretation could not be reached. You can still use a place or write your memory.');
+    text('[data-assistant-photo-availability]', photoAnalysisUnavailable || (assistantStatus ? canAnalyze ? 'Interpret the scene and get a starting point for your memory.' : 'Photo interpretation is unavailable right now. Place suggestions and your own words still work.' : 'Photo interpretation could not be reached. You can still use a place or write your memory.'));
     text('[data-assistant-photo-consent-copy]', `I can use this photo and send it to ${assistantStatus?.imageConsentLabel || providerName()} to suggest a description and memory. This does not create the 3D gift.`);
     host.querySelector<HTMLButtonElement>('[data-assistant-analyze]')!.disabled = !canAnalyze || !source || assistantBusy || wizardBusy() || !host.querySelector<HTMLInputElement>('[data-assistant-photo-consent]')!.checked;
     for (const button of host.querySelectorAll<HTMLButtonElement>('[data-assistant-suggest],[data-assistant-regenerate]')) button.disabled = assistantBusy || wizardBusy();
   }
+  const warningCopy = (code: string) => code === 'PHOTO_ANALYSIS_UNAVAILABLE' && photoAnalysisUnavailable ? photoAnalysisUnavailable : assistantWarningCopy(code);
   async function loadAssistantStatus() {
     try { const next = await assistant.status(events.signal); if (!active()) return; assistantStatus = next; }
     catch { if (!active()) return; assistantStatus = undefined; }
@@ -324,7 +326,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     host.querySelector<HTMLElement>('[data-assistant-story]')!.hidden = false;
     text('[data-assistant-title]', result.title); text('[data-assistant-story-copy]', result.story);
     text('[data-assistant-provenance]', result.photoAnalyzed ? `Photo interpreted by ${providerName()}. Suggested words remain editable.` : photoInterpretation ? 'Suggested words from public place information. Your earlier photo interpretation remains above.' : 'Suggested words from public place information. Your photo has not been interpreted.');
-    text('[data-assistant-warnings]', result.warnings.map(assistantWarningCopy).join(' '));
+    text('[data-assistant-warnings]', result.warnings.map(warningCopy).join(' '));
     host.querySelector<HTMLElement>('[data-assistant-location-note]')!.hidden = !suggestionUsesLocation;
     const description = host.querySelector<HTMLElement>('[data-assistant-photo-description]')!;
     description.hidden = !photoInterpretation;
@@ -364,6 +366,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   }
   async function suggestMemory(includePhoto = false, automatic = false, placeOverride = '') {
     if (!active() || wizardBusy() || assistantBusy) return;
+    if (includePhoto && photoAnalysisUnavailable) { assistantAvailability(); return; }
     const consent = host.querySelector<HTMLInputElement>('[data-assistant-photo-consent]')!.checked;
     if (includePhoto && (!source || !consent || !assistantStatus?.photoAnalysisAvailable)) { text('[data-assistant-photo-availability]', 'Choose the photo permission before interpreting your photo.'); return; }
     const lookup = giftContext.getLookupLocation();
@@ -381,13 +384,22 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
       if (!current()) return;
       const next = await assistant.suggest(input, abort.signal);
       if (!current()) return;
+      // A different photo cannot resolve site access or account limits. Keep
+      // this gate for this wizard only; a fresh mount checks status again.
+      if (includePhoto && ['AUTH_UNAVAILABLE', 'ACCESS_DENIED', 'MODEL_ACCESS_DENIED', 'ACCOUNT_RESTRICTION', 'CUSTOMER_VERIFICATION_REQUIRED', 'CREDIT_LIMIT'].includes(next.generationFailure?.code || '')) {
+        photoAnalysisUnavailable = next.generationFailure?.code === 'CUSTOMER_VERIFICATION_REQUIRED'
+          ? 'Photo interpretation is not enabled for this site yet. Place suggestions and your own words still work.'
+          : 'Photo interpretation is unavailable right now. Place suggestions and your own words still work.';
+        if (assistantStatus) assistantStatus = { ...assistantStatus, photoAnalysisAvailable: false };
+        host.querySelector<HTMLInputElement>('[data-assistant-photo-consent]')!.checked = false;
+      }
       if (next.photoAnalyzed && next.photoDescription) photoInterpretation = { description: next.photoDescription, provider: providerName() };
       suggestion = next; suggestionUsesLocation = Boolean(input.location); suggestionTarget = input.placeName || '';
       renderSuggestion();
       // A typed place is deliberate input. A GPS suggestion stays reviewable
       // until its place is confirmed and inclusion is explicitly chosen.
       if (!input.location || confirmedPlaceLabel) applySuggestion();
-      text('[data-assistant-status]', next.places.length ? 'Place suggestions are ready. Confirm the right place, then use or edit the words.' : next.photoAnalyzed ? 'Your photo interpretation and suggested words are ready to edit.' : next.warnings[0] ? assistantWarningCopy(next.warnings[0]) : 'Suggested words are ready to edit.');
+      text('[data-assistant-status]', next.places.length ? 'Place suggestions are ready. Confirm the right place, then use or edit the words.' : next.photoAnalyzed ? 'Your photo interpretation and suggested words are ready to edit.' : next.warnings[0] ? warningCopy(next.warnings[0]) : 'Suggested words are ready to edit.');
       if (!automatic && step === 'story') field('story').focus({ preventScroll: true });
     } catch (cause) { if (current()) text('[data-assistant-status]', cause instanceof Error ? cause.message : 'Suggestions are unavailable. Your words remain here.'); }
     finally {

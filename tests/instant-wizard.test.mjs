@@ -430,6 +430,50 @@ test('interpreting a photo needs its own named permission and sends only a prepa
   }, { language: 'pt-BR', photoAvailable: true, suggestion: { story: 'Uma lembrança sugerida.', photoAnalyzed: true, photoDescription: 'An open square in afternoon light.', provider: 'vercel' } });
 });
 
+test('site or account refusals stop photo retries for this wizard while retaining photos, manual words, place lookup and gift creation', async () => {
+  for (const code of ['AUTH_UNAVAILABLE', 'ACCESS_DENIED', 'MODEL_ACCESS_DENIED', 'ACCOUNT_RESTRICTION', 'CUSTOMER_VERIFICATION_REQUIRED', 'CREDIT_LIMIT']) await fixture(async state => {
+    state.upload(new File(['private pixels'], 'private.jpg', { type: 'image/jpeg' }));
+    state.edit('title', 'My own gift'); state.edit('worldPrompt', 'A place described by me.'); state.edit('story', 'My personal memory.');
+    const originalPhoto = state.find('[data-instant-photo]').src;
+    state.photoConsent(); state.find('[data-assistant-analyze]').click(); await flush();
+    assert.equal(state.assists.length, 1); assert.equal(state.find('[data-instant-photo]').src, originalPhoto);
+    for (const [name, words] of [['title', 'My own gift'], ['worldPrompt', 'A place described by me.'], ['story', 'My personal memory.']]) assert.equal(state.field(name).value, words);
+    assert.equal(state.find('[data-assistant-analyze]').disabled, true); assert.equal(state.field('photoAnalysisConsent').checked, false);
+    assert.equal(state.find('[data-assistant-photo-consent-label]').hidden, true);
+    const copy = state.find('[data-assistant-photo-availability]').textContent;
+    assert.match(copy, code === 'CUSTOMER_VERIFICATION_REQUIRED' ? /not enabled for this site yet/ : /unavailable right now/);
+    assert.doesNotMatch(copy + state.find('[data-assistant-warnings]').textContent + state.find('[data-assistant-status]').textContent, /AUTH_|ACCESS_DENIED|CREDIT_LIMIT|CUSTOMER_VERIFICATION|403|billing|payment/);
+    state.find('[data-assistant-analyze]').click(); await flush(); assert.equal(state.assists.length, 1);
+    state.edit('assistantPlace', 'Praça Américo'); state.find('[data-assistant-regenerate]').click(); await flush();
+    assert.equal(state.assists.length, 2); assert.equal(state.assists[1].input.imageDataUrl, undefined); assert.equal(state.assists[1].input.photoConsent, undefined);
+    state.lookup = { latitude: -23.551234, longitude: -46.632345 }; state.context = { mode: 'device', includeInStory: false };
+    state.contextOptions.onChange(state.context); await flush();
+    assert.equal(state.assists.length, 3); assert.equal(state.assists[2].input.locationConsent, true); assert.equal(state.assists[2].input.imageDataUrl, undefined);
+    state.upload(new File(['different pixels'], 'different.jpg', { type: 'image/jpeg' })); state.photoConsent();
+    assert.equal(state.find('[data-assistant-analyze]').disabled, true, 'Changing the photo cannot resolve a site/account refusal');
+    state.find('[data-assistant-analyze]').click(); await flush(); assert.equal(state.assists.length, 3);
+    assert.equal(state.field('story').value, 'My personal memory.');
+    state.next(); state.next(); state.next(); state.consent(); state.submit(); await flush();
+    assert.equal(state.creates.length, 1); assert.equal(state.creates[0].story, 'My personal memory.');
+  }, { photoAvailable: true, assistHandler: (input, _signal, state) => ({ ...state.suggestion, ...(input.imageDataUrl ? { generationFailure: { code, status: 403 }, warnings: ['PHOTO_ANALYSIS_UNAVAILABLE'] } : {}) }) });
+  await fixture(async state => {
+    state.upload(new File(['pixels'], 'fresh-session.jpg', { type: 'image/jpeg' })); state.photoConsent();
+    assert.equal(state.find('[data-assistant-analyze]').disabled, false, 'A new wizard checks availability afresh');
+    state.find('[data-assistant-analyze]').click(); await flush(); assert.equal(state.assists.length, 1);
+  }, { photoAvailable: true });
+});
+
+test('temporary photo failures leave an explicitly authorized retry available', async () => {
+  for (const code of ['RATE_LIMIT', 'PROVIDER_REJECTED', 'INVALID_RESPONSE', 'NETWORK_UNAVAILABLE']) await fixture(async state => {
+    state.upload(new File(['pixels'], 'photo.jpg', { type: 'image/jpeg' })); state.photoConsent();
+    state.find('[data-assistant-analyze]').click(); await flush();
+    assert.equal(state.find('[data-assistant-analyze]').disabled, false); assert.equal(state.field('photoAnalysisConsent').checked, true);
+    state.find('[data-assistant-analyze]').click(); await flush();
+    assert.equal(state.assists.length, 2); assert.equal(state.assists[1].input.photoConsent, true);
+    assert.equal(state.find('[data-assistant-photo-description]').hidden, false);
+  }, { photoAvailable: true, assistHandler: (_input, _signal, state) => ({ ...state.suggestion, ...(state.assists.length === 1 ? { generationFailure: { code }, warnings: ['PHOTO_ANALYSIS_UNAVAILABLE'] } : { photoAnalyzed: true, photoDescription: 'A scene in warm light.' }) }) });
+});
+
 test('an async suggestion and Use never replace manually written title, world or story', async () => {
   let finish;
   await fixture(async state => {
@@ -486,10 +530,13 @@ test('changing the photo or leaving the route aborts interpretation and ignores 
       if (retire === 'photo') state.upload(new File(['new'], 'new.jpg', { type: 'image/jpeg' })); else state.handle.destroy();
       assert.equal(state.assists[0].signal.aborted, true);
       finish(state.suggestion); await flush();
-      if (retire === 'photo') { assert.equal(state.field('story').value, ''); assert.equal(state.field('photoAnalysisConsent').checked, false); assert.equal(state.find('[data-assistant-story]').hidden, true); }
+      if (retire === 'photo') {
+        assert.equal(state.field('story').value, ''); assert.equal(state.field('photoAnalysisConsent').checked, false); assert.equal(state.find('[data-assistant-story]').hidden, true);
+        state.photoConsent(); assert.equal(state.find('[data-assistant-analyze]').disabled, false, 'An obsolete refusal cannot gate the current photo');
+      }
       else assert.equal(state.host.children.length, 0);
       assert.equal(state.creates.length, 0);
-    }, { photoAvailable: true, assistHandler: () => new Promise(resolve => { finish = resolve; }) });
+    }, { photoAvailable: true, suggestion: { generationFailure: { code: 'CUSTOMER_VERIFICATION_REQUIRED', status: 403 }, warnings: ['PHOTO_ANALYSIS_UNAVAILABLE'] }, assistHandler: () => new Promise(resolve => { finish = resolve; }) });
   }
 });
 
