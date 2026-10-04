@@ -6,7 +6,7 @@ import { mountGiftUnboxing } from './gift-unboxing';
 import { mountKeepsakeAtmosphere } from './keepsake-atmosphere';
 import type { InstantObjectRepresentation } from '../shared/instant-examples';
 
-export interface MemorySceneOptions { modelUrl: string; theme?: 'studio' | 'dusk'; backgroundUrl?: string; photoIntent?:'object'|'place'; objectRepresentation?:InstantObjectRepresentation; modelYaw?:number; photoUrl?:string; unboxing?:boolean; onReady?: () => void; onError?: (message: string) => void; onProgress?:(state:ViewerProgress)=>void }
+export interface MemorySceneOptions { modelUrl: string; theme?: 'studio' | 'dusk'; backgroundUrl?: string; photoIntent?:'object'|'place'; objectRepresentation?:InstantObjectRepresentation; modelYaw?:number; photoUrl?:string; unboxing?:boolean; onReady?: () => void; onReveal?: () => void; onError?: (message: string) => void; onProgress?:(state:ViewerProgress)=>void }
 
 export function mountMemoryScene(host: HTMLElement, options: MemorySceneOptions) {
   let dead = false;
@@ -219,7 +219,7 @@ export function mountMemoryScene(host: HTMLElement, options: MemorySceneOptions)
       atmosphere?.setComposition(focus,home);
       if(options.unboxing){
         object.updateMatrixWorld(true);const wrappedBounds=new THREE.Box3().setFromObject(object);
-        unboxing=mountGiftUnboxing({host,parent:content,model:object,bounds:wrappedBounds,reduced,requestFrame:()=>gate?.request(),onReveal:()=>{reset();renderer?.domElement.focus({preventScroll:true});}});
+        unboxing=mountGiftUnboxing({host,parent:content,model:object,bounds:wrappedBounds,reduced,requestFrame:()=>gate?.request(),onReveal:()=>{reset();options.onReveal?.();renderer?.domElement.focus({preventScroll:true});}});
         content.traverse(item=>{if(item instanceof THREE.Mesh){item.castShadow=true;item.receiveShadow=true;}});
       }
       reset();clearTimeout(deadline);ready=true;gate?.request();

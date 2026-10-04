@@ -136,6 +136,37 @@ test('a failed real gift model keeps an honest image preview without creating re
  state.draw();assert.equal(state.host.dataset.roomModelsFailed,'1');const group=state.renderers[0].scene.children.find(value=>value.userData.collectionId==='failed');assert.equal(group.children.length,0);assert.equal(group.userData.representation,'reference-photo-proxy');assert.equal(state.host.children.find(child=>child.className==='cr-asset-preview').hidden,false);
 },{failModel:true,items:[item('failed',{imageUrl:'/synthetic/photo.png',modelUrl:'/synthetic/model.glb'})]}));
 
+test('a pending Tripo model never shows a large photo card before becoming the real desk souvenir',async()=>fixture(async state=>{
+ state.draw();const renderer=state.renderers[0],group=renderer.scene.children.find(value=>value.userData.collectionId==='gift'),preview=state.host.children.find(child=>child.className==='cr-asset-preview');
+ assert.equal(state.host.dataset.roomPhotosReady,'1');assert.equal(state.host.dataset.roomModelsReady,'0');assert.equal(preview.children[0].hidden,false);assert.equal(preview.hidden,true);assert.equal(group.userData.representation,'loading-real-model');assert.equal(group.children.length,0);assert.deepEqual(group.scale.toArray(),[1,1,1]);assert.match(state.host.children.find(child=>child.className==='cr-environment-state').textContent,/opening keepsakes/);
+ state.parses[0].resolve();await flush();state.draw();assert.equal(state.host.dataset.roomModelsReady,'1');assert.equal(group.children.length,1);assert.equal(preview.hidden,true);assert.equal(group.userData.representation,'cached-generated-model');assert.deepEqual(group.scale.toArray(),[1,1,1]);
+},{deferParse:true,items:[item('gift',{imageUrl:'/synthetic/photo.png',modelUrl:'/synthetic/model.glb'})]}));
+
+test('the first complete souvenir receives its whole display interval after every model has settled',async()=>fixture(async state=>{
+ const visible=()=>state.renderers[0].scene.children.filter(value=>value.userData.collectionId&&value.visible).map(value=>value.userData.collectionId);
+ state.draw();assert.deepEqual(visible(),['first']);assert.equal(state.parses.length,2);
+ for(let i=0;i<140;i++){state.scene.look(0);state.draw();}assert.deepEqual(visible(),['first'],'Loading longer than 5.5s cannot select an undecoded gift');assert.equal(state.frames.size,0,'A pending model does not keep an idle animation loop running');
+ state.parses[0].resolve();await flush();for(let i=0;i<140;i++){state.scene.look(0);state.draw();}assert.deepEqual(visible(),['first'],'The second pending model still prevents automatic replacement');
+ state.parses[1].resolve();await flush();state.draw();for(let i=0;i<109;i++)state.draw();assert.deepEqual(visible(),['first'],'The readiness clock starts at zero');
+ for(let i=0;i<3;i++)state.draw();assert.deepEqual(visible(),['second']);assert.equal(state.renderers[0].scene.children.filter(value=>value.userData.collectionId&&value.visible).length,1);
+ for(const group of state.renderers[0].scene.children.filter(value=>value.userData.collectionId))assert.deepEqual(group.scale.toArray(),[1,1,1],'The physical gift scale never grows or shrinks');
+ for(const model of state.models){assert.equal(model.material.opacity,1);assert.equal(model.material.transparent,false);assert.equal(model.material.color.getHexString(),'987654');}
+ state.scene.setPlaying(false);state.scene.step(-1);state.draw();assert.deepEqual(visible(),['first']);state.scene.select('first');state.draw();state.scene.reset();state.settle();assert.deepEqual(visible(),['first']);assert.equal(state.frames.size,0);
+},{deferParse:true,items:[item('first',{modelUrl:'/synthetic/first.glb'}),item('second',{modelUrl:'/synthetic/second.glb'})]}));
+
+test('a model decode deadline exposes its photo fallback and disposes a late model without a size transition',async()=>fixture(async state=>{
+ state.draw();const preview=state.host.children.find(child=>child.className==='cr-asset-preview');assert.equal(preview.hidden,true);
+ const deadline=[...state.timers.entries()].find(([,timer])=>timer.delay===45000);assert.ok(deadline);state.timers.delete(deadline[0]);deadline[1].callback();state.draw();
+ assert.equal(state.host.dataset.roomModelsFailed,'1');assert.equal(preview.hidden,false);const group=state.renderers[0].scene.children.find(value=>value.userData.collectionId==='gift');assert.deepEqual(group.scale.toArray(),[1,1,1]);assert.equal(group.children.length,0);
+ state.parses[0].resolve();await flush();state.draw();assert.equal(state.host.dataset.roomModelsReady,'0');assert.equal(preview.hidden,false);assert.equal(state.models[0].geometryDisposed,1);assert.equal(state.models[0].materialDisposed,1);
+},{deferParse:true,items:[item('gift',{imageUrl:'/synthetic/photo.png',modelUrl:'/synthetic/model.glb'})]}));
+
+test('loaded gifts do not consume shuffle time while both environment render sources are unavailable',async()=>fixture(async state=>{
+ for(let i=0;i<140;i++){state.scene.look(0);state.draw();}assert.equal(state.ready,0);assert.equal(state.host.dataset.roomModelsReady,'2');
+ state.worldDecodes[0].resolve();await flush();state.draw();const groups=()=>state.renderers[0].scene.children.filter(value=>value.userData.collectionId&&value.visible).map(value=>value.userData.collectionId);
+ for(let i=0;i<109;i++)state.draw();assert.deepEqual(groups(),['first']);for(let i=0;i<3;i++)state.draw();assert.deepEqual(groups(),['second']);
+},{deferWorld:true,failPanorama:true,items:[item('first',{modelUrl:'/synthetic/first.glb'}),item('second',{modelUrl:'/synthetic/second.glb'})]}));
+
 test('scene preserves the six-gift limit, selection, pointer capture and bounded drag without accidental clicking',async()=>fixture(async state=>{
  state.draw();assert.equal(state.projects.at(-1).length,6);assert.ok(state.projects.at(-1).every(point=>Number.isFinite(point.x+point.y)));const point=state.projects.at(-1).find(value=>value.visible);
  state.pointer('pointerdown',point.x,point.y);assert.equal(state.renderers[0].domElement.hasPointerCapture(1),true);state.pointer('pointerup',point.x,point.y);assert.deepEqual(state.selected,[point.id]);assert.equal(state.renderers[0].domElement.hasPointerCapture(1),false);state.settle();assert.equal(state.frames.size,0);

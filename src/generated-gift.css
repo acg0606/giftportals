@@ -48,6 +48,11 @@
 .gg-canvas:focus-visible { outline-offset: -6px; }
 .gg-visual.is-ready .gg-canvas { opacity: 1; }
 .gg-visual.is-ready .gg-poster { opacity: 0; pointer-events: none; }
+.gg-visual.is-opening .gg-poster { opacity: 1; pointer-events: none; }
+.gg-visual.is-opening .gg-canvas > canvas { opacity: 0; }
+.gg-canvas > canvas { transition: opacity .3s ease; }
+.generated-gift:not(.is-world) .gg-poster > img { padding: 24px 24px 184px; }
+@media(max-width:600px) { .generated-gift:not(.is-world) .gg-poster > img { padding: 14px 14px 142px; } }
 .gg-no-image { display: grid; place-items: center; height: 100%; padding: 24px; color: var(--gg-muted); font-size: 20px; text-align: center; }
 .gg-loading { position: absolute; z-index: 4; left: 20px; right: 20px; bottom: 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; padding: 13px 18px; border: 1px solid #fff4df26; border-radius: 18px; background: #08222dee; color: var(--gg-cream); font-size: 13px; text-align: center; }
 .gg-loading.is-fallback { justify-content: space-between; }
@@ -147,7 +152,7 @@
   .gg-footer { max-height: 36dvh; overflow-y: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gg-poster, .gg-canvas { transition: none; }
+  .gg-poster, .gg-canvas, .gg-canvas > canvas { transition: none; }
 }
 
 /* A warm keepsake gallery and an immersive world share one compact toolbar. */

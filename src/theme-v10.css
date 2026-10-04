@@ -515,16 +515,16 @@ body:has(.v10-welcome) { padding-bottom: 0; }
 .instant-creator .instant-workspace { border-color: var(--v10-line); }
 .instant-creator .instant-field :is(input,textarea) { border-radius: 10px; }
 .gu-unboxing.gu-unboxing {
-  inset: 0; left: 0; bottom: 0; width: 100%; max-width: none; transform: none;
-  align-content: center; gap: 22px; padding: 24px; color: var(--v10-ink);
-  background: var(--v10-cream); text-align: center;
+  inset: auto auto 16px 50%; width: min(420px,calc(100% - 24px)); max-width: none; transform: translateX(-50%);
+  align-content: center; gap: 8px; padding: 14px 18px; color: var(--v10-ink);
+  background: #fffdf8f5; border: 1px solid var(--v10-line); border-radius: 22px; box-shadow: var(--v10-shadow); text-align: center;
 }
-.gu-unboxing .gu-status { max-width: 360px; margin: 0; padding: 0; border-radius: 0; color: var(--v10-ink); background: transparent; font-family: Caveat,'Segoe Print',cursive; font-size: clamp(32px,4vw,48px); font-weight: 500; line-height: 1.15; backdrop-filter: none; }
+.gu-unboxing .gu-status { max-width: 360px; margin: 0; padding: 0; border-radius: 0; color: var(--v10-ink); background: transparent; font-family: Caveat,'Segoe Print',cursive; font-size: clamp(24px,3vw,32px); font-weight: 500; line-height: 1.15; backdrop-filter: none; }
 .gu-unboxing .gu-action { color: #fffdf8; background: var(--v10-accent); border-color: var(--v10-accent); border-radius: 28px; box-shadow: var(--v10-shadow); }
 .gu-unboxing .gu-action:hover:not(:disabled) { background: #023b59; border-color: #023b59; }
 .gu-unboxing .gu-action:focus-visible { outline-color: var(--v10-focus); }
 .gu-unboxing .gu-hint { padding: 0; color: var(--v10-muted); background: transparent; font-size: 12px; }
-.gu-unboxing.gu-unboxing.is-revealed { inset: auto 12px 16px; width: calc(100% - 24px); padding: 0; background: transparent; }
+.gu-unboxing.gu-unboxing.is-revealed { inset: auto auto 16px 50%; width: calc(100% - 24px); padding: 0; background: transparent; border: 0; box-shadow: none; }
 .gu-unboxing.is-revealed .gu-status { padding: 6px 12px; color: var(--v10-muted); background: #fffdf8e0; border-radius: 20px; font: 400 11px/1.5 Inter,Arial,sans-serif; }
 
 @media (min-width: 1600px) {

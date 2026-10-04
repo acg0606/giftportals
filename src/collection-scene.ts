@@ -110,6 +110,7 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
  const target = new THREE.Vector3(...config.cameraTarget), wantedTarget = target.clone(), objectOrigin = new THREE.Vector3(...config.objectPosition);
  const events = new AbortController(), downloads = new AbortController(), motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : undefined;
  const slots: ConveyorItem[] = [], deadlines = new Set<ReturnType<typeof setTimeout>>(), failedModels = new Set<string>(), disposedSplats = new WeakSet<SplatMesh>();
+ const pendingModels = new Set(items.filter(item => item.modelUrl && !expired(item)).map(item => item.id));
  const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2(), belt = createCollectionConveyor(items.length, motion?.matches ?? false), desk = createDeskShuffle(items.length);
  let dead = false, unavailable = false, announced = false, reduced = motion?.matches ?? false, selected: string | null = null, hovered: string | null = null;
  let renderer: THREE.WebGLRenderer | undefined, spark: SparkRenderer | undefined, splats: SplatMesh | undefined, panorama: THREE.Texture | undefined, panoramaBitmap: ImageBitmap | undefined;
@@ -125,11 +126,21 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   if (dead) return;
   host.dataset.roomModelsReady = String(slots.filter(slot => !!slot.model && !expired(slot.item)).length); host.dataset.roomModelsFailed = String(failedModels.size); host.dataset.roomPhotosReady = String(slots.filter(slot => !!slot.photoUrl && !expired(slot.item)).length);
  }
+ function settleModel(slot: ConveyorItem) {
+  if (!active() || !pendingModels.delete(slot.item.id)) return;
+  // Loading time never consumes the first gift's display time.
+  desk.elapsed = 0; lastFrame = null; environmentState(); invalidate();
+ }
+ function modelFailed(slot: ConveyorItem) {
+  if (!active() || !slot.item.modelUrl || slot.model || expired(slot.item)) return;
+  failedModels.add(slot.item.id); slot.group.userData.representation = 'reference-photo-proxy';
+  slot.label.textContent = slot.photoUrl ? slot.item.title : 'Preview unavailable'; diagnostics(); settleModel(slot); invalidate();
+ }
  function environmentState() {
   if (dead) return;
   host.dataset.roomEnvironmentProvider = worldReady ? 'WorldLabs' : panoramaReady ? 'panorama' : 'pending';
   host.dataset.roomEnvironmentState = worldReady ? 'ready' : panoramaReady ? 'panorama' : worldFailed && panoramaFailed ? 'unavailable' : 'loading';
-  status.textContent = worldReady ? 'World Labs studio · 3D' : panoramaReady ? 'Studio panorama · opening the 3D room…' : 'Opening the World Labs studio…';
+  status.textContent = worldReady ? pendingModels.size ? 'World Labs studio · opening keepsakes…' : 'World Labs studio · 3D' : panoramaReady ? 'Studio panorama · opening the 3D room…' : 'Opening the World Labs studio…';
   if (worldFailed && panoramaReady) status.textContent = 'Studio panorama · 3D room unavailable';
  }
  function invalidate() { if (active()) gate?.request(); }
@@ -196,14 +207,15 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
  function setMood(mood: CollectionMood) { if (!active() || mood !== 'sunset' && mood !== 'night') return; const night = mood === 'night'; keyLight.intensity = night ? 1.1 : 1.6; fillLight.intensity = night ? .3 : .45; scene.environmentIntensity = night ? .5 : .7; invalidate(); }
  function dropExpired(slot: ConveyorItem) {
   if (!expired(slot.item) || dead) return; slot.controller.abort(); if (slot.model) { slot.group.remove(slot.model); disposeModel(slot.model); slot.model = undefined; }
-  if (slot.photoUrl) { URL.revokeObjectURL(slot.photoUrl); slot.photoUrl = undefined; slot.image.removeAttribute('src'); } slot.image.hidden = true; slot.label.textContent = 'Preview expired'; slot.group.userData.representation = 'unavailable-media'; diagnostics(); invalidate();
+  if (slot.photoUrl) { URL.revokeObjectURL(slot.photoUrl); slot.photoUrl = undefined; slot.image.removeAttribute('src'); } slot.image.hidden = true; slot.label.textContent = 'Preview expired'; slot.group.userData.representation = 'unavailable-media'; diagnostics(); settleModel(slot); invalidate();
  }
  function expiryTimer(slot: ConveyorItem) { if (!slot.item.mediaExpiresAt || slot.item.mediaExpiresAt <= 0 || !Number.isFinite(slot.item.mediaExpiresAt)) return; const delay = slot.item.mediaExpiresAt * 1000 - Date.now(); slot.timer = setTimeout(() => { if (dead) return; if (expired(slot.item)) dropExpired(slot); else expiryTimer(slot); }, clamp(delay, 1, 2_147_483_647)); }
  async function thumbnail(slot: ConveyorItem) {
   if (!slot.item.imageUrl || expired(slot.item) || !active()) return; const source = viewerAssetUrl(slot.item.imageUrl, location.origin), signal = slot.controller.signal, bytes = await fetchViewerBytes(source.href, signal);
   if (bytes.length > 6 * 1024 * 1024) throw new Error('ROOM_IMAGE_LIMIT'); boundedImage(bytes); const bitmap = await createImageBitmap(new Blob([bytes])); bitmap.close();
   if (!active() || signal.aborted || expired(slot.item)) return; slot.photoUrl = URL.createObjectURL(new Blob([bytes])); slot.image.src = slot.photoUrl; slot.image.hidden = false;
-  if (!slot.model) slot.group.userData.representation = 'reference-photo-proxy'; slot.label.textContent = slot.item.title; diagnostics(); invalidate();
+  if (!slot.model && (!slot.item.modelUrl || failedModels.has(slot.item.id))) slot.group.userData.representation = 'reference-photo-proxy';
+  slot.label.textContent = slot.item.modelUrl && !slot.model && !failedModels.has(slot.item.id) ? 'Loading souvenir…' : slot.item.title; diagnostics(); invalidate();
  }
  async function model(slot: ConveyorItem) {
   if (!slot.item.modelUrl || expired(slot.item) || !active()) return; const source = viewerAssetUrl(slot.item.modelUrl, location.origin), signal = slot.controller.signal, bytes = await fetchViewerBytes(source.href, signal); validateCollectionGLB(bytes); signal.throwIfAborted();
@@ -234,7 +246,8 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
  function project(): CollectionProjection[] {
   camera.updateMatrixWorld(); scene.updateMatrixWorld(true);
   return slots.map(slot => { const point = slot.group.localToWorld(slot.anchor.clone()).project(camera), visible = slot.group.visible && point.z >= -1 && point.z <= 1 && point.x > -1 && point.x < 1 && point.y > -1 && point.y < 1;
-   slot.proxy.hidden = !visible || !!slot.model; if (!slot.proxy.hidden) { slot.proxy.style.left = `${(point.x + 1) * width / 2}px`; slot.proxy.style.top = `${(1 - point.y) * height / 2}px`; }
+   const photoFallback = !slot.model && (!slot.item.modelUrl || failedModels.has(slot.item.id) || expired(slot.item));
+   slot.proxy.hidden = !visible || !photoFallback; if (!slot.proxy.hidden) { slot.proxy.style.left = `${(point.x + 1) * width / 2}px`; slot.proxy.style.top = `${(1 - point.y) * height / 2}px`; }
    return {id: slot.item.id, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, visible}; });
  }
  function hit(event: PointerEvent) { const rect = host.getBoundingClientRect(); ndc.set((event.clientX - rect.left) / Math.max(1, rect.width) * 2 - 1, -(event.clientY - rect.top) / Math.max(1, rect.height) * 2 + 1); camera.updateMatrixWorld(); scene.updateMatrixWorld(true); raycaster.setFromCamera(ndc, camera);
@@ -245,7 +258,7 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   renderer.domElement.setAttribute('role', 'img'); renderer.domElement.setAttribute('aria-label', 'World Labs memory studio with real 3D souvenirs. Select a gift, use arrows to browse, Space to pause, drag to look and plus or minus to zoom.'); renderer.domElement.style.touchAction = 'pan-y'; renderer.domElement.tabIndex = 0; host.append(renderer.domElement);
   renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); fail('The studio view was interrupted. Your photos and gift stories remain available.'); }, {signal: events.signal});
   for (const [index, item] of items.entries()) {
-   const group = new THREE.Group(); group.position.copy(objectOrigin); group.visible = index === desk.current; group.scale.setScalar(group.visible ? 1 : 0); group.userData.collectionId = item.id; group.userData.representation = item.modelUrl && !expired(item) ? 'loading-real-model' : 'reference-photo-proxy'; scene.add(group);
+   const group = new THREE.Group(); group.position.copy(objectOrigin); group.visible = index === desk.current; group.userData.collectionId = item.id; group.userData.representation = item.modelUrl && !expired(item) ? 'loading-real-model' : 'reference-photo-proxy'; scene.add(group);
    const proxy = document.createElement('button'), image = document.createElement('img'), label = document.createElement('span'); proxy.type = 'button'; proxy.className = 'cr-asset-preview'; proxy.setAttribute('aria-label', `View ${item.title}`); proxy.hidden = true; image.alt = item.title; image.hidden = true; label.textContent = item.modelUrl ? 'Loading souvenir…' : item.title; proxy.append(image, label); host.append(proxy);
    const slot: ConveyorItem = {item, group, proxy, image, label, anchor: new THREE.Vector3(0, config.objectSize[1] / 2, 0), index, controller: new AbortController()}; slots.push(slot);
    proxy.addEventListener('click', () => { if (active()) { setFocus(item.id); options.onSelect(item.id); } }, {signal: events.signal}); downloads.signal.addEventListener('abort', () => slot.controller.abort(), {once: true}); expiryTimer(slot);
@@ -253,12 +266,16 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   diagnostics(); environmentState(); options.onPlaybackChange?.(belt.playing);
   gate = createFrameGate(now => {
    if (!active() || !renderer || blurred || !worldReady && !panoramaReady) return; if (lastFrame !== null && now - lastFrame < 49) { gate?.request(); return; }
-   const dt = lastFrame === null ? 0 : clamp((now - lastFrame) / 1000, 0, .05); lastFrame = now; deskShuffleAdvance(desk, dt, belt.playing, reduced); belt.cursor = desk.current;
+   const dt = lastFrame === null ? 0 : clamp((now - lastFrame) / 1000, 0, .05); lastFrame = now;
+   const automatic = belt.playing && !reduced && pendingModels.size === 0;
+   deskShuffleAdvance(desk, dt, automatic, reduced); belt.cursor = desk.current;
    const alpha = reduced ? 1 : 1 - Math.exp(-(dt || 1 / 30) * 9); target.lerp(wantedTarget, alpha); yaw += (wantedYaw - yaw) * alpha; fieldOfView += (wantedFov - fieldOfView) * alpha;
-   let moving = false; for (const slot of slots) { const wantedScale = slot.index === desk.current ? 1 : 0; slot.group.scale.lerp(new THREE.Vector3(wantedScale, wantedScale, wantedScale), alpha); slot.group.visible = slot.index === desk.current || slot.group.scale.x > .001; moving ||= Math.abs(slot.group.scale.x - wantedScale) > .0001; }
+   // Switch whole imported gifts in one frame. Their physical size and PBR
+   // materials stay intact; no grow/shrink or transparency sorting with splats.
+   for (const slot of slots) slot.group.visible = slot.index === desk.current;
    const direction = target.clone().sub(cameraHome).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw); camera.position.copy(cameraHome); camera.lookAt(cameraHome.clone().add(direction)); camera.fov = fieldOfView; camera.updateProjectionMatrix();
    try { renderer.render(scene, camera); options.onProject(project()); if (!announced) { announced = true; options.onReady(); } } catch { fail('The studio could not render here. Your photos and gift stories remain available.'); return; }
-   if (belt.playing && !reduced || !reduced && (moving || target.distanceToSquared(wantedTarget) > .000001 || Math.abs(wantedYaw - yaw) + Math.abs(wantedFov - fieldOfView) > .001)) gate?.request();
+   if (automatic || !reduced && (target.distanceToSquared(wantedTarget) > .000001 || Math.abs(wantedYaw - yaw) + Math.abs(wantedFov - fieldOfView) > .001)) gate?.request();
   });
   spark = new SparkRenderer({renderer, onDirty: () => invalidate()}); scene.add(spark); stopVisibility = observeViewerVisibility(host, gate);
   document.addEventListener('visibilitychange', () => { lastFrame = null; if (blurred) gate?.setHidden(true); }, {signal: events.signal});
@@ -274,7 +291,7 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   void environmentJob(loadWorld, () => { worldFailed = true; if (splats) { scene.remove(splats); disposeSplat(splats); splats = undefined; } checkEnvironmentFailure(); });
   void environmentJob(loadPanorama, () => { panoramaFailed = true; checkEnvironmentFailure(); });
   const jobs = slots.flatMap(slot => [{slot, kind: 'photo', run: () => thumbnail(slot)}, {slot, kind: 'model', run: () => model(slot)}]);
-  async function runJobs() { for (;;) { if (!active()) return; const job = jobs.shift(); if (!job) return; const timer = setTimeout(() => job.slot.controller.abort(), VIEWER_LOAD_TIMEOUT); deadlines.add(timer); try { await job.run(); } catch { if (job.kind === 'model' && active() && !expired(job.slot.item) && job.slot.item.modelUrl) { failedModels.add(job.slot.item.id); job.slot.group.userData.representation = 'reference-photo-proxy'; job.slot.label.textContent = job.slot.photoUrl ? job.slot.item.title : 'Preview unavailable'; diagnostics(); invalidate(); } } finally { clearTimeout(timer); deadlines.delete(timer); } } }
+  async function runJobs() { for (;;) { if (!active()) return; const job = jobs.shift(); if (!job) return; const timer = setTimeout(() => { job.slot.controller.abort(); if (job.kind === 'model') modelFailed(job.slot); }, VIEWER_LOAD_TIMEOUT); deadlines.add(timer); try { await job.run(); } catch { if (job.kind === 'model') modelFailed(job.slot); } finally { clearTimeout(timer); deadlines.delete(timer); if (job.kind === 'model') settleModel(job.slot); } } }
   void Promise.all([runJobs(), runJobs()]); invalidate();
  } catch { fail('The studio renderer is unavailable. Your photos and gift stories remain available.'); }
  return {select: setFocus, reset, look, zoom, setMood, setPlaying, step, destroy};

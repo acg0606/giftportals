@@ -170,19 +170,20 @@ test('a place souvenir retains model volume and explicit yaw without fetching or
 });
 
 test('three deliberate HTML actions reveal the untouched GLB without 3D packaging',async()=>{
+  let revealed=0;
   await fixture(async state=>{
-    await state.loaded();state.run(100);assert.equal(state.readyCount(),1);assert.equal(state.viewer.getUnboxingState(),'wrapped');assert.equal(state.model.visible,false);
+    await state.loaded();state.run(100);assert.equal(state.readyCount(),1);assert.equal(state.viewer.getUnboxingState(),'wrapped');assert.equal(state.model.visible,false);assert.equal(revealed,0);
     const scene=state.frames.at(-1).scene,ui=state.host.children.find(value=>value.className==='gu-unboxing'),button=ui.children.find(value=>value.className==='gu-action');
     for(const name of ['Interactive gift wrapping','Gift box lifting lid','Gift display plinth'])assert.equal(scene.getObjectByName(name),undefined);
     const position=state.model.position.clone(),scale=state.model.scale.clone(),rotation=state.model.rotation.clone();
     let now=100;const drain=()=>{for(let i=0;i<80&&state.pending.size;i++)state.run(now+=40);assert.equal(state.pending.size,0,'The viewer sleeps after each HTML reveal action');};
     button.click();assert.equal(button.disabled,true);button.click();drain();assert.equal(state.viewer.getUnboxingState(),'ribbon');assert.equal(state.model.visible,false);
     button.click();drain();assert.equal(state.viewer.getUnboxingState(),'lid');assert.equal(state.model.visible,false);
-    button.click();drain();assert.equal(state.viewer.getUnboxingState(),'revealed');assert.equal(state.model.visible,true);assert.equal(button.hidden,true);assert.equal(state.focused,1);
+    button.click();drain();assert.equal(state.viewer.getUnboxingState(),'revealed');assert.equal(state.model.visible,true);assert.equal(button.hidden,true);assert.equal(state.focused,1);assert.equal(revealed,1);
     assert.ok(state.model.position.equals(position));assert.ok(state.model.scale.equals(scale));assert.ok(state.model.rotation.equals(rotation));assert.equal(state.standard.map,state.texture);
-    state.viewer.rotate(.1);state.viewer.zoom(-.1);state.run(now+=40);assert.equal(state.pending.size,0);
+    state.viewer.rotate(.1);state.viewer.zoom(-.1);state.run(now+=40);assert.equal(state.pending.size,0);assert.equal(revealed,1);
     state.viewer.destroy();state.viewer.destroy();assert.equal(state.geometryDisposed,1);assert.equal(state.modelTextureDisposed,1);assert.equal(ui.removed,true);
-  },{options:{unboxing:true,theme:'dusk'}});
+  },{options:{unboxing:true,theme:'dusk',onReveal:()=>revealed++}});
 });
 test('HTML reveal pauses while offscreen/blurred, and reduced motion completes only the requested step',async()=>{
   await fixture(async state=>{
