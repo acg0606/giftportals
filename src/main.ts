@@ -148,7 +148,7 @@ function header(active = '') {
   const href = (path: string) => `#/${scopedPath(path)}`;
   return `<header class="site-header"><a class="brand" href="#/home" aria-label="GiftPortals home"><img class="brand-image" src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a class="${active === 'gallery' ? 'active' : ''}" href="${href('collection')}">Explore</a><a class="${active === 'world' ? 'active' : ''}" href="${href('world')}">My world</a><a class="${active === 'atlas' ? 'active' : ''}" href="${href('atlas')}">Atlas</a></nav><div class="header-actions">${session() ? `<button class="avatar-button" data-account title="Account and sign out">${esc(session()!.user.displayName.slice(0, 1))}</button>` : `<button class="quiet-button login-trigger" data-auth>Sign in</button>`}<button class="button button-small" data-create>${giftIcon}Make a gift</button></div></header>`;
 }
-function footer() { return '<footer class="site-footer"><a class="brand footer-brand" href="#/home">GiftPortals</a><span>People. Places. Stories. Always with you.</span><span>Version 10.2.1 · Tripothon S1</span><a href="#/about">About & credits</a></footer>'; }
+function footer() { return '<footer class="site-footer"><a class="brand footer-brand" href="#/home">GiftPortals</a><span>People. Places. Stories. Always with you.</span><span>Version 10.3.0 · Tripothon S1</span><a href="#/about">About & credits</a></footer>'; }
 function bindCommon() {
   app.querySelectorAll<HTMLButtonElement>('[data-auth]').forEach((button) => button.onclick = () => showAuth());
   app.querySelectorAll<HTMLButtonElement>('[data-create]').forEach((button) => button.onclick = () => navigate('make'));
