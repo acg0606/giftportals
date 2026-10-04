@@ -9,13 +9,18 @@ const compile=source=>ts.transpileModule(source,{compilerOptions:{module:ts.Modu
 const data=source=>'data:text/javascript;base64,'+Buffer.from(source).toString('base64');
 const runtime=data(compile(await readFile(new URL('../src/viewer-runtime.ts',import.meta.url),'utf8')));
 const conveyor=data(compile(await readFile(new URL('../src/collection-conveyor.ts',import.meta.url),'utf8')));
+const props=data(compile(await readFile(new URL('../src/collection-props.ts',import.meta.url),'utf8'))
+ .replace("import * as THREE from 'three';",'const THREE=globalThis.__roomFixture.THREE;')
+ .replace("import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';",'class GLTFLoader { constructor(manager) { return new globalThis.__roomFixture.GLTFLoader(manager); } }')
+ .replace("from './viewer-runtime'",`from '${runtime}'`));
 const moduleCode=compile(await readFile(new URL('../src/collection-scene.ts',import.meta.url),'utf8'))
  .replace("import * as THREE from 'three';",'const THREE=globalThis.__roomFixture.THREE;')
  .replace("import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';",'const GLTFLoader=globalThis.__roomFixture.GLTFLoader;')
  .replace("import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';",'const {SparkRenderer,SplatMesh}=globalThis.__roomFixture;')
 
  .replace("from './viewer-runtime'",`from '${runtime}'`)
- .replace("from './collection-conveyor'",`from '${conveyor}'`);
+ .replace("from './collection-conveyor'",`from '${conveyor}'`)
+ .replace("from './collection-props'",`from '${props}'`);
 const controller=data(moduleCode);
 const flush=async()=>{await setImmediate();await setImmediate();};
 const deferred=()=>{let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail;});return{promise,resolve,reject};};
@@ -80,7 +85,7 @@ async function fixture(action,settings={}){
  };
  for(const[name,value]of Object.entries(values))Object.defineProperty(globalThis,name,{value,configurable:true,writable:true});
  const module=await import(controller+'#'+ ++sequence);state.module=module;state.host=new Element();
- state.scene=module.mountCollectionScene(state.host,{items:settings.items||[item('first',{imageUrl:'/synthetic/photo.png'}),item('second'),item('third')],environment:settings.environment,isCurrent:()=>state.current,onReady:()=>state.ready++,onUnavailable:message=>state.errors.push(message),onSelect:id=>state.selected.push(id),onProject:points=>state.projects.push(points),onPlaybackChange:value=>state.playback.push(value)});
+ state.propSelections=[];state.scene=module.mountCollectionScene(state.host,{items:settings.items||[item('first',{imageUrl:'/synthetic/photo.png'}),item('second'),item('third')],environment:settings.environment,props:settings.props||[],isCurrent:()=>state.current,onReady:()=>state.ready++,onUnavailable:message=>state.errors.push(message),onSelect:id=>state.selected.push(id),onPropSelect:id=>state.propSelections.push(id),onProject:points=>state.projects.push(points),onPlaybackChange:value=>state.playback.push(value)});
  state.draw=(elapsed=50)=>{const callbacks=[...state.frames.values()];state.frames.clear();state.now+=elapsed;callbacks.forEach(callback=>callback(state.now));};
  state.settle=()=>{for(let i=0;i<100&&state.frames.size;i++)state.draw();};
  state.pointer=(type,x,y)=>{const event=new Event(type);Object.assign(event,{button:0,pointerId:1,clientX:x+10,clientY:y+20});state.renderers[0].domElement.dispatchEvent(event);};
@@ -93,6 +98,19 @@ async function fixture(action,settings={}){
  const authoredMeshes=[];scene.traverse(object=>{if(object instanceof Three.Mesh&&!state.models.some(model=>model.root.getObjectById(object.id)))authoredMeshes.push(object);});assert.equal(authoredMeshes.length,0);assert.equal(state.host.dataset.roomModelsReady,'1');
  state.scene.destroy();state.scene.destroy();assert.equal(state.splats[0].disposed,1);assert.equal(state.sparks[0].disposed,1);assert.equal(state.environmentBitmaps[0].closed,1);assert.equal(state.timers.size,0);assert.equal(state.frames.size,0);
 },{items:[item('first',{modelUrl:'/synthetic/model.glb'})]}));
+
+test('the first room frame waits for imported desk props and taps activate their real mesh',async()=>fixture(async state=>{
+ assert.equal(state.parses.length,2);state.parses[0].resolve();await flush();state.draw();assert.equal(state.ready,0);assert.equal(state.renderers[0].cameras.length,0);
+ state.parses[1].resolve();await flush();state.draw();assert.equal(state.ready,1);assert.equal(state.host.dataset.roomPropsReady,'1');
+ const frame=state.renderers[0].scene.getObjectByName('Tripo photo-frame');assert.ok(frame);const center=new Three.Box3().setFromObject(frame).getCenter(new Three.Vector3()).project(state.renderers[0].camera),x=(center.x+1)*500,y=(1-center.y)*325;
+ const checkRay=new Three.Raycaster();checkRay.setFromCamera(new Three.Vector2(center.x,center.y),state.renderers[0].camera);assert.ok(checkRay.intersectObject(frame,true).length,'a projected prop center must intersect its imported mesh');
+ state.pointer('pointermove',x,y);assert.equal(state.renderers[0].domElement.title,'Your memories');state.pointer('pointerdown',x,y);state.pointer('pointerup',x,y);assert.deepEqual(state.propSelections,['photo-frame']);assert.deepEqual(state.selected,[]);
+ state.scene.destroy();assert.equal(frame.parent,null);assert.ok(state.models.every(value=>value.geometryDisposed===1&&value.materialDisposed===1));
+},{deferParse:true,items:[item('gift',{modelUrl:'/synthetic/gift.glb'})],props:[{id:'photo-frame',modelUrl:'/synthetic/frame.glb',position:[-.6,-.24,-1.2],maxBounds:[.16,.20,.07]}]}));
+
+test('exit while a desk prop decodes cannot reveal or reattach the late imported object',async()=>fixture(async state=>{
+ assert.equal(state.parses.length,1);state.scene.destroy();state.parses[0].resolve();await flush();state.draw();assert.equal(state.ready,0);assert.equal(state.renderers[0].scene,undefined);assert.equal(state.models[0].geometryDisposed,1);assert.equal(state.models[0].materialDisposed,1);
+},{deferParse:true,items:[],props:[{id:'travel-journal',modelUrl:'/synthetic/journal.glb',position:[.25,-.24,-.73],maxBounds:[.18,.025,.12]}]}));
 
 test('a decoded panorama only lights PBR materials and cannot reveal the pending 3D studio',async()=>fixture(async state=>{
  const scene=state.sparks[0].parent;assert.ok(scene.environment instanceof Three.Texture);assert.ok(scene.background instanceof Three.Color);assert.equal(scene.background.getHexString(),'101c2b');
@@ -178,7 +196,7 @@ test('a failed real gift model keeps an honest image preview without creating re
 
 test('a pending Tripo model never shows a large photo card before becoming the real desk souvenir',async()=>fixture(async state=>{
  state.draw();const renderer=state.renderers[0],group=state.sparks[0].parent.children.find(value=>value.userData.collectionId==='gift'),preview=state.host.children.find(child=>child.className==='cr-asset-preview');
- assert.equal(state.ready,0);assert.equal(renderer.cameras.length,0);assert.equal(state.host.dataset.roomPhotosReady,'1');assert.equal(state.host.dataset.roomModelsReady,'0');assert.equal(preview.children[0].hidden,false);assert.equal(preview.hidden,true);assert.equal(group.userData.representation,'loading-real-model');assert.equal(group.children.length,0);assert.deepEqual(group.scale.toArray(),[1,1,1]);assert.match(state.host.children.find(child=>child.className==='cr-environment-state').textContent,/opening keepsakes/);
+ assert.equal(state.ready,0);assert.equal(renderer.cameras.length,0);assert.equal(state.host.dataset.roomPhotosReady,'1');assert.equal(state.host.dataset.roomModelsReady,'0');assert.equal(preview.children[0].hidden,false);assert.equal(preview.hidden,true);assert.equal(group.userData.representation,'loading-real-model');assert.equal(group.children.length,0);assert.deepEqual(group.scale.toArray(),[1,1,1]);assert.match(state.host.children.find(child=>child.className==='cr-environment-state').textContent,/Opening your memory desk/);
  state.parses[0].resolve();await flush();state.draw();assert.equal(state.host.dataset.roomModelsReady,'1');assert.equal(group.children.length,1);assert.equal(preview.hidden,true);assert.equal(group.userData.representation,'cached-generated-model');assert.deepEqual(group.scale.toArray(),[1,1,1]);
 },{deferParse:true,items:[item('gift',{imageUrl:'/synthetic/photo.png',modelUrl:'/synthetic/model.glb'})]}));
 
@@ -251,5 +269,6 @@ test('fair shuffle visits every gift per bag and prevents an adjacent duplicate'
 
 test('GLB guards accept real cached sponsor models and reject external or excessive decode resources',async()=>fixture(async state=>{
  for(const path of ['rio-keepsake.glb','v13/paris-model.glb','v17/paris-model.glb','v13/antikythera-model.glb'])state.module.validateCollectionGLB(new Uint8Array(await readFile(new URL('../public/demo/'+path,import.meta.url))));
+ for(const path of ['brass-travel-frame.glb','leather-travel-journal.glb','brass-travel-frame-mobile.glb','leather-travel-journal-mobile.glb'])state.module.validateCollectionGLB(new Uint8Array(await readFile(new URL('../public/assets/v10/props/'+path,import.meta.url))));
  for(const document of [{buffers:[{uri:'https://external.invalid/file.bin',byteLength:0}]},{images:[{uri:'https://external.invalid/image.png'}]},{nodes:Array(257).fill({})},{accessors:[{count:2_000_001}]},{extensionsRequired:['KHR_draco_mesh_compression']}])assert.throws(()=>state.module.validateCollectionGLB(glb(document)));
 }));

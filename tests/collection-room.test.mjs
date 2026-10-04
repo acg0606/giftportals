@@ -177,3 +177,51 @@ test('a failed lazy import offers retry without mounting a renderer or adding su
   state.find('[data-cr-retry]').click();assert.equal(state.imports.length,2);assert.equal(state.host.dataset.roomPhase,'loading');state.imports[1].resolve();await flush();assert.equal(state.renderers.length,1);state.renderers[0].options.onReady();assert.equal(state.host.dataset.roomPhase,'ready');
  },{deferredImport:true});
 });
+
+test('the real photo-frame action opens the gift drawer, focuses its list and pauses without opening a gift',async()=>{
+ await fixture(async state=>{
+  const renderer=state.renderers[0];renderer.options.onReady();assert.equal(state.host.dataset.playing,'true');
+  renderer.options.onPropSelect('photo-frame');
+  assert.equal(state.find('[data-cr-drawer]').open,true);assert.equal(state.find('[data-cr-drawer-open]').getAttribute('aria-expanded'),'true');
+  assert.equal(state.document.activeElement,state.find('[data-cr-list-item="gift-0"]'));assert.equal(state.host.dataset.playing,'false');
+  assert.equal(state.find('[data-cr-play]').getAttribute('aria-label'),'Play desk');assert.ok(renderer.calls.some(call=>call[0]==='playing'&&call[1]===false));
+  assert.equal(state.creates,0);assert.deepEqual(state.opened,[]);assert.equal(state.find('[data-cr-detail]').hidden,true);
+  state.find('[data-cr-drawer-close]').click();assert.equal(state.find('[data-cr-drawer]').open,false);assert.equal(state.host.dataset.playing,'false');
+ });
+});
+
+test('the real travel-journal action pauses playback, closes an existing gift drawer and calls creation once per activation',async()=>{
+ await fixture(async state=>{
+  const renderer=state.renderers[0];renderer.options.onReady();assert.equal(state.host.dataset.playing,'true');
+  renderer.options.onPropSelect('travel-journal');assert.equal(state.creates,1);assert.equal(state.host.dataset.playing,'false');
+  assert.equal(state.find('[data-cr-drawer]').open,false);assert.deepEqual(renderer.calls.at(-1),['playing',false]);assert.deepEqual(state.opened,[]);
+  renderer.options.onPropSelect('photo-frame');assert.equal(state.find('[data-cr-drawer]').open,true);const focus=state.focus.length;
+  renderer.options.onPropSelect('travel-journal');assert.equal(state.creates,2);assert.equal(state.find('[data-cr-drawer]').open,false);
+  assert.equal(state.find('[data-cr-drawer-open]').getAttribute('aria-expanded'),'false');assert.equal(state.focus.length,focus);assert.equal(state.host.dataset.playing,'false');
+ });
+});
+
+test('retired prop callbacks after pagination or destroy cannot open the drawer, create gifts or change playback',async()=>{
+ await fixture(async state=>{
+  const first=state.renderers[0];first.options.onReady();state.find('[data-cr-page="next"]').click();await flush();
+  const second=state.renderers[1];second.options.onReady();const focus=state.focus.length,calls=second.calls.length;
+  first.options.onPropSelect('photo-frame');first.options.onPropSelect('travel-journal');
+  assert.equal(first.destroyed,1);assert.equal(first.options.isCurrent(),false);assert.equal(state.find('[data-cr-drawer]').open,false);
+  assert.equal(state.creates,0);assert.equal(state.focus.length,focus);assert.equal(state.host.dataset.playing,'true');assert.equal(second.calls.length,calls);
+  second.options.onPropSelect('photo-frame');assert.equal(state.find('[data-cr-drawer]').open,true);assert.equal(state.document.activeElement,state.find('[data-cr-list-item="gift-0"]'));
+  second.options.onPropSelect('travel-journal');assert.equal(state.creates,1);assert.equal(state.find('[data-cr-drawer]').open,false);
+  const drawer=state.find('[data-cr-drawer]');state.handle.destroy();const focusAfterExit=state.focus.length;
+  second.options.onPropSelect('photo-frame');second.options.onPropSelect('travel-journal');first.options.onPropSelect('travel-journal');
+  assert.equal(state.creates,1);assert.equal(drawer.open,false);assert.equal(state.focus.length,focusAfterExit);assert.equal(state.host.children.length,0);assert.equal(state.host.dataset.playing,undefined);
+ },{count:7});
+});
+
+test('prop actions from an unavailable or externally rerouted room cannot invoke creation or drawer changes',async()=>{
+ for(const unavailable of [false,true])await fixture(async state=>{
+  const renderer=state.renderers[0];renderer.options.onReady();
+  if(unavailable)renderer.options.onUnavailable('Synthetic context loss');else state.current=false;
+  const focus=state.focus.length,calls=renderer.calls.length,playing=state.host.dataset.playing;
+  renderer.options.onPropSelect('photo-frame');renderer.options.onPropSelect('travel-journal');
+  assert.equal(state.find('[data-cr-drawer]').open,false);assert.equal(state.creates,0);assert.equal(state.focus.length,focus);assert.equal(renderer.calls.length,calls);assert.equal(state.host.dataset.playing,playing);
+ });
+});

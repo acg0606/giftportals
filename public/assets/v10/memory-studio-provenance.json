@@ -1,16 +1,30 @@
 {
-  "format": "giftportals-worldlabs-studio-v1",
+  "format": "giftportals-worldlabs-studio-v2",
   "provider": "World Labs",
-  "worldId": "a986cafc-e5fa-42c7-a847-58b73a621ef6",
+  "model": "marble-1.1",
+  "worldId": "5e2a19e0-5d07-418a-9398-9792ad51ae8d",
+  "actualCredits": 1580,
   "input": {
-    "provider": "TapNow",
-    "kind": "generated-single-image",
+    "provider": "Tripo",
+    "stage": "image-to-image",
+    "model": "chat_image_2",
+    "quality": "high",
+    "taskId": "3eb48799-7068-4357-b99d-db1f8826c88c",
+    "actualCredits": 40,
+    "inputProvider": "TapNow",
+    "inputSHA256": "662cbce7112a254a2357fa433511a22293f74a6c3333a7976192d161592c9272",
+    "file": "studio-reference-corrected.png",
+    "mime": "image/png",
+    "bytes": 7169445,
+    "sha256": "9624cfadd7b01008ed64e7887517e2f87cfa084590389710a54833126b0957a1",
+    "privateURLsIncluded": false,
+    "url": "/assets/v10/studio-reference-corrected.png",
+    "kind": "sponsor-edited-single-image",
     "artisticInterpretation": true
   },
-  "actualCredits": 1580,
   "semantics": {
-    "metricScaleFactor": 1.2550683,
-    "groundPlaneOffset": 1.2042749
+    "metricScaleFactor": 1.4512057,
+    "groundPlaneOffset": 1.1945221
   },
   "collectionCalibration": {
     "providerExportRotationX": 3.141592653589793,
@@ -25,54 +39,64 @@
       -2.8
     ],
     "objectPosition": [
-      0,
-      -0.239,
-      -0.95
+      -0.1,
+      -0.202,
+      -1.12
     ],
     "objectSize": [
-      0.48,
-      0.4,
-      0.42
+      0.36,
+      0.3,
+      0.32
     ],
     "fieldOfView": 60,
-    "source": "actual transformed collider desk rays; desktop/mobile viewport review"
+    "source": "actual transformed World Labs collider with runtime GLB fitting; desktop/mobile viewport review"
   },
+  "props": [
+    {
+      "provider": "Tripo",
+      "modelUrl": "/assets/v10/props/brass-travel-frame.glb",
+      "mobileModelUrl": "/assets/v10/props/brass-travel-frame-mobile.glb",
+      "provenanceUrl": "/assets/v10/props/brass-travel-frame.provenance.json"
+    },
+    {
+      "provider": "Tripo",
+      "modelUrl": "/assets/v10/props/leather-travel-journal.glb",
+      "mobileModelUrl": "/assets/v10/props/leather-travel-journal-mobile.glb",
+      "provenanceUrl": "/assets/v10/props/leather-travel-journal.provenance.json"
+    }
+  ],
   "assets": [
     {
       "file": "memory-studio.spz",
       "url": "/assets/v10/memory-studio.spz",
-      "bytes": 7616521,
-      "sha256": "7c183fd16e2fe19634b84ad07047a0fe52352e85983495a66bdc0981efe5aa4a"
+      "bytes": 7598163,
+      "sha256": "4448c0c971cdd7815ecc22863a8f7f663f2d1c9da8aea4bf6319cb2d8601b8b6"
     },
     {
       "file": "memory-studio-mobile.spz",
       "url": "/assets/v10/memory-studio-mobile.spz",
-      "bytes": 1352468,
-      "sha256": "8e57d5bfc3b0bf2450e015a0981ad94106a645c9137742dcf015f2280dac0bb9"
-    },
-    {
-      "file": "memory-studio-full.spz",
-      "url": "/assets/v10/memory-studio-full.spz",
-      "bytes": 29253755,
-      "sha256": "0621d8484cf74d7d3d1cc1b044bc501cdd111a34ccfaa0c76c2fd513b127bf5f"
+      "bytes": 1331387,
+      "sha256": "330c9345bd6ef55e813af603e19d3c48dda3b0a9d0124ea28bee0cc896383239"
     },
     {
       "file": "memory-studio-pano.png",
       "url": "/assets/v10/memory-studio-pano.png",
-      "bytes": 11063417,
-      "sha256": "284d14e5d16826dcda7c6e56ab4e96f01fc15e5b245082567953275caab28675"
+      "bytes": 11493056,
+      "sha256": "8cf23b8f701dea59719cfe88da1ef8158165de58cebc7e9c3c83291fbfacb99f"
     },
     {
       "file": "memory-studio-collider.glb",
       "url": "/assets/v10/memory-studio-collider.glb",
-      "bytes": 1834760,
-      "sha256": "92653814a6bcdd0af919bd82d23f574256378d36189d7b32c3bf4f9a19c35ef9"
+      "bytes": 1797408,
+      "sha256": "1a1b040559d14ab185495ff4c4ac93a8515882a0da41e347847e6f9ca4d25a7a"
+    },
+    {
+      "file": "studio-reference-corrected.png",
+      "url": "/assets/v10/studio-reference-corrected.png",
+      "bytes": 7169445,
+      "sha256": "9624cfadd7b01008ed64e7887517e2f87cfa084590389710a54833126b0957a1"
     }
   ],
-  "notClaims": [
-    "Verified physical reconstruction",
-    "Animated objects",
-    "Physical headset validation"
-  ],
+  "replacesWorldId": "a986cafc-e5fa-42c7-a847-58b73a621ef6",
   "privateURLsIncluded": false
 }

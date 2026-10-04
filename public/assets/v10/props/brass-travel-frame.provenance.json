@@ -1,0 +1,91 @@
+{
+  "title": "Brass travel photograph frame",
+  "provider": "Tripo",
+  "generatedAt": "2026-10-04T14:22:14.324Z",
+  "endpoint": "/v3/generation/text-to-model",
+  "taskIdentitySha256": "9785ae0839ae1c34170ae55356ae1f799ef76b02b0b60c4883f405b96690fd50",
+  "promptSha256": "d82c45883c4189588cb344804e660614e81b86157dc255310dd8e685e8fdf1af",
+  "prompt": "A single compact freestanding landscape travel photograph frame, a complete real physical desk object, about 18 cm wide and 13 cm tall. An elegant thin brushed brass rectangular frame with softly rounded corners, a glass inset, a finished dark back and a small rear easel support, tilted gently backward. Inside is one richly coloured travel photograph of Mount Fuji, a red torii gate, pink cherry blossoms and a blue lake at golden hour. The photograph fills the inset edge to edge; no white blank picture or white border. Frame, glass, back and stand have true thickness and separate visible contours. Refined physically based brass, glass and wood, restrained authentic wear, realistic proportions. Neutral balanced studio lighting without baked harsh shadows. Isolate the complete frame alone, centred, three quarter front view on a plain white background. No desk, room, people, other objects, labels or logos. Genuine solid 3D geometry with a finished back, not a flat billboard.",
+  "negativePrompt": "cartoon, low poly, flat billboard, cardboard cutout, white blank photograph, empty frame, room, desk, furniture, people, labels, logos, text, giant plinth, broken stand, distorted perspective",
+  "requested": {
+    "model": "v3.1-20260211",
+    "texture": true,
+    "pbr": true,
+    "geometry_quality": "detailed",
+    "texture_quality": "detailed",
+    "texture_version": "v3.5-20260815",
+    "delight": true,
+    "face_limit": 30000,
+    "auto_size": true,
+    "quad": false,
+    "export_uv": true
+  },
+  "glb": {
+    "file": "brass-travel-frame.glb",
+    "bytes": 8589368,
+    "sha256": "b601a0c4fbc3da5153f7c169c39b3016ad0a477bd3564653dd3d24c2c78844e2",
+    "vertices": 22134,
+    "triangles": 27914,
+    "meshes": 1,
+    "materials": 1,
+    "embeddedTextures": 3,
+    "textureDetails": [
+      {
+        "mime": "image/jpeg",
+        "bytes": 3178724,
+        "width": 4096,
+        "height": 4096
+      },
+      {
+        "mime": "image/jpeg",
+        "bytes": 2181580,
+        "width": 4096,
+        "height": 4096
+      },
+      {
+        "mime": "image/png",
+        "bytes": 2183519,
+        "width": 4096,
+        "height": 4096
+      }
+    ],
+    "sourceAccessorBounds": [
+      {
+        "min": [
+          -0.2680961787700653,
+          -0.4897269010543823,
+          -0.3484305143356323
+        ],
+        "max": [
+          0.26795199513435364,
+          0.49021846055984497,
+          0.3482569456100464
+        ]
+      }
+    ],
+    "doubleSidedMaterials": 0,
+    "pbrMapPresence": [
+      {
+        "baseColor": true,
+        "metallicRoughness": true,
+        "normal": true
+      }
+    ]
+  },
+  "creditsConsumed": 50,
+  "placementHint": "Compact upright accent. Keep the photo facing the desk camera and the easel bottom on the measured tabletop; do not cover the souvenir or embedded laptop.",
+  "visualQa": {
+    "providerPreview": "reviewed",
+    "reviewedAt": "2026-10-04T14:24:49.458Z",
+    "scope": "Actual Tripo-rendered front three-quarter preview only; final room placement and mobile rendering remain to be checked.",
+    "notes": [
+      "Coloured Fuji, torii, blossoms and lake photograph is present.",
+      "Solid brass-coloured border and rear support are visible.",
+      "Provider returned a portrait composition despite the landscape prompt."
+    ]
+  },
+  "sources": [
+    "https://developers.tripo3d.ai/en/docs/generation-text-to-model/standard",
+    "https://developers.tripo3d.ai/en/models/v3-1"
+  ]
+}

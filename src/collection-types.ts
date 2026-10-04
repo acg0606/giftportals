@@ -27,6 +27,7 @@ export interface CollectionSceneOptions {
   onReady(): void;
   onUnavailable(message: string): void;
   onPlaybackChange?(playing: boolean): void;
+  onPropSelect?(id: 'photo-frame' | 'travel-journal'): void;
 }
 export interface CollectionSceneHandle {
   select(id: string | null): void;

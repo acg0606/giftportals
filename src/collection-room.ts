@@ -193,6 +193,7 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
           items: pageItems, isCurrent: () => current() && !unavailable,
           onPlaybackChange: (next: boolean) => { if (mounted && current() && !unavailable) syncPlayback(next, false); },
           onSelect: (id: string) => { if (current() && !unavailable) selectItem(id, true, false); },
+          onPropSelect: (id: 'photo-frame' | 'travel-journal') => { if (!current() || unavailable) return; syncPlayback(false); if (id === 'photo-frame') showDrawer(); else { closeDrawer(false); options.onCreate(); } },
           onProject: (positions: readonly CollectionProjection[]) => { if (current() && !unavailable) { latestProjection = positions; if (sceneReady) project(positions); } },
           onReady: () => { if (!current() || unavailable) return; sceneReady = true; roomPhase = 'ready'; host.dataset.roomPhase = roomPhase; stage.classList.add('is-ready'); sceneHost.inert = false; loading.hidden = true; find('[data-cr-empty]').hidden = !!items.length; host.querySelectorAll<HTMLButtonElement>('[data-cr-control]').forEach(button => button.disabled = !pageItems.length && ['previous','next'].includes(button.dataset.crControl || '')); find<HTMLButtonElement>('[data-cr-mood]').disabled = false; syncPlayback(playing, false); project(latestProjection); },
           onUnavailable: () => { if (!current() || unavailable) return; unavailable = true; scene?.destroy(); scene = undefined; loadingState('The 3D desk could not open. Try again or browse your gifts.', true); },

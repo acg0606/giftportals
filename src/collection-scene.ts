@@ -4,6 +4,7 @@ import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 
 import { createFrameGate, fetchViewerBytes, observeViewerVisibility, viewerAssetUrl, viewerPixelRatio, VIEWER_LOAD_TIMEOUT } from './viewer-runtime';
 import { createCollectionConveyor, conveyorSetPlaying, conveyorSetReduced } from './collection-conveyor';
+import { mountCollectionProps, type CollectionPropConfig, type CollectionPropsHandle } from './collection-props';
 import type { CollectionRoomItem, CollectionProjection, CollectionSceneOptions, CollectionSceneHandle, CollectionMood } from './collection-types';
 
 const MAX_ITEMS = 6, MAX_MODEL_VERTICES = 500_000, MAX_IMAGE_PIXELS = 16_777_216;
@@ -87,9 +88,14 @@ export interface CollectionEnvironmentConfig {
  * Calibrate these values against the completed world, never an invented desk. */
 export const DEFAULT_COLLECTION_ENVIRONMENT: CollectionEnvironmentConfig = {
  worldUrl: '/assets/v10/memory-studio.spz', mobileWorldUrl: '/assets/v10/memory-studio-mobile.spz', panoramaUrl: '/assets/v10/memory-studio-pano.png',
- cameraPosition: [0, 0, .03], cameraTarget: [0, -.30, -2.8], objectPosition: [0, -.239, -.95], objectSize: [.48, .4, .42],
+ cameraPosition: [0, 0, .03], cameraTarget: [0, -.30, -2.8], objectPosition: [-.10, -.202, -1.12], objectSize: [.36, .30, .32],
  worldPosition: [0, 0, 0], worldRotation: [Math.PI, 0, 0], worldScale: 1, fieldOfView: 60, panoramaYaw: 0,
 };
+/** Independent sponsor-generated meshes, supported by the World Labs desktop. */
+export const DEFAULT_COLLECTION_PROPS: readonly CollectionPropConfig[] = [
+ {id: 'photo-frame', modelUrl: '/assets/v10/props/brass-travel-frame.glb', position: [-.53, -.187, -.92], rotation: [0, -Math.PI / 2, 0], maxBounds: [.16, .20, .115]},
+ {id: 'travel-journal', modelUrl: '/assets/v10/props/leather-travel-journal.glb', position: [-.15, -.196, -.76], rotation: [0, -Math.PI / 2, 0], maxBounds: [.16, .055, .145]},
+];
 function environmentConfig(input: Partial<CollectionEnvironmentConfig> = {}): CollectionEnvironmentConfig {
  const base = DEFAULT_COLLECTION_ENVIRONMENT;
  const vector = (value: readonly [number, number, number] | undefined, fallback: readonly [number, number, number], positive = false): readonly [number, number, number] => Array.isArray(value) && value.length === 3 && value.every(n => Number.isFinite(n) && (positive ? n > 0 && n <= 50 : Math.abs(n) <= 500)) ? [value[0], value[1], value[2]] : fallback;
@@ -104,7 +110,7 @@ interface ConveyorItem {
 }
 /** Renders a completed World Labs studio and real Tripo gifts. No room furniture,
  * decorative props, gift stand-ins or painted room textures are authored here. */
-export function mountCollectionScene(host: HTMLElement, options: CollectionSceneOptions & {environment?: Partial<CollectionEnvironmentConfig>}): CollectionSceneHandle {
+export function mountCollectionScene(host: HTMLElement, options: CollectionSceneOptions & {environment?: Partial<CollectionEnvironmentConfig>; props?: readonly CollectionPropConfig[]}): CollectionSceneHandle {
  const config = environmentConfig(options.environment), items = collectionSceneItems(options.items), scene = new THREE.Scene();
  const camera = new THREE.PerspectiveCamera(config.fieldOfView, 1, .05, 150), cameraHome = new THREE.Vector3(...config.cameraPosition);
  const target = new THREE.Vector3(...config.cameraTarget), wantedTarget = target.clone(), objectOrigin = new THREE.Vector3(...config.objectPosition);
@@ -115,7 +121,7 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
  let dead = false, unavailable = false, announced = false, reduced = motion?.matches ?? false, selected: string | null = null, hovered: string | null = null;
  let renderer: THREE.WebGLRenderer | undefined, spark: SparkRenderer | undefined, splats: SplatMesh | undefined, panorama: THREE.Texture | undefined, panoramaBitmap: ImageBitmap | undefined;
  let gate: ReturnType<typeof createFrameGate> | undefined, stopVisibility: (() => void) | undefined, observer: ResizeObserver | undefined;
- let worldReady = false, blurred = false;
+ let worldReady = false, propsReady = false, blurred = false, props: CollectionPropsHandle | undefined;
  let width = 1, height = 1, yaw = 0, wantedYaw = 0, zoomOffset = 0, fieldOfView = config.fieldOfView, wantedFov = fieldOfView, lastFrame: number | null = null;
  let pointer: {id: number; x: number; y: number; startX: number; startY: number; dragged: boolean} | undefined;
  const active = () => !dead && host.isConnected && options.isCurrent();
@@ -139,8 +145,8 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
  function environmentState() {
   if (dead) return;
   host.dataset.roomEnvironmentProvider = worldReady ? 'WorldLabs' : 'pending';
-  host.dataset.roomEnvironmentState = worldReady && pendingModels.size === 0 ? 'ready' : 'loading';
-  status.textContent = worldReady ? pendingModels.size ? 'World Labs studio · opening keepsakes…' : 'World Labs studio · 3D' : 'Opening the World Labs studio…';
+  host.dataset.roomEnvironmentState = worldReady && propsReady && pendingModels.size === 0 ? 'ready' : 'loading';
+  status.textContent = worldReady ? pendingModels.size || !propsReady ? 'Opening your memory desk…' : 'Your memory desk · 3D' : 'Opening your memory desk…';
  }
  function invalidate() { if (active()) gate?.request(); }
  function textureMaterials(root: THREE.Object3D) {
@@ -154,12 +160,12 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
  function disposeSplat(value: SplatMesh) { if (disposedSplats.has(value)) return; disposedSplats.add(value); try { value.dispose(); } catch { /* Partial decoder initialization may have failed. */ } }
  function releasePointer() { if (!pointer) return; const id = pointer.id; pointer = undefined; try { if (renderer?.domElement.hasPointerCapture(id)) renderer.domElement.releasePointerCapture(id); } catch {} }
  function destroy() {
-  if (dead) return; dead = true; downloads.abort(); events.abort(); releasePointer(); gate?.destroy(); stopVisibility?.(); observer?.disconnect(); motion?.removeEventListener('change', motionChanged);
+  if (dead) return; dead = true; downloads.abort(); events.abort(); releasePointer(); gate?.destroy(); stopVisibility?.(); observer?.disconnect(); motion?.removeEventListener('change', motionChanged); props?.destroy();
   for (const timer of deadlines) clearTimeout(timer); deadlines.clear();
   for (const slot of slots) { clearTimeout(slot.timer); slot.controller.abort(); if (slot.model) disposeModel(slot.model); if (slot.photoUrl) URL.revokeObjectURL(slot.photoUrl); slot.image.removeAttribute('src'); slot.proxy.remove(); }
   if (splats) disposeSplat(splats); try { spark?.dispose(); } catch {} scene.environment = null; scene.background = null; panorama?.dispose(); panoramaBitmap?.close(); panorama = undefined; panoramaBitmap = undefined;
   renderer?.dispose(); renderer?.forceContextLoss(); renderer?.domElement.remove(); scene.clear(); status.remove(); host.style.cursor = '';
-  for (const name of ['roomModelsReady', 'roomModelsFailed', 'roomPhotosReady', 'roomEnvironmentProvider', 'roomEnvironmentState', 'roomEnvironmentBudget']) delete host.dataset[name];
+  for (const name of ['roomModelsReady', 'roomModelsFailed', 'roomPhotosReady', 'roomEnvironmentProvider', 'roomEnvironmentState', 'roomEnvironmentBudget', 'roomPropsReady', 'roomPropsFailed']) delete host.dataset[name];
  }
  function fail(message: string) { if (dead || unavailable) return; unavailable = true; destroy(); options.onUnavailable(message); }
  async function environmentJob(work: (signal: AbortSignal) => Promise<void>, failed: () => void) {
@@ -255,8 +261,9 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
    slot.proxy.hidden = !visible || !photoFallback; if (!slot.proxy.hidden) { slot.proxy.style.left = `${(point.x + 1) * width / 2}px`; slot.proxy.style.top = `${(1 - point.y) * height / 2}px`; }
    return {id: slot.item.id, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, visible}; });
  }
- function hit(event: PointerEvent) { const rect = host.getBoundingClientRect(); ndc.set((event.clientX - rect.left) / Math.max(1, rect.width) * 2 - 1, -(event.clientY - rect.top) / Math.max(1, rect.height) * 2 + 1); camera.updateMatrixWorld(); scene.updateMatrixWorld(true); raycaster.setFromCamera(ndc, camera);
-  for (const value of raycaster.intersectObjects(slots.map(slot => slot.group), true)) { let object: THREE.Object3D | null = value.object, slot: ConveyorItem | undefined, visible = true; while (object) { visible &&= object.visible; slot ||= slots.find(candidate => object === candidate.group); object = object.parent; } if (visible && slot) return slot; } return undefined;
+ function hit(event: PointerEvent): {slot: ConveyorItem} | {prop: 'photo-frame' | 'travel-journal'} | undefined { const rect = host.getBoundingClientRect(); ndc.set((event.clientX - rect.left) / Math.max(1, rect.width) * 2 - 1, -(event.clientY - rect.top) / Math.max(1, rect.height) * 2 + 1); camera.updateMatrixWorld(); scene.updateMatrixWorld(true); raycaster.setFromCamera(ndc, camera);
+  const propHit = props?.hit(raycaster);
+  for (const value of raycaster.intersectObjects(slots.map(slot => slot.group), true)) { let object: THREE.Object3D | null = value.object, slot: ConveyorItem | undefined, visible = true; while (object) { visible &&= object.visible; slot ||= slots.find(candidate => object === candidate.group); object = object.parent; } if (visible && slot) return propHit && propHit.distance < value.distance ? {prop: propHit.id} : {slot}; } return propHit ? {prop: propHit.id} : undefined;
  }
  try {
   renderer = new THREE.WebGLRenderer({antialias: false, alpha: false, powerPreference: 'high-performance'}); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
@@ -270,7 +277,7 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   }
   diagnostics(); environmentState(); options.onPlaybackChange?.(belt.playing);
   gate = createFrameGate(now => {
-   if (!active() || !renderer || blurred || !worldReady || pendingModels.size > 0) return; if (lastFrame !== null && now - lastFrame < 49) { gate?.request(); return; }
+   if (!active() || !renderer || blurred || !worldReady || !propsReady || pendingModels.size > 0) return; if (lastFrame !== null && now - lastFrame < 49) { gate?.request(); return; }
    const dt = lastFrame === null ? 0 : clamp((now - lastFrame) / 1000, 0, .05); lastFrame = now;
    const automatic = belt.playing && !reduced && pendingModels.size === 0;
    deskShuffleAdvance(desk, dt, automatic, reduced); belt.cursor = desk.current;
@@ -289,12 +296,16 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   observer = new ResizeObserver(resize); observer.observe(host); resize(); motion?.addEventListener('change', motionChanged);
   const pointerEvent = (name: string, listener: (event: PointerEvent) => void) => renderer!.domElement.addEventListener(name, listener as EventListener, {signal: events.signal});
   pointerEvent('pointerdown', event => { if (!active() || event.button !== 0) return; pointer = {id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, dragged: false}; try { renderer!.domElement.setPointerCapture(event.pointerId); } catch {} });
-  pointerEvent('pointermove', event => { if (!active()) return; if (pointer && pointer.id === event.pointerId) { const dx = event.clientX - pointer.x; pointer.dragged ||= Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > 6; pointer.x = event.clientX; pointer.y = event.clientY; if (pointer.dragged) { const previous = belt.playing; conveyorSetPlaying(belt, false); look(-dx * .0017); publishPlayback(previous); } } else { const next = hit(event)?.item.id || null; if (next !== hovered) { hovered = next; host.style.cursor = next ? 'pointer' : ''; invalidate(); } } });
-  pointerEvent('pointerup', event => { if (!pointer || pointer.id !== event.pointerId) return; const slot = !pointer.dragged && active() ? hit(event) : undefined; releasePointer(); if (slot) { setFocus(slot.item.id); options.onSelect(slot.item.id); } });
-  pointerEvent('pointercancel', releasePointer); pointerEvent('lostpointercapture', releasePointer); pointerEvent('pointerleave', () => { if (!pointer) { hovered = null; host.style.cursor = ''; } });
+  pointerEvent('pointermove', event => { if (!active()) return; if (pointer && pointer.id === event.pointerId) { const dx = event.clientX - pointer.x; pointer.dragged ||= Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > 6; pointer.x = event.clientX; pointer.y = event.clientY; if (pointer.dragged) { const previous = belt.playing; conveyorSetPlaying(belt, false); look(-dx * .0017); publishPlayback(previous); } } else { const found = hit(event), next = found && ('slot' in found ? found.slot.item.id : found.prop) || null; if (next !== hovered) { hovered = next; host.style.cursor = next ? 'pointer' : ''; renderer!.domElement.title = found && 'prop' in found ? found.prop === 'photo-frame' ? 'Your memories' : 'Create a gift' : ''; invalidate(); } } });
+  pointerEvent('pointerup', event => { if (!pointer || pointer.id !== event.pointerId) return; const found = !pointer.dragged && active() ? hit(event) : undefined; releasePointer(); if (found && 'slot' in found) { setFocus(found.slot.item.id); options.onSelect(found.slot.item.id); } else if (found && 'prop' in found) { setPlaying(false); props?.activate(found.prop); } });
+  pointerEvent('pointercancel', releasePointer); pointerEvent('lostpointercapture', releasePointer); pointerEvent('pointerleave', () => { if (!pointer) { hovered = null; host.style.cursor = ''; renderer!.domElement.title = ''; } });
   renderer.domElement.addEventListener('keydown', event => { if (!active() || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return; if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); event.stopPropagation(); step(event.key === 'ArrowRight' ? 1 : -1); } else if (event.code === 'Space' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setPlaying(!belt.playing); } else if (event.key === '+' || event.key === '=') { event.preventDefault(); zoom(-1); } else if (event.key === '-') { event.preventDefault(); zoom(1); } else if (event.key.toLowerCase() === 'r') { event.preventDefault(); reset(); } }, {signal: events.signal});
   void environmentJob(loadWorld, () => { fail('The 3D studio could not load. Your photos and gift stories remain available.'); });
   void environmentJob(loadPanorama, () => { /* Imported models remain usable with the scene lights. */ });
+  const propStates = new Map<string, string>();
+  const propConfigs = options.props ?? DEFAULT_COLLECTION_PROPS.map(prop => innerWidth <= 640 ? {...prop, modelUrl: prop.modelUrl.replace('.glb', '-mobile.glb')} : prop);
+  props = mountCollectionProps({parent: scene, props: propConfigs, origin: location.origin, isCurrent: active, validateGLB: validateCollectionGLB, textureLimit: innerWidth <= 640 ? 1024 : 2048, onActivate: id => { if (active()) options.onPropSelect?.(id); }, onInvalidate: invalidate, onState: outcome => { propStates.set(outcome.id, outcome.state); host.dataset.roomPropsReady = String([...propStates.values()].filter(value => value === 'ready').length); host.dataset.roomPropsFailed = String([...propStates.values()].filter(value => value === 'failed').length); }});
+  void props.ready.then(() => { if (!active()) return; propsReady = true; desk.elapsed = 0; lastFrame = null; environmentState(); invalidate(); });
   const jobs = slots.flatMap(slot => [{slot, kind: 'photo', run: () => thumbnail(slot)}, {slot, kind: 'model', run: () => model(slot)}]);
   async function runJobs() { for (;;) { if (!active()) return; const job = jobs.shift(); if (!job) return; const timer = setTimeout(() => { job.slot.controller.abort(); if (job.kind === 'model') modelFailed(job.slot); }, VIEWER_LOAD_TIMEOUT); deadlines.add(timer); try { await job.run(); } catch { if (job.kind === 'model') modelFailed(job.slot); } finally { clearTimeout(timer); deadlines.delete(timer); if (job.kind === 'model') settleModel(job.slot); } } }
   void Promise.all([runJobs(), runJobs()]); invalidate();

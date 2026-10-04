@@ -1,0 +1,91 @@
+{
+  "title": "Leather travel journal with pen",
+  "provider": "Tripo",
+  "generatedAt": "2026-10-04T14:20:29.375Z",
+  "endpoint": "/v3/generation/text-to-model",
+  "taskIdentitySha256": "df7eeeb86116e805ce41b8025593eb9f5c7eb972cebe6d37548aae9c7cccbbd7",
+  "promptSha256": "3bc2d9fde39e9e564a001f7a04963c067fa866b67248c11cacf0b7e1facf14db",
+  "prompt": "A single compact closed travel journal with one pen resting snugly along its right edge, a complete real physical desk object, about 19 cm long, 13 cm wide and 2 cm thick. The journal has a rich cognac brown leather hard cover, rounded corners, fine stitched edges, restrained embossed compass decoration without letters, cream paper edges and a narrow leather closure strap. A refined dark brass fountain pen with a clip rests parallel to the long edge, secured beside the cover by a small leather loop. Closed and lying flat. Leather grain, paper layers and metal details are clear. Real thickness, finished underside and distinct pen contours, no merged flat shapes. High fidelity physically based leather, paper and brushed brass with subtle wear. Neutral balanced studio lighting without baked harsh shadows. Isolate the entire journal and attached pen alone, centred, three quarter top view on a plain white background. No desk, room, hands, extra objects, pedestal, labels or logos. Genuine solid 3D geometry.",
+  "negativePrompt": "cartoon, low poly, flat billboard, cardboard cutout, open book, white cover, plastic leather, floating pen, people, desk, room, giant pedestal, labels, logos, text, broken mesh, fused pen",
+  "requested": {
+    "model": "v3.1-20260211",
+    "texture": true,
+    "pbr": true,
+    "geometry_quality": "detailed",
+    "texture_quality": "detailed",
+    "texture_version": "v3.5-20260815",
+    "delight": true,
+    "face_limit": 30000,
+    "auto_size": true,
+    "quad": false,
+    "export_uv": true
+  },
+  "glb": {
+    "file": "leather-travel-journal.glb",
+    "bytes": 12359092,
+    "sha256": "eb24ac00163dd44900380d91f06afa73b31370a03c26fedee0c46d887185a8df",
+    "vertices": 17910,
+    "triangles": 28004,
+    "meshes": 1,
+    "materials": 1,
+    "embeddedTextures": 3,
+    "textureDetails": [
+      {
+        "mime": "image/jpeg",
+        "bytes": 5257715,
+        "width": 4096,
+        "height": 4096
+      },
+      {
+        "mime": "image/jpeg",
+        "bytes": 1411927,
+        "width": 4096,
+        "height": 4096
+      },
+      {
+        "mime": "image/png",
+        "bytes": 4777994,
+        "width": 4096,
+        "height": 4096
+      }
+    ],
+    "sourceAccessorBounds": [
+      {
+        "min": [
+          -0.4900777041912079,
+          -0.13695161044597626,
+          -0.4451872706413269
+        ],
+        "max": [
+          0.4909369945526123,
+          0.13701708614826202,
+          0.4445245862007141
+        ]
+      }
+    ],
+    "doubleSidedMaterials": 0,
+    "pbrMapPresence": [
+      {
+        "baseColor": true,
+        "metallicRoughness": true,
+        "normal": true
+      }
+    ]
+  },
+  "creditsConsumed": 50,
+  "placementHint": "Low horizontal accent. Rest the lower cover on the measured tabletop away from the souvenir staging area and embedded notebook; retain a clear silhouette for the pen.",
+  "visualQa": {
+    "providerPreview": "reviewed",
+    "reviewedAt": "2026-10-04T14:24:49.474Z",
+    "scope": "Actual Tripo-rendered front three-quarter preview only; final room placement and mobile rendering remain to be checked.",
+    "notes": [
+      "Leather grain, stitching and cream paper edges are visible.",
+      "Closed journal and brass-trimmed pen have distinct contours.",
+      "Inferred meter scale is too large for this desk; normalize by loaded world bounds."
+    ]
+  },
+  "sources": [
+    "https://developers.tripo3d.ai/en/docs/generation-text-to-model/standard",
+    "https://developers.tripo3d.ai/en/models/v3-1"
+  ]
+}

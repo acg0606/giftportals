@@ -1,0 +1,118 @@
+{
+  "kind": "derived-mobile-texture-variant",
+  "providerSource": "Tripo",
+  "newProviderRequests": 0,
+  "newCreditsConsumed": 0,
+  "source": {
+    "file": "leather-travel-journal.glb",
+    "sha256": "eb24ac00163dd44900380d91f06afa73b31370a03c26fedee0c46d887185a8df",
+    "bytes": 12359092
+  },
+  "derived": {
+    "file": "leather-travel-journal-mobile.glb",
+    "sha256": "aee349b6a7e8a23c24d9d6906ca419c556a78ff4e8c2837d0fd5868538b98318",
+    "bytes": 1684192
+  },
+  "technique": {
+    "tool": "Python Pillow",
+    "pillowVersion": "12.3.0",
+    "maximumTextureDimension": 1024,
+    "profile": "base-color-1024-normal-and-mr-512",
+    "resampling": "Lanczos",
+    "baseColor": "JPEG quality90 4:4:4 if opaque; PNG with original alpha when present",
+    "normalAndMetallicRoughness": "PNG lossless encoding after resolution reduction",
+    "note": "Spatial resolution is reduced. Lossless refers to the resized data-map encoding; prior provider JPEG compression is not reversed."
+  },
+  "textures": [
+    {
+      "index": 0,
+      "sourceMime": "image/jpeg",
+      "mime": "image/jpeg",
+      "roles": [
+        "baseColor"
+      ],
+      "sourceSize": [
+        4096,
+        4096
+      ],
+      "size": [
+        1024,
+        1024
+      ],
+      "sourceAlpha": false,
+      "alphaPreserved": false,
+      "encoding": "JPEG-quality90-444",
+      "bytes": 359471
+    },
+    {
+      "index": 1,
+      "sourceMime": "image/jpeg",
+      "mime": "image/png",
+      "roles": [
+        "metallicRoughness"
+      ],
+      "sourceSize": [
+        4096,
+        4096
+      ],
+      "size": [
+        512,
+        512
+      ],
+      "sourceAlpha": false,
+      "alphaPreserved": false,
+      "encoding": "PNG-lossless",
+      "bytes": 241532
+    },
+    {
+      "index": 2,
+      "sourceMime": "image/png",
+      "mime": "image/png",
+      "roles": [
+        "normal"
+      ],
+      "sourceSize": [
+        4096,
+        4096
+      ],
+      "size": [
+        512,
+        512
+      ],
+      "sourceAlpha": false,
+      "alphaPreserved": false,
+      "encoding": "PNG-lossless",
+      "bytes": 171737
+    }
+  ],
+  "verifiedUnchanged": {
+    "meshDefinitions": true,
+    "accessorDefinitions": true,
+    "geometryBufferViewBytes": [
+      {
+        "bufferView": 0,
+        "bytes": 336048,
+        "sha256": "b17329d1309a2ab1f2dbdcac9dc4922c41651b5e9e019ab3c00d778c192c3d63"
+      },
+      {
+        "bufferView": 1,
+        "bytes": 214920,
+        "sha256": "7d3ef4349ffd7512b9659963d7e229794794b4a3b5566e9f138f237445e5b9ff"
+      },
+      {
+        "bufferView": 2,
+        "bytes": 143280,
+        "sha256": "622a8ba25c13f6a3be4f9d7be40dc8d70851896c6c80e5a72db2c6863983433f"
+      },
+      {
+        "bufferView": 3,
+        "bytes": 214920,
+        "sha256": "35f3195eb08927185ea7156d61fee8d5473f597abfac000cb69a3efa04886f96"
+      }
+    ],
+    "materialDefinitionsAndPbrTextureBindings": true,
+    "nodeTransforms": true,
+    "scenesAnimationsAndSkins": true,
+    "externalResources": 0
+  }
+}
