@@ -1,0 +1,3756 @@
+{
+  "checkedAt": "2026-10-04T22:22:43.397Z",
+  "basis": "Actual downloaded provider collider; collection GLB pre-decode validator, Three GLTFLoader and BVH raycasts. Surface identity awaits the rendered world.",
+  "coordinates": "Three Y-up scene units: root rotation.x=Math.PI, unit scale, no added translation. Provider metric metadata is retained separately and not applied twice.",
+  "input": {
+    "file": "collider.glb",
+    "bytes": 6112284,
+    "sha256": "1911c8932d7bbdbb97dd005534eb5b069fcc88b2eff1753ab746810522cc67e4"
+  },
+  "meshes": 1,
+  "vertices": 119197,
+  "triangles": 231122,
+  "bounds": {
+    "min": [
+      -9.68602,
+      -4.8913,
+      -13.39237
+    ],
+    "max": [
+      13.43146,
+      3.96734,
+      13.58192
+    ]
+  },
+  "worldSemantics": {
+    "metricScaleFactor": 0.5552033185958862,
+    "groundPlaneOffset": 1.0559234619140625
+  },
+  "referenceCamera": [
+    0,
+    0,
+    0.03
+  ],
+  "nearCameraGrid": {
+    "originY": 0.35,
+    "step": 0.08,
+    "xRange": [
+      -1.8,
+      1.8
+    ],
+    "zRange": [
+      -3.2,
+      -0.4
+    ],
+    "normalAbsYGreaterThan": 0.9
+  },
+  "horizontalSurfaceCandidates": [
+    {
+      "sampleCount": 504,
+      "sampledArea": 3.2256,
+      "min": [
+        -1.64,
+        -0.34474,
+        -2.8
+      ],
+      "max": [
+        0.92,
+        -0.08838,
+        -0.4
+      ],
+      "medianY": -0.22586,
+      "center": [
+        -0.36,
+        -0.22586,
+        -1.6
+      ],
+      "verticalSpread": 0.25636,
+      "firstLineOfSightHit": null
+    },
+    {
+      "sampleCount": 40,
+      "sampledArea": 0.256,
+      "min": [
+        -1.8,
+        -1.08356,
+        -0.88
+      ],
+      "max": [
+        -1.16,
+        -1.02499,
+        -0.4
+      ],
+      "medianY": -1.05538,
+      "center": [
+        -1.48,
+        -1.05538,
+        -0.64
+      ],
+      "verticalSpread": 0.05857,
+      "firstLineOfSightHit": {
+        "point": [
+          -1.45891,
+          -1.04034,
+          -0.63045
+        ],
+        "normal": [
+          0.09202,
+          0.96854,
+          0.23122
+        ],
+        "distance": 1.90969
+      }
+    },
+    {
+      "sampleCount": 33,
+      "sampledArea": 0.2112,
+      "min": [
+        0.92,
+        -0.30339,
+        -0.8
+      ],
+      "max": [
+        1.8,
+        -0.25351,
+        -0.4
+      ],
+      "medianY": -0.28751,
+      "center": [
+        1.36,
+        -0.28751,
+        -0.6
+      ],
+      "verticalSpread": 0.04988,
+      "firstLineOfSightHit": null
+    },
+    {
+      "sampleCount": 18,
+      "sampledArea": 0.1152,
+      "min": [
+        -1.08,
+        -0.9781,
+        -0.56
+      ],
+      "max": [
+        -0.36,
+        -0.88349,
+        -0.4
+      ],
+      "medianY": -0.90992,
+      "center": [
+        -0.72,
+        -0.90992,
+        -0.48
+      ],
+      "verticalSpread": 0.09461,
+      "firstLineOfSightHit": null
+    },
+    {
+      "sampleCount": 9,
+      "sampledArea": 0.0576,
+      "min": [
+        0.92,
+        -0.21109,
+        -1.84
+      ],
+      "max": [
+        1.16,
+        -0.18446,
+        -1.6
+      ],
+      "medianY": -0.19658,
+      "center": [
+        1.04,
+        -0.19658,
+        -1.72
+      ],
+      "verticalSpread": 0.02663,
+      "firstLineOfSightHit": {
+        "point": [
+          0.79874,
+          -0.15098,
+          -1.31403
+        ],
+        "normal": [
+          -0.66078,
+          -0.25107,
+          0.70735
+        ],
+        "distance": 1.57073
+      }
+    }
+  ],
+  "centerRays": [
+    {
+      "pitch": 0,
+      "hits": [
+        {
+          "point": [
+            0,
+            0,
+            -3.0656
+          ],
+          "normal": [
+            0.59451,
+            -0.07616,
+            0.80047
+          ],
+          "distance": 3.0956
+        }
+      ]
+    },
+    {
+      "pitch": -0.12,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.22476,
+            -1.83397
+          ],
+          "normal": [
+            -0.17353,
+            0.92161,
+            0.34718
+          ],
+          "distance": 1.87748
+        }
+      ]
+    },
+    {
+      "pitch": -0.24,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.27768,
+            -1.1047
+          ],
+          "normal": [
+            0.06094,
+            0.97698,
+            0.20445
+          ],
+          "distance": 1.16818
+        }
+      ]
+    },
+    {
+      "pitch": -0.36,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.30985,
+            -0.79319
+          ],
+          "normal": [
+            0.013,
+            0.98736,
+            0.15797
+          ],
+          "distance": 0.87957
+        }
+      ]
+    },
+    {
+      "pitch": -0.48,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.31845,
+            -0.58169
+          ],
+          "normal": [
+            0.00032,
+            0.99999,
+            0.00523
+          ],
+          "distance": 0.68962
+        }
+      ]
+    }
+  ],
+  "verticalProbeGrid": [
+    {
+      "x": -0.6,
+      "z": -0.6,
+      "hits": [
+        {
+          "point": [
+            -0.6,
+            -0.87455,
+            -0.6
+          ],
+          "normal": [
+            -0.59835,
+            0.43659,
+            0.67184
+          ],
+          "distance": 1.22455
+        }
+      ]
+    },
+    {
+      "x": -0.6,
+      "z": -1,
+      "hits": [
+        {
+          "point": [
+            -0.6,
+            -0.28536,
+            -1
+          ],
+          "normal": [
+            0.0269,
+            0.92143,
+            0.38762
+          ],
+          "distance": 0.63536
+        }
+      ]
+    },
+    {
+      "x": -0.6,
+      "z": -1.4,
+      "hits": [
+        {
+          "point": [
+            -0.6,
+            -0.21958,
+            -1.4
+          ],
+          "normal": [
+            0.04669,
+            0.99059,
+            0.12867
+          ],
+          "distance": 0.56958
+        }
+      ]
+    },
+    {
+      "x": -0.6,
+      "z": -1.8,
+      "hits": [
+        {
+          "point": [
+            -0.6,
+            -0.19213,
+            -1.8
+          ],
+          "normal": [
+            0.08414,
+            0.99411,
+            0.06827
+          ],
+          "distance": 0.54213
+        }
+      ]
+    },
+    {
+      "x": -0.6,
+      "z": -2.2,
+      "hits": [
+        {
+          "point": [
+            -0.6,
+            -0.15604,
+            -2.2
+          ],
+          "normal": [
+            0.02399,
+            0.99647,
+            0.08044
+          ],
+          "distance": 0.50604
+        }
+      ]
+    },
+    {
+      "x": -0.3,
+      "z": -0.6,
+      "hits": [
+        {
+          "point": [
+            -0.3,
+            -0.70616,
+            -0.6
+          ],
+          "normal": [
+            0.06704,
+            0.70611,
+            -0.70492
+          ],
+          "distance": 1.05616
+        }
+      ]
+    },
+    {
+      "x": -0.3,
+      "z": -1,
+      "hits": [
+        {
+          "point": [
+            -0.3,
+            -0.30544,
+            -1
+          ],
+          "normal": [
+            -0.41858,
+            0.73967,
+            0.52695
+          ],
+          "distance": 0.65544
+        }
+      ]
+    },
+    {
+      "x": -0.3,
+      "z": -1.4,
+      "hits": [
+        {
+          "point": [
+            -0.3,
+            -0.25549,
+            -1.4
+          ],
+          "normal": [
+            -0.21191,
+            0.97609,
+            0.04842
+          ],
+          "distance": 0.60549
+        }
+      ]
+    },
+    {
+      "x": -0.3,
+      "z": -1.8,
+      "hits": [
+        {
+          "point": [
+            -0.3,
+            -0.19985,
+            -1.8
+          ],
+          "normal": [
+            0.00603,
+            0.9944,
+            0.10547
+          ],
+          "distance": 0.54985
+        }
+      ]
+    },
+    {
+      "x": -0.3,
+      "z": -2.2,
+      "hits": [
+        {
+          "point": [
+            -0.3,
+            -0.16094,
+            -2.2
+          ],
+          "normal": [
+            0.08564,
+            0.9909,
+            0.10383
+          ],
+          "distance": 0.51094
+        }
+      ]
+    },
+    {
+      "x": 0,
+      "z": -0.6,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.31836,
+            -0.6
+          ],
+          "normal": [
+            0.00032,
+            0.99999,
+            0.00523
+          ],
+          "distance": 0.66836
+        }
+      ]
+    },
+    {
+      "x": 0,
+      "z": -1,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.28924,
+            -1
+          ],
+          "normal": [
+            0.0622,
+            0.99712,
+            0.04334
+          ],
+          "distance": 0.63924
+        }
+      ]
+    },
+    {
+      "x": 0,
+      "z": -1.4,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.251,
+            -1.4
+          ],
+          "normal": [
+            -0.02379,
+            0.99027,
+            0.1371
+          ],
+          "distance": 0.601
+        }
+      ]
+    },
+    {
+      "x": 0,
+      "z": -1.8,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.23579,
+            -1.8
+          ],
+          "normal": [
+            -0.28528,
+            0.95473,
+            0.0843
+          ],
+          "distance": 0.58579
+        }
+      ]
+    },
+    {
+      "x": 0,
+      "z": -2.2,
+      "hits": [
+        {
+          "point": [
+            0,
+            -0.17445,
+            -2.2
+          ],
+          "normal": [
+            -0.16509,
+            0.98338,
+            0.0755
+          ],
+          "distance": 0.52445
+        }
+      ]
+    },
+    {
+      "x": 0.3,
+      "z": -0.6,
+      "hits": [
+        {
+          "point": [
+            0.3,
+            -0.3094,
+            -0.6
+          ],
+          "normal": [
+            0.05773,
+            0.99257,
+            0.10714
+          ],
+          "distance": 0.6594
+        }
+      ]
+    },
+    {
+      "x": 0.3,
+      "z": -1,
+      "hits": [
+        {
+          "point": [
+            0.3,
+            -0.29797,
+            -1
+          ],
+          "normal": [
+            -0.14098,
+            0.98045,
+            -0.13726
+          ],
+          "distance": 0.64797
+        }
+      ]
+    },
+    {
+      "x": 0.3,
+      "z": -1.4,
+      "hits": [
+        {
+          "point": [
+            0.3,
+            -0.26627,
+            -1.4
+          ],
+          "normal": [
+            -0.18837,
+            0.95902,
+            0.21165
+          ],
+          "distance": 0.61627
+        }
+      ]
+    },
+    {
+      "x": 0.3,
+      "z": -1.8,
+      "hits": [
+        {
+          "point": [
+            0.3,
+            -0.21056,
+            -1.8
+          ],
+          "normal": [
+            0.05883,
+            0.94352,
+            0.32604
+          ],
+          "distance": 0.56056
+        }
+      ]
+    },
+    {
+      "x": 0.3,
+      "z": -2.2,
+      "hits": [
+        {
+          "point": [
+            0.3,
+            -0.18141,
+            -2.2
+          ],
+          "normal": [
+            -0.02412,
+            0.99691,
+            0.07476
+          ],
+          "distance": 0.53141
+        }
+      ]
+    },
+    {
+      "x": 0.6,
+      "z": -0.6,
+      "hits": [
+        {
+          "point": [
+            0.6,
+            0.1063,
+            -0.6
+          ],
+          "normal": [
+            -0.09392,
+            0.99528,
+            -0.02426
+          ],
+          "distance": 0.2437
+        }
+      ]
+    },
+    {
+      "x": 0.6,
+      "z": -1,
+      "hits": [
+        {
+          "point": [
+            0.6,
+            -0.27748,
+            -1
+          ],
+          "normal": [
+            0.05699,
+            0.98301,
+            0.17447
+          ],
+          "distance": 0.62748
+        }
+      ]
+    },
+    {
+      "x": 0.6,
+      "z": -1.4,
+      "hits": [
+        {
+          "point": [
+            0.6,
+            -0.22001,
+            -1.4
+          ],
+          "normal": [
+            -0.62164,
+            0.68585,
+            -0.37838
+          ],
+          "distance": 0.57001
+        }
+      ]
+    },
+    {
+      "x": 0.6,
+      "z": -1.8,
+      "hits": [
+        {
+          "point": [
+            0.6,
+            -0.24362,
+            -1.8
+          ],
+          "normal": [
+            0.4379,
+            0.89874,
+            0.02281
+          ],
+          "distance": 0.59362
+        }
+      ]
+    },
+    {
+      "x": 0.6,
+      "z": -2.2,
+      "hits": [
+        {
+          "point": [
+            0.6,
+            -0.22457,
+            -2.2
+          ],
+          "normal": [
+            0.07897,
+            0.99318,
+            -0.08578
+          ],
+          "distance": 0.57457
+        }
+      ]
+    }
+  ],
+  "leftTabletopPatches": [
+    {
+      "center": [
+        -0.6,
+        -0.24368,
+        -1.2
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.26853,
+      "maxY": -0.22024,
+      "spreadY": 0.04829,
+      "minAbsNormalY": 0.90105,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.24575,
+        "slopeX": -0.03341,
+        "slopeZ": -0.12862,
+        "normal": [
+          0.03312,
+          0.99129,
+          0.1275
+        ],
+        "maxResidual": 0.00325
+      },
+      "supportedByCollider": true
+    },
+    {
+      "center": [
+        -0.6,
+        -0.21958,
+        -1.4
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.24978,
+      "maxY": -0.20432,
+      "spreadY": 0.04546,
+      "minAbsNormalY": 0.98327,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.22452,
+        "slopeX": -0.05222,
+        "slopeZ": -0.08957,
+        "normal": [
+          0.05194,
+          0.99467,
+          0.0891
+        ],
+        "maxResidual": 0.00646
+      },
+      "supportedByCollider": true
+    },
+    {
+      "center": [
+        -0.6,
+        -0.20856,
+        -1.6
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.22586,
+      "maxY": -0.19116,
+      "spreadY": 0.0347,
+      "minAbsNormalY": 0.95842,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.209,
+        "slopeX": -0.05735,
+        "slopeZ": -0.05751,
+        "normal": [
+          0.05717,
+          0.99672,
+          0.05732
+        ],
+        "maxResidual": 0.00518
+      },
+      "supportedByCollider": true
+    },
+    {
+      "center": [
+        -0.6,
+        -0.19213,
+        -1.8
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.26589,
+      "maxY": 0.26176,
+      "spreadY": 0.52765,
+      "minAbsNormalY": 0.15363,
+      "aboveSurfaceHits": 1,
+      "plane": {
+        "centerY": -0.15068,
+        "slopeX": -0.60025,
+        "slopeZ": -0.49931,
+        "normal": [
+          0.47312,
+          0.78821,
+          0.39356
+        ],
+        "maxResidual": 0.23651
+      },
+      "supportedByCollider": false
+    },
+    {
+      "center": [
+        -0.6,
+        -0.20936,
+        -2
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 8,
+      "minY": -0.29921,
+      "maxY": 0.31412,
+      "spreadY": 0.61333,
+      "minAbsNormalY": 0.42279,
+      "aboveSurfaceHits": 1,
+      "plane": null,
+      "supportedByCollider": false
+    },
+    {
+      "center": [
+        -0.8,
+        -0.23616,
+        -1.2
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.2979,
+      "maxY": -0.21266,
+      "spreadY": 0.08524,
+      "minAbsNormalY": 0.91651,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.24413,
+        "slopeX": 0.0094,
+        "slopeZ": -0.18764,
+        "normal": [
+          -0.00923,
+          0.98281,
+          0.18441
+        ],
+        "maxResidual": 0.02225
+      },
+      "supportedByCollider": true
+    },
+    {
+      "center": [
+        -0.8,
+        -0.2123,
+        -1.4
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.23827,
+      "maxY": -0.20435,
+      "spreadY": 0.03392,
+      "minAbsNormalY": 0.98785,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.21699,
+        "slopeX": -0.01924,
+        "slopeZ": -0.08271,
+        "normal": [
+          0.01917,
+          0.99641,
+          0.08241
+        ],
+        "maxResidual": 0.00537
+      },
+      "supportedByCollider": true
+    },
+    {
+      "center": [
+        -0.8,
+        -0.2019,
+        -1.6
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.21256,
+      "maxY": -0.19025,
+      "spreadY": 0.02231,
+      "minAbsNormalY": 0.99143,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.20242,
+        "slopeX": 0.00496,
+        "slopeZ": -0.05683,
+        "normal": [
+          -0.00495,
+          0.99838,
+          0.05674
+        ],
+        "maxResidual": 0.00308
+      },
+      "supportedByCollider": true
+    },
+    {
+      "center": [
+        -0.8,
+        -0.18645,
+        -1.8
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.20214,
+      "maxY": 0.22478,
+      "spreadY": 0.42692,
+      "minAbsNormalY": 0.53651,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.10159,
+        "slopeX": 0.41776,
+        "slopeZ": -0.89717,
+        "normal": [
+          -0.29693,
+          0.71077,
+          0.63768
+        ],
+        "maxResidual": 0.18283
+      },
+      "supportedByCollider": false
+    },
+    {
+      "center": [
+        -0.8,
+        0.27757,
+        -2
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 7,
+      "minY": -0.1923,
+      "maxY": 0.27757,
+      "spreadY": 0.46987,
+      "minAbsNormalY": 0.50331,
+      "aboveSurfaceHits": 1,
+      "plane": null,
+      "supportedByCollider": false
+    },
+    {
+      "center": [
+        -1,
+        -0.23009,
+        -1.2
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.34864,
+      "maxY": -0.21173,
+      "spreadY": 0.13691,
+      "minAbsNormalY": 0.38096,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.25475,
+        "slopeX": 0.10886,
+        "slopeZ": -0.29473,
+        "normal": [
+          -0.10386,
+          0.95402,
+          0.28118
+        ],
+        "maxResidual": 0.02931
+      },
+      "supportedByCollider": false
+    },
+    {
+      "center": [
+        -1,
+        -0.21079,
+        -1.4
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.2418,
+      "maxY": -0.20073,
+      "spreadY": 0.04107,
+      "minAbsNormalY": 0.84122,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.21536,
+        "slopeX": 0.0067,
+        "slopeZ": -0.09003,
+        "normal": [
+          -0.00667,
+          0.99595,
+          0.08967
+        ],
+        "maxResidual": 0.01097
+      },
+      "supportedByCollider": false
+    },
+    {
+      "center": [
+        -1,
+        -0.20498,
+        -1.6
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.21028,
+      "maxY": -0.18932,
+      "spreadY": 0.02096,
+      "minAbsNormalY": 0.99525,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.20201,
+        "slopeX": 0.00239,
+        "slopeZ": -0.04459,
+        "normal": [
+          -0.00238,
+          0.999,
+          0.04455
+        ],
+        "maxResidual": 0.00517
+      },
+      "supportedByCollider": true
+    },
+    {
+      "center": [
+        -1,
+        -0.1947,
+        -1.8
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 9,
+      "minY": -0.20313,
+      "maxY": -0.1534,
+      "spreadY": 0.04973,
+      "minAbsNormalY": 0.88536,
+      "aboveSurfaceHits": 0,
+      "plane": {
+        "centerY": -0.1874,
+        "slopeX": 0.03541,
+        "slopeZ": -0.09641,
+        "normal": [
+          -0.03522,
+          0.99477,
+          0.0959
+        ],
+        "maxResidual": 0.01291
+      },
+      "supportedByCollider": false
+    },
+    {
+      "center": [
+        -1,
+        -0.17611,
+        -2
+      ],
+      "footprint": [
+        0.32,
+        0.32
+      ],
+      "samples": 7,
+      "minY": -0.19131,
+      "maxY": 0.24234,
+      "spreadY": 0.43365,
+      "minAbsNormalY": 0.48277,
+      "aboveSurfaceHits": 1,
+      "plane": null,
+      "supportedByCollider": false
+    }
+  ],
+  "cameraCandidates": [
+    {
+      "position": [
+        -0.8,
+        0.04,
+        -0.4
+      ],
+      "target": [
+        -0.8,
+        -0.055,
+        -1.6
+      ],
+      "lineToGiftCenterClear": true,
+      "lineToGiftTopClear": true,
+      "firstCenterLineHit": {
+        "point": [
+          -0.8,
+          -0.0865,
+          -1.99793
+        ],
+        "normal": [
+          -0.52299,
+          -0.50049,
+          0.68992
+        ],
+        "distance": 1.60293
+      },
+      "examplePortraitFOV": 32,
+      "exampleGiftBounds": [
+        [
+          -0.98,
+          -0.2,
+          -1.76
+        ],
+        [
+          -0.62,
+          0.1,
+          -1.44
+        ]
+      ],
+      "projectedGiftWidthFraction": 1.31633,
+      "projectedGiftHeightFraction": 0.49934
+    },
+    {
+      "position": [
+        -0.8,
+        0.04,
+        -0.65
+      ],
+      "target": [
+        -0.8,
+        -0.055,
+        -1.6
+      ],
+      "lineToGiftCenterClear": true,
+      "lineToGiftTopClear": true,
+      "firstCenterLineHit": {
+        "point": [
+          -0.8,
+          -0.09544,
+          -2.00441
+        ],
+        "normal": [
+          -0.52299,
+          -0.50049,
+          0.68992
+        ],
+        "distance": 1.36117
+      },
+      "examplePortraitFOV": 32,
+      "exampleGiftBounds": [
+        [
+          -0.98,
+          -0.2,
+          -1.76
+        ],
+        [
+          -0.62,
+          0.1,
+          -1.44
+        ]
+      ],
+      "projectedGiftWidthFraction": 1.7414,
+      "projectedGiftHeightFraction": 0.65404
+    },
+    {
+      "position": [
+        -0.7,
+        0.06,
+        -0.45
+      ],
+      "target": [
+        -0.8,
+        -0.055,
+        -1.6
+      ],
+      "lineToGiftCenterClear": true,
+      "lineToGiftTopClear": true,
+      "firstCenterLineHit": {
+        "point": [
+          -0.83749,
+          -0.09811,
+          -2.0311
+        ],
+        "normal": [
+          -0.45529,
+          -0.4357,
+          0.77645
+        ],
+        "distance": 1.59492
+      },
+      "examplePortraitFOV": 32,
+      "exampleGiftBounds": [
+        [
+          -0.98,
+          -0.2,
+          -1.76
+        ],
+        [
+          -0.62,
+          0.1,
+          -1.44
+        ]
+      ],
+      "projectedGiftWidthFraction": 1.37116,
+      "projectedGiftHeightFraction": 0.52769
+    },
+    {
+      "position": [
+        -0.55,
+        0.06,
+        -0.4
+      ],
+      "target": [
+        -0.8,
+        -0.055,
+        -1.6
+      ],
+      "lineToGiftCenterClear": true,
+      "lineToGiftTopClear": true,
+      "firstCenterLineHit": {
+        "point": [
+          -0.89999,
+          -0.101,
+          -2.07997
+        ],
+        "normal": [
+          -0.57121,
+          -0.40167,
+          0.71581
+        ],
+        "distance": 1.72357
+      },
+      "examplePortraitFOV": 32,
+      "exampleGiftBounds": [
+        [
+          -0.98,
+          -0.2,
+          -1.76
+        ],
+        [
+          -0.62,
+          0.1,
+          -1.44
+        ]
+      ],
+      "projectedGiftWidthFraction": 1.30811,
+      "projectedGiftHeightFraction": 0.50117
+    }
+  ],
+  "currentPlacementPatches": [
+    {
+      "id": "gift",
+      "center": [
+        -0.1,
+        -0.27059,
+        -1.12
+      ],
+      "footprint": [
+        0.36,
+        0.32
+      ],
+      "samples": 25,
+      "minY": -0.33909,
+      "maxY": -0.25714,
+      "medianY": -0.27233,
+      "spreadY": 0.08195,
+      "minAbsNormalY": 0.75956,
+      "aboveSurfaceHits": 0,
+      "allSamples": [
+        {
+          "point": [
+            -0.28,
+            -0.26334,
+            -1.28
+          ],
+          "normal": [
+            0.06982,
+            0.91148,
+            -0.40537
+          ],
+          "distance": 0.61334
+        },
+        {
+          "point": [
+            -0.28,
+            -0.2676,
+            -1.2
+          ],
+          "normal": [
+            -0.11719,
+            0.98922,
+            -0.08775
+          ],
+          "distance": 0.6176
+        },
+        {
+          "point": [
+            -0.28,
+            -0.26581,
+            -1.12
+          ],
+          "normal": [
+            -0.11762,
+            0.99285,
+            0.02028
+          ],
+          "distance": 0.61581
+        },
+        {
+          "point": [
+            -0.28,
+            -0.27481,
+            -1.04
+          ],
+          "normal": [
+            -0.00303,
+            0.989,
+            0.14792
+          ],
+          "distance": 0.62481
+        },
+        {
+          "point": [
+            -0.28,
+            -0.32043,
+            -0.96
+          ],
+          "normal": [
+            -0.38427,
+            0.80679,
+            0.44881
+          ],
+          "distance": 0.67043
+        },
+        {
+          "point": [
+            -0.19,
+            -0.26435,
+            -1.28
+          ],
+          "normal": [
+            -0.08403,
+            0.99646,
+            -0.00026
+          ],
+          "distance": 0.61435
+        },
+        {
+          "point": [
+            -0.19,
+            -0.2577,
+            -1.2
+          ],
+          "normal": [
+            -0.08371,
+            0.99259,
+            -0.08805
+          ],
+          "distance": 0.6077
+        },
+        {
+          "point": [
+            -0.19,
+            -0.26463,
+            -1.12
+          ],
+          "normal": [
+            0.05315,
+            0.9895,
+            0.13441
+          ],
+          "distance": 0.61463
+        },
+        {
+          "point": [
+            -0.19,
+            -0.27643,
+            -1.04
+          ],
+          "normal": [
+            0.0803,
+            0.98581,
+            0.14744
+          ],
+          "distance": 0.62643
+        },
+        {
+          "point": [
+            -0.19,
+            -0.29752,
+            -0.96
+          ],
+          "normal": [
+            0.43334,
+            0.75956,
+            0.48507
+          ],
+          "distance": 0.64752
+        },
+        {
+          "point": [
+            -0.1,
+            -0.25714,
+            -1.28
+          ],
+          "normal": [
+            0.03022,
+            0.99745,
+            0.06472
+          ],
+          "distance": 0.60714
+        },
+        {
+          "point": [
+            -0.1,
+            -0.26117,
+            -1.2
+          ],
+          "normal": [
+            0.03025,
+            0.99833,
+            0.04925
+          ],
+          "distance": 0.61117
+        },
+        {
+          "point": [
+            -0.1,
+            -0.27059,
+            -1.12
+          ],
+          "normal": [
+            0.01646,
+            0.98675,
+            0.1614
+          ],
+          "distance": 0.62059
+        },
+        {
+          "point": [
+            -0.1,
+            -0.29117,
+            -1.04
+          ],
+          "normal": [
+            -0.41794,
+            0.7596,
+            0.49833
+          ],
+          "distance": 0.64117
+        },
+        {
+          "point": [
+            -0.1,
+            -0.33909,
+            -0.96
+          ],
+          "normal": [
+            -0.3877,
+            0.81112,
+            0.43792
+          ],
+          "distance": 0.68909
+        },
+        {
+          "point": [
+            -0.01,
+            -0.25987,
+            -1.28
+          ],
+          "normal": [
+            0.03022,
+            0.99745,
+            0.06472
+          ],
+          "distance": 0.60987
+        },
+        {
+          "point": [
+            -0.01,
+            -0.26301,
+            -1.2
+          ],
+          "normal": [
+            0.01667,
+            0.99922,
+            0.03569
+          ],
+          "distance": 0.61301
+        },
+        {
+          "point": [
+            -0.01,
+            -0.27386,
+            -1.12
+          ],
+          "normal": [
+            0.06094,
+            0.97698,
+            0.20445
+          ],
+          "distance": 0.62386
+        },
+        {
+          "point": [
+            -0.01,
+            -0.28688,
+            -1.04
+          ],
+          "normal": [
+            0.0622,
+            0.99712,
+            0.04334
+          ],
+          "distance": 0.63688
+        },
+        {
+          "point": [
+            -0.01,
+            -0.2941,
+            -0.96
+          ],
+          "normal": [
+            -0.40891,
+            0.78705,
+            0.46188
+          ],
+          "distance": 0.6441
+        },
+        {
+          "point": [
+            0.08,
+            -0.26746,
+            -1.28
+          ],
+          "normal": [
+            0.07618,
+            0.98577,
+            -0.14985
+          ],
+          "distance": 0.61746
+        },
+        {
+          "point": [
+            0.08,
+            -0.27233,
+            -1.2
+          ],
+          "normal": [
+            0.13641,
+            0.98604,
+            0.09544
+          ],
+          "distance": 0.62233
+        },
+        {
+          "point": [
+            0.08,
+            -0.28154,
+            -1.12
+          ],
+          "normal": [
+            -0.04051,
+            0.99872,
+            0.03032
+          ],
+          "distance": 0.63154
+        },
+        {
+          "point": [
+            0.08,
+            -0.28426,
+            -1.04
+          ],
+          "normal": [
+            -0.04049,
+            0.99824,
+            0.04339
+          ],
+          "distance": 0.63426
+        },
+        {
+          "point": [
+            0.08,
+            -0.29361,
+            -0.96
+          ],
+          "normal": [
+            0.03624,
+            0.99216,
+            0.11961
+          ],
+          "distance": 0.64361
+        }
+      ]
+    },
+    {
+      "id": "gift-mobile",
+      "center": [
+        -0.1,
+        -0.27059,
+        -1.12
+      ],
+      "footprint": [
+        0.48,
+        0.43
+      ],
+      "samples": 25,
+      "minY": -0.34034,
+      "maxY": -0.25708,
+      "medianY": -0.27874,
+      "spreadY": 0.08326,
+      "minAbsNormalY": 0.73295,
+      "aboveSurfaceHits": 0,
+      "allSamples": [
+        {
+          "point": [
+            -0.34,
+            -0.25729,
+            -1.335
+          ],
+          "normal": [
+            0.10101,
+            0.99463,
+            -0.02234
+          ],
+          "distance": 0.60729
+        },
+        {
+          "point": [
+            -0.34,
+            -0.26075,
+            -1.2275
+          ],
+          "normal": [
+            0.11119,
+            0.98822,
+            0.10511
+          ],
+          "distance": 0.61075
+        },
+        {
+          "point": [
+            -0.34,
+            -0.26933,
+            -1.12
+          ],
+          "normal": [
+            0.05002,
+            0.99854,
+            0.02039
+          ],
+          "distance": 0.61933
+        },
+        {
+          "point": [
+            -0.34,
+            -0.29197,
+            -1.0125
+          ],
+          "normal": [
+            0.46416,
+            0.73295,
+            0.49733
+          ],
+          "distance": 0.64197
+        },
+        {
+          "point": [
+            -0.34,
+            -0.30981,
+            -0.905
+          ],
+          "normal": [
+            0.40108,
+            0.91343,
+            -0.06919
+          ],
+          "distance": 0.65981
+        },
+        {
+          "point": [
+            -0.22,
+            -0.2924,
+            -1.335
+          ],
+          "normal": [
+            0.06982,
+            0.91148,
+            -0.40537
+          ],
+          "distance": 0.6424
+        },
+        {
+          "point": [
+            -0.22,
+            -0.26293,
+            -1.2275
+          ],
+          "normal": [
+            -0.11719,
+            0.98922,
+            -0.08775
+          ],
+          "distance": 0.61293
+        },
+        {
+          "point": [
+            -0.22,
+            -0.26345,
+            -1.12
+          ],
+          "normal": [
+            -0.00303,
+            0.9909,
+            0.1346
+          ],
+          "distance": 0.61345
+        },
+        {
+          "point": [
+            -0.22,
+            -0.27874,
+            -1.0125
+          ],
+          "normal": [
+            -0.00303,
+            0.989,
+            0.14792
+          ],
+          "distance": 0.62874
+        },
+        {
+          "point": [
+            -0.22,
+            -0.30102,
+            -0.905
+          ],
+          "normal": [
+            0.01047,
+            0.96466,
+            0.26331
+          ],
+          "distance": 0.65102
+        },
+        {
+          "point": [
+            -0.1,
+            -0.25708,
+            -1.335
+          ],
+          "normal": [
+            -0.03483,
+            0.99939,
+            -0.00026
+          ],
+          "distance": 0.60708
+        },
+        {
+          "point": [
+            -0.1,
+            -0.25981,
+            -1.2275
+          ],
+          "normal": [
+            0.03025,
+            0.99833,
+            0.04925
+          ],
+          "distance": 0.60981
+        },
+        {
+          "point": [
+            -0.1,
+            -0.27059,
+            -1.12
+          ],
+          "normal": [
+            0.01646,
+            0.98675,
+            0.1614
+          ],
+          "distance": 0.62059
+        },
+        {
+          "point": [
+            -0.1,
+            -0.30921,
+            -1.0125
+          ],
+          "normal": [
+            -0.41794,
+            0.7596,
+            0.49833
+          ],
+          "distance": 0.65921
+        },
+        {
+          "point": [
+            -0.1,
+            -0.34034,
+            -0.905
+          ],
+          "normal": [
+            -0.43121,
+            0.90214,
+            -0.01431
+          ],
+          "distance": 0.69034
+        },
+        {
+          "point": [
+            0.02,
+            -0.26249,
+            -1.335
+          ],
+          "normal": [
+            0.28167,
+            0.9575,
+            0.06213
+          ],
+          "distance": 0.61249
+        },
+        {
+          "point": [
+            0.02,
+            -0.26374,
+            -1.2275
+          ],
+          "normal": [
+            0.077,
+            0.9964,
+            0.03559
+          ],
+          "distance": 0.61374
+        },
+        {
+          "point": [
+            0.02,
+            -0.27725,
+            -1.12
+          ],
+          "normal": [
+            0.13418,
+            0.96995,
+            0.20298
+          ],
+          "distance": 0.62725
+        },
+        {
+          "point": [
+            0.02,
+            -0.28789,
+            -1.0125
+          ],
+          "normal": [
+            -0.04049,
+            0.99824,
+            0.04339
+          ],
+          "distance": 0.63789
+        },
+        {
+          "point": [
+            0.02,
+            -0.29651,
+            -0.905
+          ],
+          "normal": [
+            0.03636,
+            0.99526,
+            0.09016
+          ],
+          "distance": 0.64651
+        },
+        {
+          "point": [
+            0.14,
+            -0.27872,
+            -1.335
+          ],
+          "normal": [
+            0.02567,
+            0.98832,
+            -0.15023
+          ],
+          "distance": 0.62872
+        },
+        {
+          "point": [
+            0.14,
+            -0.28082,
+            -1.2275
+          ],
+          "normal": [
+            0.2164,
+            0.97176,
+            0.09405
+          ],
+          "distance": 0.63082
+        },
+        {
+          "point": [
+            0.14,
+            -0.28035,
+            -1.12
+          ],
+          "normal": [
+            -0.0037,
+            0.99953,
+            0.03034
+          ],
+          "distance": 0.63035
+        },
+        {
+          "point": [
+            0.14,
+            -0.28965,
+            -1.0125
+          ],
+          "normal": [
+            0.04157,
+            0.99195,
+            0.11959
+          ],
+          "distance": 0.63965
+        },
+        {
+          "point": [
+            0.14,
+            -0.30801,
+            -0.905
+          ],
+          "normal": [
+            0.08643,
+            0.97776,
+            0.19111
+          ],
+          "distance": 0.65801
+        }
+      ]
+    },
+    {
+      "id": "photo-frame",
+      "center": [
+        -0.53,
+        -0.28977,
+        -0.92
+      ],
+      "footprint": [
+        0.16,
+        0.16
+      ],
+      "samples": 25,
+      "minY": -0.31726,
+      "maxY": -0.27031,
+      "medianY": -0.29047,
+      "spreadY": 0.04695,
+      "minAbsNormalY": 0.92143,
+      "aboveSurfaceHits": 0,
+      "allSamples": [
+        {
+          "point": [
+            -0.61,
+            -0.28506,
+            -1
+          ],
+          "normal": [
+            0.0269,
+            0.92143,
+            0.38762
+          ],
+          "distance": 0.63506
+        },
+        {
+          "point": [
+            -0.61,
+            -0.29541,
+            -0.96
+          ],
+          "normal": [
+            -0.23563,
+            0.96159,
+            0.14082
+          ],
+          "distance": 0.64541
+        },
+        {
+          "point": [
+            -0.61,
+            -0.30027,
+            -0.92
+          ],
+          "normal": [
+            -0.23643,
+            0.96487,
+            0.11457
+          ],
+          "distance": 0.65027
+        },
+        {
+          "point": [
+            -0.61,
+            -0.30502,
+            -0.88
+          ],
+          "normal": [
+            -0.23643,
+            0.96487,
+            0.11457
+          ],
+          "distance": 0.65502
+        },
+        {
+          "point": [
+            -0.61,
+            -0.31545,
+            -0.84
+          ],
+          "normal": [
+            -0.00141,
+            0.99985,
+            0.01747
+          ],
+          "distance": 0.66545
+        },
+        {
+          "point": [
+            -0.57,
+            -0.27975,
+            -1
+          ],
+          "normal": [
+            -0.23563,
+            0.96159,
+            0.14082
+          ],
+          "distance": 0.62975
+        },
+        {
+          "point": [
+            -0.57,
+            -0.28561,
+            -0.96
+          ],
+          "normal": [
+            -0.23563,
+            0.96159,
+            0.14082
+          ],
+          "distance": 0.63561
+        },
+        {
+          "point": [
+            -0.57,
+            -0.29047,
+            -0.92
+          ],
+          "normal": [
+            -0.23643,
+            0.96487,
+            0.11457
+          ],
+          "distance": 0.64047
+        },
+        {
+          "point": [
+            -0.57,
+            -0.30432,
+            -0.88
+          ],
+          "normal": [
+            -0.00133,
+            0.94017,
+            0.34069
+          ],
+          "distance": 0.65432
+        },
+        {
+          "point": [
+            -0.57,
+            -0.31539,
+            -0.84
+          ],
+          "normal": [
+            -0.00141,
+            0.99985,
+            0.01747
+          ],
+          "distance": 0.66539
+        },
+        {
+          "point": [
+            -0.53,
+            -0.27031,
+            -1
+          ],
+          "normal": [
+            0.04786,
+            0.98831,
+            0.14473
+          ],
+          "distance": 0.62031
+        },
+        {
+          "point": [
+            -0.53,
+            -0.27616,
+            -0.96
+          ],
+          "normal": [
+            0.04786,
+            0.98831,
+            0.14473
+          ],
+          "distance": 0.62616
+        },
+        {
+          "point": [
+            -0.53,
+            -0.28977,
+            -0.92
+          ],
+          "normal": [
+            -0.0025,
+            0.94017,
+            0.34069
+          ],
+          "distance": 0.63977
+        },
+        {
+          "point": [
+            -0.53,
+            -0.30426,
+            -0.88
+          ],
+          "normal": [
+            -0.0025,
+            0.94017,
+            0.34069
+          ],
+          "distance": 0.65426
+        },
+        {
+          "point": [
+            -0.53,
+            -0.31537,
+            -0.84
+          ],
+          "normal": [
+            0.02362,
+            0.99957,
+            0.01747
+          ],
+          "distance": 0.66537
+        },
+        {
+          "point": [
+            -0.49,
+            -0.27224,
+            -1
+          ],
+          "normal": [
+            0.04786,
+            0.98831,
+            0.14473
+          ],
+          "distance": 0.62224
+        },
+        {
+          "point": [
+            -0.49,
+            -0.27619,
+            -0.96
+          ],
+          "normal": [
+            -0.00265,
+            0.99548,
+            0.09493
+          ],
+          "distance": 0.62619
+        },
+        {
+          "point": [
+            -0.49,
+            -0.28966,
+            -0.92
+          ],
+          "normal": [
+            -0.0025,
+            0.94017,
+            0.34069
+          ],
+          "distance": 0.63966
+        },
+        {
+          "point": [
+            -0.49,
+            -0.30445,
+            -0.88
+          ],
+          "normal": [
+            0.02202,
+            0.93185,
+            0.36217
+          ],
+          "distance": 0.65445
+        },
+        {
+          "point": [
+            -0.49,
+            -0.31631,
+            -0.84
+          ],
+          "normal": [
+            0.02362,
+            0.99957,
+            0.01747
+          ],
+          "distance": 0.66631
+        },
+        {
+          "point": [
+            -0.45,
+            -0.27227,
+            -1
+          ],
+          "normal": [
+            -0.00265,
+            0.99548,
+            0.09493
+          ],
+          "distance": 0.62227
+        },
+        {
+          "point": [
+            -0.45,
+            -0.27608,
+            -0.96
+          ],
+          "normal": [
+            -0.00265,
+            0.99548,
+            0.09493
+          ],
+          "distance": 0.62608
+        },
+        {
+          "point": [
+            -0.45,
+            -0.28985,
+            -0.92
+          ],
+          "normal": [
+            0.02202,
+            0.93185,
+            0.36217
+          ],
+          "distance": 0.63985
+        },
+        {
+          "point": [
+            -0.45,
+            -0.3054,
+            -0.88
+          ],
+          "normal": [
+            0.02202,
+            0.93185,
+            0.36217
+          ],
+          "distance": 0.6554
+        },
+        {
+          "point": [
+            -0.45,
+            -0.31726,
+            -0.84
+          ],
+          "normal": [
+            0.02362,
+            0.99957,
+            0.01747
+          ],
+          "distance": 0.66726
+        }
+      ]
+    },
+    {
+      "id": "travel-journal",
+      "center": [
+        -0.15,
+        -0.3164,
+        -0.76
+      ],
+      "footprint": [
+        0.16,
+        0.16
+      ],
+      "samples": 25,
+      "minY": -0.33796,
+      "maxY": -0.31424,
+      "medianY": -0.31703,
+      "spreadY": 0.02372,
+      "minAbsNormalY": 0.88278,
+      "aboveSurfaceHits": 0,
+      "allSamples": [
+        {
+          "point": [
+            -0.23,
+            -0.31612,
+            -0.84
+          ],
+          "normal": [
+            0.01085,
+            0.9998,
+            0.01689
+          ],
+          "distance": 0.66612
+        },
+        {
+          "point": [
+            -0.23,
+            -0.3164,
+            -0.8
+          ],
+          "normal": [
+            -0.00128,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.6664
+        },
+        {
+          "point": [
+            -0.23,
+            -0.31659,
+            -0.76
+          ],
+          "normal": [
+            -0.00128,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66659
+        },
+        {
+          "point": [
+            -0.23,
+            -0.31696,
+            -0.72
+          ],
+          "normal": [
+            0.00007,
+            0.99991,
+            0.01342
+          ],
+          "distance": 0.66696
+        },
+        {
+          "point": [
+            -0.23,
+            -0.3175,
+            -0.68
+          ],
+          "normal": [
+            0.00007,
+            0.99991,
+            0.01342
+          ],
+          "distance": 0.6675
+        },
+        {
+          "point": [
+            -0.19,
+            -0.31772,
+            -0.84
+          ],
+          "normal": [
+            0.16988,
+            0.95772,
+            -0.2322
+          ],
+          "distance": 0.66772
+        },
+        {
+          "point": [
+            -0.19,
+            -0.31632,
+            -0.8
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66632
+        },
+        {
+          "point": [
+            -0.19,
+            -0.31651,
+            -0.76
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66651
+        },
+        {
+          "point": [
+            -0.19,
+            -0.3169,
+            -0.72
+          ],
+          "normal": [
+            -0.00258,
+            0.99991,
+            0.01342
+          ],
+          "distance": 0.6669
+        },
+        {
+          "point": [
+            -0.19,
+            -0.31744,
+            -0.68
+          ],
+          "normal": [
+            -0.00258,
+            0.99991,
+            0.01342
+          ],
+          "distance": 0.66744
+        },
+        {
+          "point": [
+            -0.15,
+            -0.32761,
+            -0.84
+          ],
+          "normal": [
+            0.23707,
+            0.91586,
+            -0.32404
+          ],
+          "distance": 0.67761
+        },
+        {
+          "point": [
+            -0.15,
+            -0.31703,
+            -0.8
+          ],
+          "normal": [
+            0.06205,
+            0.99627,
+            -0.05988
+          ],
+          "distance": 0.66703
+        },
+        {
+          "point": [
+            -0.15,
+            -0.3164,
+            -0.76
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.6664
+        },
+        {
+          "point": [
+            -0.15,
+            -0.3168,
+            -0.72
+          ],
+          "normal": [
+            -0.00258,
+            0.99991,
+            0.01342
+          ],
+          "distance": 0.6668
+        },
+        {
+          "point": [
+            -0.15,
+            -0.31743,
+            -0.68
+          ],
+          "normal": [
+            0.0023,
+            0.99983,
+            0.01829
+          ],
+          "distance": 0.66743
+        },
+        {
+          "point": [
+            -0.11,
+            -0.33796,
+            -0.84
+          ],
+          "normal": [
+            0.23707,
+            0.91586,
+            -0.32404
+          ],
+          "distance": 0.68796
+        },
+        {
+          "point": [
+            -0.11,
+            -0.32381,
+            -0.8
+          ],
+          "normal": [
+            0.23707,
+            0.91586,
+            -0.32404
+          ],
+          "distance": 0.67381
+        },
+        {
+          "point": [
+            -0.11,
+            -0.31712,
+            -0.76
+          ],
+          "normal": [
+            0.06205,
+            0.99627,
+            -0.05988
+          ],
+          "distance": 0.66712
+        },
+        {
+          "point": [
+            -0.11,
+            -0.31679,
+            -0.72
+          ],
+          "normal": [
+            0.0023,
+            0.99983,
+            0.01829
+          ],
+          "distance": 0.66679
+        },
+        {
+          "point": [
+            -0.11,
+            -0.31753,
+            -0.68
+          ],
+          "normal": [
+            0.0023,
+            0.99983,
+            0.01829
+          ],
+          "distance": 0.66753
+        },
+        {
+          "point": [
+            -0.07,
+            -0.32453,
+            -0.84
+          ],
+          "normal": [
+            -0.35093,
+            0.88278,
+            -0.31234
+          ],
+          "distance": 0.67453
+        },
+        {
+          "point": [
+            -0.07,
+            -0.31584,
+            -0.8
+          ],
+          "normal": [
+            -0.35117,
+            0.91071,
+            -0.21746
+          ],
+          "distance": 0.66584
+        },
+        {
+          "point": [
+            -0.07,
+            -0.31424,
+            -0.76
+          ],
+          "normal": [
+            0.013,
+            0.98736,
+            0.15797
+          ],
+          "distance": 0.66424
+        },
+        {
+          "point": [
+            -0.07,
+            -0.31728,
+            -0.72
+          ],
+          "normal": [
+            0.01316,
+            0.99975,
+            0.01829
+          ],
+          "distance": 0.66728
+        },
+        {
+          "point": [
+            -0.07,
+            -0.31801,
+            -0.68
+          ],
+          "normal": [
+            0.01316,
+            0.99975,
+            0.01829
+          ],
+          "distance": 0.66801
+        }
+      ]
+    },
+    {
+      "id": "photo-frame-right-candidate",
+      "center": [
+        0.1,
+        -0.28194,
+        -1.08
+      ],
+      "footprint": [
+        0.16,
+        0.115
+      ],
+      "samples": 25,
+      "minY": -0.29047,
+      "maxY": -0.27358,
+      "medianY": -0.28334,
+      "spreadY": 0.01689,
+      "minAbsNormalY": 0.96995,
+      "aboveSurfaceHits": 0,
+      "allSamples": [
+        {
+          "point": [
+            0.02,
+            -0.27358,
+            -1.1375
+          ],
+          "normal": [
+            0.13418,
+            0.96995,
+            0.20298
+          ],
+          "distance": 0.62358
+        },
+        {
+          "point": [
+            0.02,
+            -0.2796,
+            -1.10875
+          ],
+          "normal": [
+            0.13418,
+            0.96995,
+            0.20298
+          ],
+          "distance": 0.6296
+        },
+        {
+          "point": [
+            0.02,
+            -0.28518,
+            -1.08
+          ],
+          "normal": [
+            -0.04051,
+            0.99872,
+            0.03032
+          ],
+          "distance": 0.63518
+        },
+        {
+          "point": [
+            0.02,
+            -0.2862,
+            -1.05125
+          ],
+          "normal": [
+            -0.04049,
+            0.99824,
+            0.04339
+          ],
+          "distance": 0.6362
+        },
+        {
+          "point": [
+            0.02,
+            -0.28745,
+            -1.0225
+          ],
+          "normal": [
+            -0.04049,
+            0.99824,
+            0.04339
+          ],
+          "distance": 0.63745
+        },
+        {
+          "point": [
+            0.06,
+            -0.27912,
+            -1.1375
+          ],
+          "normal": [
+            0.13418,
+            0.96995,
+            0.20298
+          ],
+          "distance": 0.62912
+        },
+        {
+          "point": [
+            0.06,
+            -0.28269,
+            -1.10875
+          ],
+          "normal": [
+            -0.04051,
+            0.99872,
+            0.03032
+          ],
+          "distance": 0.63269
+        },
+        {
+          "point": [
+            0.06,
+            -0.28356,
+            -1.08
+          ],
+          "normal": [
+            -0.04051,
+            0.99872,
+            0.03032
+          ],
+          "distance": 0.63356
+        },
+        {
+          "point": [
+            0.06,
+            -0.28458,
+            -1.05125
+          ],
+          "normal": [
+            -0.04049,
+            0.99824,
+            0.04339
+          ],
+          "distance": 0.63458
+        },
+        {
+          "point": [
+            0.06,
+            -0.28583,
+            -1.0225
+          ],
+          "normal": [
+            -0.04049,
+            0.99824,
+            0.04339
+          ],
+          "distance": 0.63583
+        },
+        {
+          "point": [
+            0.1,
+            -0.28019,
+            -1.1375
+          ],
+          "normal": [
+            -0.04051,
+            0.99872,
+            0.03032
+          ],
+          "distance": 0.63019
+        },
+        {
+          "point": [
+            0.1,
+            -0.28107,
+            -1.10875
+          ],
+          "normal": [
+            -0.04051,
+            0.99872,
+            0.03032
+          ],
+          "distance": 0.63107
+        },
+        {
+          "point": [
+            0.1,
+            -0.28194,
+            -1.08
+          ],
+          "normal": [
+            -0.04051,
+            0.99872,
+            0.03032
+          ],
+          "distance": 0.63194
+        },
+        {
+          "point": [
+            0.1,
+            -0.28334,
+            -1.05125
+          ],
+          "normal": [
+            0.03624,
+            0.99216,
+            0.11961
+          ],
+          "distance": 0.63334
+        },
+        {
+          "point": [
+            0.1,
+            -0.2868,
+            -1.0225
+          ],
+          "normal": [
+            0.03624,
+            0.99216,
+            0.11961
+          ],
+          "distance": 0.6368
+        },
+        {
+          "point": [
+            0.14,
+            -0.27982,
+            -1.1375
+          ],
+          "normal": [
+            -0.0037,
+            0.99953,
+            0.03034
+          ],
+          "distance": 0.62982
+        },
+        {
+          "point": [
+            0.14,
+            -0.28069,
+            -1.10875
+          ],
+          "normal": [
+            -0.0037,
+            0.99953,
+            0.03034
+          ],
+          "distance": 0.63069
+        },
+        {
+          "point": [
+            0.14,
+            -0.2823,
+            -1.08
+          ],
+          "normal": [
+            0.04175,
+            0.99626,
+            0.07568
+          ],
+          "distance": 0.6323
+        },
+        {
+          "point": [
+            0.14,
+            -0.28498,
+            -1.05125
+          ],
+          "normal": [
+            0.04157,
+            0.99195,
+            0.11959
+          ],
+          "distance": 0.63498
+        },
+        {
+          "point": [
+            0.14,
+            -0.28845,
+            -1.0225
+          ],
+          "normal": [
+            0.04157,
+            0.99195,
+            0.11959
+          ],
+          "distance": 0.63845
+        },
+        {
+          "point": [
+            0.18,
+            -0.27967,
+            -1.1375
+          ],
+          "normal": [
+            -0.0037,
+            0.99953,
+            0.03034
+          ],
+          "distance": 0.62967
+        },
+        {
+          "point": [
+            0.18,
+            -0.28179,
+            -1.10875
+          ],
+          "normal": [
+            0.04175,
+            0.99626,
+            0.07568
+          ],
+          "distance": 0.63179
+        },
+        {
+          "point": [
+            0.18,
+            -0.28397,
+            -1.08
+          ],
+          "normal": [
+            0.04175,
+            0.99626,
+            0.07568
+          ],
+          "distance": 0.63397
+        },
+        {
+          "point": [
+            0.18,
+            -0.28666,
+            -1.05125
+          ],
+          "normal": [
+            0.04157,
+            0.99195,
+            0.11959
+          ],
+          "distance": 0.63666
+        },
+        {
+          "point": [
+            0.18,
+            -0.29047,
+            -1.0225
+          ],
+          "normal": [
+            0.08686,
+            0.9826,
+            0.16414
+          ],
+          "distance": 0.64047
+        }
+      ]
+    },
+    {
+      "id": "travel-journal-left-candidate",
+      "center": [
+        -0.28,
+        -0.31625,
+        -0.8
+      ],
+      "footprint": [
+        0.16,
+        0.145
+      ],
+      "samples": 25,
+      "minY": -0.31777,
+      "maxY": -0.30726,
+      "medianY": -0.31634,
+      "spreadY": 0.01051,
+      "minAbsNormalY": 0.85329,
+      "aboveSurfaceHits": 0,
+      "allSamples": [
+        {
+          "point": [
+            -0.36,
+            -0.30726,
+            -0.8725
+          ],
+          "normal": [
+            -0.02359,
+            0.93182,
+            0.36216
+          ],
+          "distance": 0.65726
+        },
+        {
+          "point": [
+            -0.36,
+            -0.31626,
+            -0.83625
+          ],
+          "normal": [
+            -0.02531,
+            0.99954,
+            0.01689
+          ],
+          "distance": 0.66626
+        },
+        {
+          "point": [
+            -0.36,
+            -0.31687,
+            -0.8
+          ],
+          "normal": [
+            -0.02531,
+            0.99954,
+            0.01689
+          ],
+          "distance": 0.66687
+        },
+        {
+          "point": [
+            -0.36,
+            -0.31737,
+            -0.76375
+          ],
+          "normal": [
+            -0.02004,
+            0.99973,
+            0.01162
+          ],
+          "distance": 0.66737
+        },
+        {
+          "point": [
+            -0.36,
+            -0.31777,
+            -0.7275
+          ],
+          "normal": [
+            -0.01932,
+            0.99974,
+            0.01207
+          ],
+          "distance": 0.66777
+        },
+        {
+          "point": [
+            -0.32,
+            -0.31613,
+            -0.8725
+          ],
+          "normal": [
+            0.40108,
+            0.91343,
+            -0.06919
+          ],
+          "distance": 0.66613
+        },
+        {
+          "point": [
+            -0.32,
+            -0.31525,
+            -0.83625
+          ],
+          "normal": [
+            -0.02531,
+            0.99954,
+            0.01689
+          ],
+          "distance": 0.66525
+        },
+        {
+          "point": [
+            -0.32,
+            -0.31586,
+            -0.8
+          ],
+          "normal": [
+            -0.02531,
+            0.99954,
+            0.01689
+          ],
+          "distance": 0.66586
+        },
+        {
+          "point": [
+            -0.32,
+            -0.31647,
+            -0.76375
+          ],
+          "normal": [
+            -0.02531,
+            0.99954,
+            0.01689
+          ],
+          "distance": 0.66647
+        },
+        {
+          "point": [
+            -0.32,
+            -0.317,
+            -0.7275
+          ],
+          "normal": [
+            -0.01932,
+            0.99974,
+            0.01207
+          ],
+          "distance": 0.667
+        },
+        {
+          "point": [
+            -0.28,
+            -0.30924,
+            -0.8725
+          ],
+          "normal": [
+            0.01047,
+            0.96466,
+            0.26331
+          ],
+          "distance": 0.65924
+        },
+        {
+          "point": [
+            -0.28,
+            -0.31564,
+            -0.83625
+          ],
+          "normal": [
+            0.01085,
+            0.9998,
+            0.01689
+          ],
+          "distance": 0.66564
+        },
+        {
+          "point": [
+            -0.28,
+            -0.31625,
+            -0.8
+          ],
+          "normal": [
+            0.01085,
+            0.9998,
+            0.01689
+          ],
+          "distance": 0.66625
+        },
+        {
+          "point": [
+            -0.28,
+            -0.31663,
+            -0.76375
+          ],
+          "normal": [
+            -0.00128,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66663
+        },
+        {
+          "point": [
+            -0.28,
+            -0.31693,
+            -0.7275
+          ],
+          "normal": [
+            -0.00128,
+            0.99993,
+            0.01207
+          ],
+          "distance": 0.66693
+        },
+        {
+          "point": [
+            -0.24,
+            -0.30968,
+            -0.8725
+          ],
+          "normal": [
+            0.01047,
+            0.96466,
+            0.26331
+          ],
+          "distance": 0.65968
+        },
+        {
+          "point": [
+            -0.24,
+            -0.31607,
+            -0.83625
+          ],
+          "normal": [
+            0.01085,
+            0.9998,
+            0.01689
+          ],
+          "distance": 0.66607
+        },
+        {
+          "point": [
+            -0.24,
+            -0.31641,
+            -0.8
+          ],
+          "normal": [
+            -0.00128,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66641
+        },
+        {
+          "point": [
+            -0.24,
+            -0.31658,
+            -0.76375
+          ],
+          "normal": [
+            -0.00128,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66658
+        },
+        {
+          "point": [
+            -0.24,
+            -0.31687,
+            -0.7275
+          ],
+          "normal": [
+            -0.00128,
+            0.99993,
+            0.01207
+          ],
+          "distance": 0.66687
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31258,
+            -0.8725
+          ],
+          "normal": [
+            0.48681,
+            0.85329,
+            0.18686
+          ],
+          "distance": 0.66258
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31617,
+            -0.83625
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66617
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31634,
+            -0.8
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66634
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31652,
+            -0.76375
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66652
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31683,
+            -0.7275
+          ],
+          "normal": [
+            -0.00258,
+            0.99991,
+            0.01342
+          ],
+          "distance": 0.66683
+        }
+      ]
+    },
+    {
+      "id": "travel-journal-new-candidate",
+      "center": [
+        -0.2,
+        -0.31634,
+        -0.8
+      ],
+      "footprint": [
+        0.16,
+        0.145
+      ],
+      "samples": 25,
+      "minY": -0.33925,
+      "maxY": -0.30924,
+      "medianY": -0.31658,
+      "spreadY": 0.03001,
+      "minAbsNormalY": 0.85329,
+      "aboveSurfaceHits": 0,
+      "allSamples": [
+        {
+          "point": [
+            -0.28,
+            -0.30924,
+            -0.8725
+          ],
+          "normal": [
+            0.01047,
+            0.96466,
+            0.26331
+          ],
+          "distance": 0.65924
+        },
+        {
+          "point": [
+            -0.28,
+            -0.31564,
+            -0.83625
+          ],
+          "normal": [
+            0.01085,
+            0.9998,
+            0.01689
+          ],
+          "distance": 0.66564
+        },
+        {
+          "point": [
+            -0.28,
+            -0.31625,
+            -0.8
+          ],
+          "normal": [
+            0.01085,
+            0.9998,
+            0.01689
+          ],
+          "distance": 0.66625
+        },
+        {
+          "point": [
+            -0.28,
+            -0.31663,
+            -0.76375
+          ],
+          "normal": [
+            -0.00128,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66663
+        },
+        {
+          "point": [
+            -0.28,
+            -0.31693,
+            -0.7275
+          ],
+          "normal": [
+            -0.00128,
+            0.99993,
+            0.01207
+          ],
+          "distance": 0.66693
+        },
+        {
+          "point": [
+            -0.24,
+            -0.30968,
+            -0.8725
+          ],
+          "normal": [
+            0.01047,
+            0.96466,
+            0.26331
+          ],
+          "distance": 0.65968
+        },
+        {
+          "point": [
+            -0.24,
+            -0.31607,
+            -0.83625
+          ],
+          "normal": [
+            0.01085,
+            0.9998,
+            0.01689
+          ],
+          "distance": 0.66607
+        },
+        {
+          "point": [
+            -0.24,
+            -0.31641,
+            -0.8
+          ],
+          "normal": [
+            -0.00128,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66641
+        },
+        {
+          "point": [
+            -0.24,
+            -0.31658,
+            -0.76375
+          ],
+          "normal": [
+            -0.00128,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66658
+        },
+        {
+          "point": [
+            -0.24,
+            -0.31687,
+            -0.7275
+          ],
+          "normal": [
+            -0.00128,
+            0.99993,
+            0.01207
+          ],
+          "distance": 0.66687
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31258,
+            -0.8725
+          ],
+          "normal": [
+            0.48681,
+            0.85329,
+            0.18686
+          ],
+          "distance": 0.66258
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31617,
+            -0.83625
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66617
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31634,
+            -0.8
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66634
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31652,
+            -0.76375
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66652
+        },
+        {
+          "point": [
+            -0.2,
+            -0.31683,
+            -0.7275
+          ],
+          "normal": [
+            -0.00258,
+            0.99991,
+            0.01342
+          ],
+          "distance": 0.66683
+        },
+        {
+          "point": [
+            -0.16,
+            -0.32889,
+            -0.8725
+          ],
+          "normal": [
+            0.25056,
+            0.96798,
+            -0.01536
+          ],
+          "distance": 0.67889
+        },
+        {
+          "point": [
+            -0.16,
+            -0.32369,
+            -0.83625
+          ],
+          "normal": [
+            0.23707,
+            0.91586,
+            -0.32404
+          ],
+          "distance": 0.67369
+        },
+        {
+          "point": [
+            -0.16,
+            -0.31641,
+            -0.8
+          ],
+          "normal": [
+            0.06205,
+            0.99627,
+            -0.05988
+          ],
+          "distance": 0.66641
+        },
+        {
+          "point": [
+            -0.16,
+            -0.31641,
+            -0.76375
+          ],
+          "normal": [
+            -0.00258,
+            0.99999,
+            0.00476
+          ],
+          "distance": 0.66641
+        },
+        {
+          "point": [
+            -0.16,
+            -0.31673,
+            -0.7275
+          ],
+          "normal": [
+            -0.00258,
+            0.99991,
+            0.01342
+          ],
+          "distance": 0.66673
+        },
+        {
+          "point": [
+            -0.12,
+            -0.33925,
+            -0.8725
+          ],
+          "normal": [
+            0.25056,
+            0.96798,
+            -0.01536
+          ],
+          "distance": 0.68925
+        },
+        {
+          "point": [
+            -0.12,
+            -0.33405,
+            -0.83625
+          ],
+          "normal": [
+            0.23707,
+            0.91586,
+            -0.32404
+          ],
+          "distance": 0.68405
+        },
+        {
+          "point": [
+            -0.12,
+            -0.32122,
+            -0.8
+          ],
+          "normal": [
+            0.23707,
+            0.91586,
+            -0.32404
+          ],
+          "distance": 0.67122
+        },
+        {
+          "point": [
+            -0.12,
+            -0.31672,
+            -0.76375
+          ],
+          "normal": [
+            0.06205,
+            0.99627,
+            -0.05988
+          ],
+          "distance": 0.66672
+        },
+        {
+          "point": [
+            -0.12,
+            -0.31663,
+            -0.7275
+          ],
+          "normal": [
+            0.0023,
+            0.99983,
+            0.01829
+          ],
+          "distance": 0.66663
+        }
+      ]
+    }
+  ],
+  "patchLimits": "Downward samples and short upward rays test the coarse collider, not the splat imagery. A clear patch still requires render QA; no physical accuracy claim.",
+  "applicationChanged": false,
+  "visualQA": "pending"
+}

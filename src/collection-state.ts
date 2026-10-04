@@ -7,19 +7,19 @@ const showroom: readonly CollectionRoomItem[] = [
   {
     id: 'rio-example', title: 'A little piece of Rio', subtitle: 'Ready example · Tripo + World Labs',
     story: 'I wanted you to feel the warm light, the sea breeze, and the afternoon that made me think of you. Follow the light across the bay and find the little moments I left for you.',
-    imageUrl: '/assets/portal-dusk/rio-keepsake.png', modelUrl: '/demo/rio-keepsake.glb', modelYaw: -Math.PI / 2,
+    imageUrl: '/assets/portal-dusk/rio-keepsake.png', modelUrl: '/demo/rio-keepsake.glb', mobileModelUrl: '/assets/daylight-desk/keepsakes/rio-mobile.glb', modelYaw: -Math.PI / 2,
     openPath: 'generated/rio-example', worldPath: 'generated/rio-example?view=world', kind: 'generated', demo: true, photoIntent: 'object',
   },
   {
     id: 'paris-example', title: 'An evening in Paris', subtitle: 'Ready example · Tripo + World Labs',
     story: 'Imagine an evening walk along the Seine, with the city glowing around a quiet moment. A little piece of Paris to keep close.',
-    imageUrl: '/demo/v17/paris-tripo-input.png', originalImageUrl: '/demo/v13/paris-photo.jpg', modelUrl: '/demo/v17/paris-model.glb', modelYaw: -Math.PI / 2,
+    imageUrl: '/demo/v17/paris-tripo-input.png', originalImageUrl: '/demo/v13/paris-photo.jpg', modelUrl: '/demo/v17/paris-model.glb', mobileModelUrl: '/assets/daylight-desk/keepsakes/paris-mobile.glb', modelYaw: -Math.PI / 2,
     openPath: 'generated/paris-example', worldPath: 'generated/paris-example?view=world', kind: 'generated', demo: true, photoIntent: 'place', objectRepresentation: 'souvenir-miniature',
   },
   {
     id: 'antikythera-example', title: 'A world of human curiosity', subtitle: 'Ready example · Tripo + World Labs',
     story: 'A little tribute to the people who turned questions about the sky into gears. Imagine carrying that curiosity into a world of your own.',
-    imageUrl: '/demo/v13/antikythera-photo.jpg', modelUrl: '/demo/v13/antikythera-model.glb', modelYaw: -Math.PI / 2,
+    imageUrl: '/demo/v13/antikythera-photo.jpg', modelUrl: '/demo/v13/antikythera-model.glb', mobileModelUrl: '/assets/daylight-desk/keepsakes/antikythera-mobile.glb', modelYaw: -Math.PI / 2,
     openPath: 'generated/antikythera-example', worldPath: 'generated/antikythera-example?view=world', kind: 'generated', demo: true, photoIntent: 'object',
   },
 ];

@@ -2,9 +2,11 @@
 
 Some gifts fit in your hand. Others take you to an entire world.
 
-Release 10.2.2 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs travel studio, open their memories and discover the sender's words. The new welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Demo people, journeys and stories are fictional.
+Release 10.3.0 preview of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs daylight studio, open their memories and discover the sender's words. The welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Demo people, journeys and stories are fictional.
 
 ## Build status
+
+The 10.3.0 preview implements the selected **Daylight atelier** desk for portrait phones, with a new full Marble 1.0 room, a larger interactive keepsake, cream/navy controls and measured tabletop positions. The three public keepsakes use smaller mobile texture derivatives with byte-identical geometry; their original GLBs remain the source for other views and print preparation. The room's 500k export is the primary on mobile, with a 100k failure fallback. See [mobile desk evidence](docs/DAYLIGHT-MOBILE-DESK.md) and [design QA](design-qa.md).
 
 **Release 10.2.2** includes the reference-conditioned World Labs studio, completed Tripo keepsakes, TapNow visual direction, standard WebXR and print preparation. Physical PICO, HeyGears and Jupiter validation remain pending. Live creation uses private Supabase storage and the server's pinned image moderation models.
 

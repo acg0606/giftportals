@@ -1,5 +1,7 @@
 # GiftPortals 10.0 art direction
 
+The 10.3.0 collection preview adopts the user-selected Daylight atelier: pale oak, ivory walls, a tall daylight window, an unobscured central Tripo keepsake and cream/navy touch controls. Portrait composition is calibrated independently; desktop expands the same real World Labs room. The heading uses light serif type over a restrained header contrast treatment. The wood and gift region have no cream haze overlay. Full-room and mobile texture provenance are recorded in [mobile desk evidence](DAYLIGHT-MOBILE-DESK.md).
+
 The supplied coastal travel reference sets the interface: navy type and actions, pale sky blue, warm cream, a restrained visual hierarchy and a handwritten homepage headline. The supplied evening desk reference sets the environment: detailed travel objects, believable wood, brass and glass, warm practical lights balanced with the cool exterior sky, and a central souvenir.
 
 The homepage headline, navigation and controls are HTML. The generated scene must have no embedded UI or duplicated text. Desktop retains space for copy at left and the suitcase diorama at right; mobile stacks legible copy over a separate cropped scene area. Main actions and controls meet a 44-pixel minimum target. Creation inputs use at least 16-pixel text on mobile to avoid automatic zoom.

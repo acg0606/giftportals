@@ -1,0 +1,82 @@
+{
+  "kind": "derived-mobile-texture-variant",
+  "providerSource": "Tripo",
+  "newProviderRequests": 0,
+  "newCreditsConsumed": 0,
+  "source": {
+    "url": "/demo/v13/antikythera-model.glb",
+    "sha256": "0510a48850fba5eb326371d1cecbec606dd22dc487654a44793129ecc1cd83b1",
+    "bytes": 15649720
+  },
+  "derived": {
+    "url": "/assets/daylight-desk/keepsakes/antikythera-mobile.glb",
+    "sha256": "487169c4de2175df52e4542ed22135b6a5e182201b1204c6909a17a36517548d",
+    "bytes": 5148396
+  },
+  "technique": {
+    "tool": "Sharp",
+    "colorMaxDimension": 2048,
+    "dataMapMaxDimension": 1024,
+    "colorEncoding": "Opaque JPEG quality94 4:4:4; PNG when source has alpha",
+    "dataMapEncoding": "PNG lossless after spatial resampling",
+    "resampling": "Lanczos3"
+  },
+  "verification": {
+    "geometryBufferViewsByteExact": true,
+    "nodesMeshesAccessorsMaterialsAndTransformsUnchanged": true,
+    "sourceOriginalPreserved": true
+  },
+  "textures": [
+    {
+      "index": 0,
+      "roles": [
+        "baseColor"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        2048,
+        2048
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/jpeg",
+      "bytes": 1785354
+    },
+    {
+      "index": 1,
+      "roles": [
+        "metallicRoughness"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        1024,
+        1024
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/png",
+      "bytes": 1657377
+    },
+    {
+      "index": 2,
+      "roles": [
+        "normal"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        1024,
+        1024
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/png",
+      "bytes": 781902
+    }
+  ]
+}

@@ -19,7 +19,8 @@ test('public showroom contains exactly three completed cached gifts and only sta
     assert.equal(item.openPath, `generated/${item.id}`); assert.equal(item.worldPath, `generated/${item.id}?view=world`);
     assert.equal(item.kind, 'generated'); assert.equal(item.demo, true);
     if (name === 'paris') { assert.equal(item.originalImageUrl, manifest.originalUrl); assert.equal(item.objectRepresentation, 'souvenir-miniature'); assert.equal(manifest.objectRepresentation, 'souvenir-miniature'); assert.equal(item.modelYaw, -Math.PI / 2); assert.equal(manifest.modelYaw, undefined, 'The keepsake viewer retains native orientation'); assert.notEqual(item.imageUrl, item.originalImageUrl); }
-    for (const path of [item.imageUrl, item.modelUrl, manifest.worldUrl]) { assert.match(path, /^\/(assets|demo)\//); assert.equal(/[?#]/.test(path), false); await access(new URL(`../public${path}`, import.meta.url)); }
+    assert.equal(item.mobileModelUrl, `/assets/daylight-desk/keepsakes/${name}-mobile.glb`);
+    for (const path of [item.imageUrl, item.modelUrl, item.mobileModelUrl, manifest.worldUrl]) { assert.match(path, /^\/(assets|demo)\//); assert.equal(/[?#]/.test(path), false); await access(new URL(`../public${path}`, import.meta.url)); }
   }
   const first = publicCollectionItems(); first[0].modelUrl = '/api/instant?action=asset&token=private'; first.pop();
   assert.equal(publicCollectionItems().length, 3); assert.equal(publicCollectionItems()[0].modelUrl, '/demo/rio-keepsake.glb');

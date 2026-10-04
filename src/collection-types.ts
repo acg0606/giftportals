@@ -7,6 +7,7 @@ export interface CollectionRoomItem {
   createdAt?: string;
   imageUrl?: string;
   modelUrl?: string;
+  mobileModelUrl?: string;
   mediaExpiresAt?: number;
   photoIntent?: 'object' | 'place';
   objectRepresentation?: InstantObjectRepresentation;
@@ -24,6 +25,8 @@ export interface CollectionSceneOptions {
   items: readonly CollectionRoomItem[];
   isCurrent(): boolean;
   onSelect(id: string): void;
+  /** The gift displayed by the desk, independently of an explicit selection. */
+  onFocus?(id: string): void;
   onProject(points: readonly CollectionProjection[]): void;
   onReady(): void;
   onUnavailable(message: string): void;

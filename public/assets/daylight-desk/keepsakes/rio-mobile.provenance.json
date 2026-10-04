@@ -1,0 +1,82 @@
+{
+  "kind": "derived-mobile-texture-variant",
+  "providerSource": "Tripo",
+  "newProviderRequests": 0,
+  "newCreditsConsumed": 0,
+  "source": {
+    "url": "/demo/rio-keepsake.glb",
+    "sha256": "ffb29a30265b97ade97ee646f2ca14070c5bd947e8faef62a28d370b07d68bad",
+    "bytes": 17545328
+  },
+  "derived": {
+    "url": "/assets/daylight-desk/keepsakes/rio-mobile.glb",
+    "sha256": "7a83f305eab188c9d55640cf313dcba44350c34999b958ded6a691365a4a9632",
+    "bytes": 5150296
+  },
+  "technique": {
+    "tool": "Sharp",
+    "colorMaxDimension": 2048,
+    "dataMapMaxDimension": 1024,
+    "colorEncoding": "Opaque JPEG quality94 4:4:4; PNG when source has alpha",
+    "dataMapEncoding": "PNG lossless after spatial resampling",
+    "resampling": "Lanczos3"
+  },
+  "verification": {
+    "geometryBufferViewsByteExact": true,
+    "nodesMeshesAccessorsMaterialsAndTransformsUnchanged": true,
+    "sourceOriginalPreserved": true
+  },
+  "textures": [
+    {
+      "index": 0,
+      "roles": [
+        "baseColor"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        2048,
+        2048
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/jpeg",
+      "bytes": 1984184
+    },
+    {
+      "index": 1,
+      "roles": [
+        "metallicRoughness"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        1024,
+        1024
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/png",
+      "bytes": 1110717
+    },
+    {
+      "index": 2,
+      "roles": [
+        "normal"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        1024,
+        1024
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/png",
+      "bytes": 1099104
+    }
+  ]
+}
