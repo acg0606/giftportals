@@ -31,7 +31,11 @@ export function observeViewerVisibility(host:HTMLElement,gate:ReturnType<typeof 
 export async function fetchViewerBytes(url:string,signal:AbortSignal,onProgress?:(state:ViewerProgress)=>void,byteLimit=VIEWER_BYTE_LIMIT):Promise<Uint8Array<ArrayBuffer>>{
   signal.throwIfAborted();
   const limit=Number.isFinite(byteLimit)?Math.max(VIEWER_BYTE_LIMIT,Math.min(50*1024*1024,Math.floor(byteLimit))):VIEWER_BYTE_LIMIT;
-  const response=await fetch(url,{signal,credentials:'omit',redirect:'error',referrerPolicy:'no-referrer'});
+  // Protected previews authenticate only their own public static directories.
+  // Signed provider URLs and API endpoints never receive ambient credentials.
+  let credentials:RequestCredentials='omit';
+  if(typeof location!=='undefined')try{const source=viewerAssetUrl(url,location.origin);if(source.origin===location.origin&&/^\/(?:assets|demo)\//.test(source.pathname)&&!/%(?:2f|5c|25)/i.test(source.pathname))credentials='same-origin';}catch{}
+  const response=await fetch(url,{signal,credentials,redirect:'error',referrerPolicy:'no-referrer'});
   if(!response.ok||!response.body)throw new Error('VIEWER_DOWNLOAD_FAILED');
   const declared=Number(response.headers.get('content-length')||0);
   if(declared>limit){await response.body.cancel();throw new Error('VIEWER_ASSET_TOO_LARGE');}

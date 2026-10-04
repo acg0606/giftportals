@@ -18,6 +18,7 @@ const walkingSky = dataUrl(compile(await readFile(new URL('../src/walking-sky.ts
 const navigation = dataUrl(compile(await readFile(new URL('../src/world-navigation.ts', import.meta.url), 'utf8')).replace(/import \* as THREE from 'three';/, 'const THREE = globalThis.__worldFixture.THREE;').replace(/from 'three-mesh-bvh'/,`from '${import.meta.resolve('three-mesh-bvh')}'`));
 const walkCalibration = dataUrl(compile(await readFile(new URL('../src/walk-calibration.ts', import.meta.url), 'utf8')).replace(/import \* as THREE from 'three';/, 'const THREE = globalThis.__worldFixture.THREE;').replace(/from 'three-mesh-bvh'/, `from '${import.meta.resolve('three-mesh-bvh')}'`));
 const walkingViewpoints = dataUrl(compile(await readFile(new URL('../src/walking-viewpoints.ts', import.meta.url), 'utf8')));
+const walkingTour = dataUrl(compile(await readFile(new URL('../src/walking-tour.ts', import.meta.url), 'utf8')));
 const controller = dataUrl(compile(await readFile(new URL('../src/generated-world.ts', import.meta.url), 'utf8'))
   .replace(/import \* as THREE from 'three';/, 'const THREE = globalThis.__worldFixture.THREE;')
   .replace(/import \{ SparkRenderer, SplatMesh \} from '@sparkjsdev\/spark';/, 'const { SparkRenderer, SplatMesh } = globalThis.__worldFixture;')
@@ -30,6 +31,7 @@ const controller = dataUrl(compile(await readFile(new URL('../src/generated-worl
   .replace(/import\('\.\/walk-calibration'\)/, 'globalThis.__worldFixture.loadWalkCalibration()')
   .replace(/import\('\.\/walking-viewpoints'\)/, 'globalThis.__worldFixture.loadWalkingViewpoints()')
   .replace(/from '\.\/world-flight'/, `from '${flight}'`)
+  .replace(/from '\.\/walking-tour'/, `from '${walkingTour}'`)
   .replace(/from '\.\/viewer-runtime'/, `from '${runtime}'`));
 const flush = async () => { await setImmediate(); await setImmediate(); };
 let sequence = 0;
@@ -37,7 +39,8 @@ let sequence = 0;
 async function fixture(action, settings = {}) {
   const names = ['document', 'window', 'location', 'devicePixelRatio', 'innerWidth', 'innerHeight', 'ResizeObserver', 'IntersectionObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'fetch', 'matchMedia', 'createImageBitmap', '__worldFixture'];
   const saved = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const frames = new Map(), renderers = [], meshes = [], sparks = [], requests = [], projections = [], errors = [], walking = [], tours = [], viewpoints = [], cameraPoses = [], firstPersonStates = [], physicsInstances = [], bitmaps = [], gardens = [], gardenStates = [], walkingPointReports = [], lifecycle = [];
+  const frames = new Map(), renderers = [], meshes = [], sparks = [], requests = [], projections = [], errors = [], walking = [], tours = [], viewpoints = [], cameraPoses = [], firstPersonStates = [], physicsInstances = [], bitmaps = [], gardens = [], gardenStates = [], walkingPointReports = [], lifecycle = [], walkingTours = [];
+  let walkingTourCallback;
   const firstPerson = settings.firstPerson === true ? { spawn: [0, 1.55, .03], eyeHeight: 1.55, metricScale: 1, groundOffset: 0, walkSpeed: 1.15 } : settings.firstPerson;
   let intersection, visibilityDisconnected = 0;
   let frameId = 0, ready = 0, resizeDisconnected = 0, resolveDecode, resolveCollision, resolvePhysics, resolveCalibration, resolveViewpoints, calibrationLoads = 0, viewpointLoads = 0, collisionParses = 0, collisionGeometryDisposed = 0, collisionMaterialDisposed = 0, pointerLockExits = 0, now=0;
@@ -127,12 +130,13 @@ async function fixture(action, settings = {}) {
       freeFlight: settings.freeFlight, manualRadius: settings.manualRadius, manualStep: settings.manualStep, maxSplats: settings.maxSplats,
       firstPerson, onFirstPersonState: state => { firstPersonStates.push(state); lifecycle.push(['first-person', state.ready]); },
       onWalkingViewpoints: points => { walkingPointReports.push(points); lifecycle.push(['viewpoints', points.length]); },
+      onWalkingTour: settings.guidedWalking ? state => { walkingTours.push(state); walkingTourCallback?.(state); } : undefined,
       onGardenState: state => gardenStates.push(state),
       panoramaUrl: settings.panoramaUrl, panoramaYaw: settings.panoramaYaw,
       onCameraPose: settings.captureCamera ? pose => cameraPoses.push(pose) : undefined,
       onReady: () => ready++, onError: message => errors.push(message), onPoints: points => projections.push(points), onTourChange: state => tours.push(state) });
     await flush();
-    await action({ viewer, host, renderers, meshes, sparks, requests, projections, errors, frames, walking, motion, tours, viewpoints, cameraPoses, firstPersonStates, physicsInstances, bitmaps, gardens, gardenStates, walkingPointReports, lifecycle,
+    await action({ viewer, host, renderers, meshes, sparks, requests, projections, errors, frames, walking, motion, tours, viewpoints, cameraPoses, firstPersonStates, physicsInstances, bitmaps, gardens, gardenStates, walkingPointReports, lifecycle, walkingTours, onWalkingTour: callback => { walkingTourCallback = callback; },
       ready: () => ready, resizeDisconnected: () => resizeDisconnected, decode: async () => { resolveDecode(); await flush(); },
       collisionParses: () => collisionParses, collisionDisposals: () => ({ geometry: collisionGeometryDisposed, material: collisionMaterialDisposed }),
       completeCollision: async () => { resolveCollision?.({ scene: collider }); await flush(); },
@@ -151,6 +155,26 @@ const keyboard = (target, type, key, repeat = false) => {
 };
 
 const gardenSettings = { firstPerson: { spawn: [0, 1.65, 0], eyeHeight: 1.65, metricScale: 1, groundOffset: 0, livingGarden: true }, collisionUrl: '/synthetic/collider.glb' };
+
+test('guided walking waits for decode, pauses when hidden, resumes Next explicitly and releases navigation on destroy', async () => {
+  await fixture(async state => {
+    assert.equal(state.viewer.startWalkingTour(),false);await state.decode();state.draw();assert.equal(state.walkingTours.at(-1).available,true);
+    assert.equal(state.viewer.startWalkingTour(),true);state.draw();state.viewer.nextWalkingTour();state.draw();state.draw(50);
+    assert.equal(state.walkingTours.at(-1).index,1);const before=state.renderers[0].frames.at(-1).clone();assert.ok(before.distanceTo(new Three.Vector3(...state.physicsInstances[0].spawn))<=.03);
+    state.visible(false);assert.equal(state.walkingTours.at(-1).phase,'paused');state.draw(60000);assert.equal(state.viewer.resumeWalkingTour(),false);
+    state.visible(true);state.viewer.nextWalkingTour();assert.equal(state.walkingTours.at(-1).phase,'playing');state.draw(60000);assert.ok(state.renderers[0].frames.at(-1).distanceTo(before)<.001,'resuming resets elapsed time');state.draw(50);
+    state.motion.set(true);assert.equal(state.walkingTours.at(-1).phase,'paused');assert.equal(state.viewer.resumeWalkingTour(),false);state.viewer.nextWalkingTour();assert.equal(state.walkingTours.at(-1).index,2);assert.equal(state.walkingTours.at(-1).phase,'paused');state.draw();assert.equal(state.frames.size,0);
+    state.viewer.destroy();state.draw(60000);assert.equal(state.physicsInstances[0].destroys,1);assert.equal(state.frames.size,0);assert.equal(state.motion.listeners.size,0);assert.equal(state.visibilityDisconnected(),1);assert.equal(state.viewer.startWalkingTour(),false);
+  },{...gardenSettings,guidedWalking:true,observeVisibility:true});
+});
+
+test('destroy inside a walking chapter callback prevents a later render or callback in the same frame', async () => {
+  await fixture(async state => {
+    await state.decode();state.draw();state.viewer.startWalkingTour();state.draw();const renderer=state.renderers[0],renders=renderer.frames.length,poses=state.cameraPoses.length;
+    state.onWalkingTour(tour=>{if(tour.index===1)state.viewer.destroy();});state.draw(12000);
+    assert.equal(state.physicsInstances[0].destroys,1);assert.equal(renderer.frames.length,renders);assert.equal(state.cameraPoses.length,poses);assert.equal(state.frames.size,0);assert.equal(state.errors.length,0);assert.equal(renderer.disposed,true);
+  },{...gardenSettings,guidedWalking:true,captureCamera:true});
+});
 
 test('walking preserves the provider scene without generating placeholder visitors or an idle animation loop', async () => {
   await fixture(async state => {

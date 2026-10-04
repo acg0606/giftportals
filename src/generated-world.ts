@@ -6,6 +6,7 @@ import { createFirstPersonMotion } from './first-person-motion';
 import type { LivingGardenRoute } from './living-garden';
 import type { createFirstPersonPhysics } from './first-person-physics';
 import type { WalkingViewpoint } from './walking-viewpoints';
+import { deriveWalkingTour, createWalkingTourSession, type WalkingTourPlan, type WalkingTourState } from './walking-tour';
 import { connectWorldFlight, createWorldFlightRoute, sampleWorldFlight, validatedWorldFlightRoute, type WorldFlightPose, type WorldFlightProfile, type WorldFlightRoute } from './world-flight';
 import { createFrameGate, fetchViewerBytes, observeViewerVisibility, viewerAssetUrl, viewerPixelRatio, VIEWER_LOAD_TIMEOUT, type ViewerProgress } from './viewer-runtime';
 
@@ -47,6 +48,7 @@ export interface GeneratedWorldOptions {
   onFrameStats?(state: { framesPerSecond: number }): void;
   onGardenState?(state: { actors: number; playing: boolean; positions: readonly (readonly [number, number, number])[] }): void;
   onWalkingViewpoints?(points: readonly WalkingViewpoint[]): void;
+  onWalkingTour?(state: WalkingTourState): void;
 }
 export interface GeneratedWorldHandle {
   destroy(): void; reset(): void; look(horizontal: number, vertical: number): void; forward(): void; backward(): void;
@@ -57,6 +59,8 @@ export interface GeneratedWorldHandle {
   setMoveInput(horizontal: number, forward: number, sprint?: boolean): void;
   lockPointer(): Promise<boolean>;
   setWalkingViewpoint(id: string): boolean;
+  startWalkingTour(): boolean; pauseWalkingTour(reason?: WalkingTourState['reason']): void;
+  resumeWalkingTour(): boolean; stopWalkingTour(): void; nextWalkingTour(): void;
 }
 
 /** Real SPZ rendering. Narrative points use Three.js Y-up scene units, not GPS,
@@ -75,6 +79,8 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
   let collider: THREE.Object3D | undefined, navigation: ReturnType<typeof createGroundNavigation>, walking = false;
   let physics: Awaited<ReturnType<typeof createFirstPersonPhysics>> | undefined;
   let walkingViewpoints: readonly WalkingViewpoint[] = [];
+  let walkingTourPlan: WalkingTourPlan | undefined, walkingTour: ReturnType<typeof createWalkingTourSession> | undefined;
+  let walkingTourFrame: number | undefined, walkingTourSignature = '';
   let locomotion: ReturnType<typeof createFirstPersonMotion> | undefined, movementFrame: number | undefined;
   let stick = { horizontal: 0, forward: 0, sprint: false }, keys = new Set<string>();
   let lastMovementState = '', lastMovementReport = -Infinity;
@@ -125,6 +131,40 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
     if (!dead) options.onViewpointChange?.({ pointId, phase: 'cancelled' });
   };
   const stopInput = () => { keys.clear(); stick = { horizontal: 0, forward: 0, sprint: false }; movementFrame = undefined; locomotion?.stop(); };
+  const walkingTourState = () => {
+    if (dead) return;
+    const state: WalkingTourState = walkingTour?.state() || { available: Boolean(walkingTourPlan), phase: 'idle', index: 0, count: walkingTourPlan?.chapters.length || 0, estimatedDurationMs: walkingTourPlan?.estimatedDurationMs || 0, reducedMotion: reduced };
+    const signature = `${state.available}:${state.phase}:${state.index}:${state.stage}:${state.reason}:${state.reducedMotion}`;
+    if (signature !== walkingTourSignature) { walkingTourSignature = signature; options.onWalkingTour?.(state); }
+  };
+  const pauseWalkingTour = (reason: WalkingTourState['reason'] = 'user') => { walkingTour?.pause(reason); walkingTourFrame = undefined; walkingTourState(); gate?.request(); };
+  const stopWalkingTour = () => { if (!walkingTour) return; walkingTour.stop(); walkingTourFrame = undefined; locomotion?.reset(camera.position.toArray() as [number, number, number]); walkingTourState(); gate?.request(); };
+  const startWalkingTour = () => {
+    if (dead || !decoded || !physics || !walkingTourPlan || hidden || !visible) return false;
+    cancelFocus(); if (dead) return false; stopTour(); if (dead) return false; leaveWalking(); if (dead || !physics) return false;
+    const spawn = physics.reset(); locomotion?.reset(spawn); camera.position.set(...spawn); yaw = initialYaw; pitch = initialPitch; camera.fov = 75; camera.updateProjectionMatrix();
+    walkingTour = createWalkingTourSession(walkingTourPlan, reduced); walkingTourFrame = undefined; walkingTourState(); if (dead) return false; update(); return true;
+  };
+  const resumeWalkingTour = () => { if (dead || hidden || !visible || !decoded || !physics || !walkingTour?.resume()) return false; walkingTourFrame = undefined; walkingTourState(); gate?.request(); return true; };
+  const nextWalkingTour = () => {
+    if (dead || hidden || !visible || !physics || !walkingTour) return;
+    if (reduced) {
+      const pose = walkingTour.staticNext(); if (!pose) return;
+      const result = physics.advance(pose.position, [0, 0, 0], 1 / 60);
+      if (!result.grounded || !result.position.every(Number.isFinite)) { walkingTour.pause('blocked'); walkingTourState(); return; }
+      camera.position.set(...result.position); yaw = pose.yaw; camera.fov = pose.fov; camera.updateProjectionMatrix(); locomotion?.reset(result.position); update();
+    } else { if (walkingTour.state().phase === 'paused' && !walkingTour.resume()) return; walkingTour.next(); }
+    walkingTourFrame = undefined; walkingTourState(); gate?.request();
+  };
+  function advanceWalkingTour(now: number) {
+    if (!walkingTour || !physics || walkingTour.state().phase !== 'playing' || reduced) return;
+    const session = walkingTour, elapsed = walkingTourFrame === undefined ? 0 : Math.max(0, now - walkingTourFrame); walkingTourFrame = now;
+    const pose = session.step(elapsed, camera.position.toArray() as [number, number, number], physics.advance);
+    camera.position.set(...pose.position); const turn = Math.min(100, elapsed) / 1000 * .8, delta = Math.atan2(Math.sin(pose.yaw - yaw), Math.cos(pose.yaw - yaw)); yaw += THREE.MathUtils.clamp(delta, -turn, turn);
+    pitch += THREE.MathUtils.clamp(initialPitch - pitch, -turn * .4, turn * .4); camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    camera.fov += (pose.fov - camera.fov) * Math.min(1, Math.min(100, elapsed) / 800); camera.updateProjectionMatrix();
+    locomotion?.reset(pose.position); walkingTourState(); if (!dead && walkingTour === session && session.state().phase === 'playing') gate?.request();
+  }
   const leaveWalking = () => { releasePointer(); stopInput(); walking = false; if (options.firstPerson && document.pointerLockElement === host) document.exitPointerLock?.(); options.onWalkingChange?.({ available: Boolean(physics || navigation), enabled: false }); };
   const pauseTour = (reason: GeneratedWorldTourState['reason'] = 'user') => {
     if (dead || tourPhase !== 'playing') return;
@@ -202,7 +242,7 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
   }
   const look = (horizontal: number, vertical: number) => {
     if (dead || !decoded || !Number.isFinite(horizontal + vertical)) return;
-    cancelFocus(); pauseTour('manual');
+    cancelFocus(); pauseTour('manual'); pauseWalkingTour('manual');
     yaw += horizontal; pitch = THREE.MathUtils.clamp(pitch + vertical, -.85, .85); cameraReportPending = true; update();
   };
   const move = (horizontal: number, forward: number) => {
@@ -231,34 +271,36 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
   };
   const setWalking = (enabled: boolean) => {
     cancelFocus(); pauseTour('manual');
+    if (enabled) stopWalkingTour();
+    if (dead) return false;
     if (options.firstPerson) {
       stopInput(); walking = Boolean(enabled && physics && decoded && !dead);
       if (!walking && document.pointerLockElement === host) document.exitPointerLock?.();
-      options.onWalkingChange?.({ available: Boolean(physics) && !dead, enabled: walking }); gate?.request(); return walking;
+      options.onWalkingChange?.({ available: Boolean(physics) && !dead, enabled: walking }); gate?.request(); return !dead && walking;
     }
     const grounded = enabled && !dead ? navigation?.ground(camera.position) : undefined;
     walking=Boolean(grounded);
     if(grounded)camera.position.copy(grounded);else viewAnchor.copy(camera.position);
-    options.onWalkingChange?.({ available: Boolean(navigation) && !dead, enabled: walking });gate?.request();return walking;
+    options.onWalkingChange?.({ available: Boolean(navigation) && !dead, enabled: walking });gate?.request();return !dead && walking;
   };
   // Compatibility with existing controls: visual atmosphere comes from the
   // provider assets, never locally authored particles or extra scene geometry.
   const setAmbient = (_enabled: boolean) => {};
-  const motionChanged = () => { reduced=motion?.matches ?? false; if(reduced){cancelFocus();pauseTour('motion');} if(tourPhase!=='idle')tourState(); };
+  const motionChanged = () => { reduced=motion?.matches ?? false; walkingTour?.motion(reduced); walkingTourFrame = undefined; walkingTourState(); if(dead)return; if(reduced){cancelFocus();pauseTour('motion');} if(tourPhase!=='idle')tourState(); };
   motion?.addEventListener('change', motionChanged);
-  const reset = () => { if (!dead) { cancelFocus(); pauseTour('manual'); stopInput(); yaw = initialYaw; pitch = initialPitch; camera.fov = 75; camera.updateProjectionMatrix(); camera.position.copy(origin); if (physics && locomotion) { const spawn = physics.reset(); locomotion.reset(spawn); camera.position.set(...spawn); } viewAnchor.copy(camera.position); cameraReportPending = true; update(); } };
+  const reset = () => { if (!dead) { cancelFocus(); pauseTour('manual'); stopWalkingTour(); stopInput(); yaw = initialYaw; pitch = initialPitch; camera.fov = 75; camera.updateProjectionMatrix(); camera.position.copy(origin); if (physics && locomotion) { const spawn = physics.reset(); locomotion.reset(spawn); camera.position.set(...spawn); } viewAnchor.copy(camera.position); cameraReportPending = true; update(); } };
   const setWalkingViewpoint = (id: string) => {
     const point = walkingViewpoints.find(point => point.id === id);
     if (dead || !decoded || !physics || !locomotion || !point) return false;
-    cancelFocus(); stopTour(); releasePointer(); stopInput(); physics.reset();
+    cancelFocus(); stopTour(); stopWalkingTour(); if (dead || !physics || !locomotion) return false; releasePointer(); stopInput(); physics.reset();
     const resolved = physics.advance(point.position, [0, 0, 0], 1 / 60);
     locomotion.reset(resolved.position); camera.position.set(...resolved.position);
     yaw = point.yaw; pitch = initialPitch; camera.fov = 75; camera.updateProjectionMatrix();
     viewAnchor.copy(camera.position); cameraReportPending = true; update();
     options.onFirstPersonState?.({ ready: true, active: walking, locked: document.pointerLockElement === host, moving: false, distance: 0, grounded: resolved.grounded });
-    return true;
+    return !dead;
   };
-  const setMoveInput = (horizontal: number, forward: number, sprint = false) => { if (!options.firstPerson || dead) return; stick = { horizontal: Number.isFinite(horizontal) ? THREE.MathUtils.clamp(horizontal, -1, 1) : 0, forward: Number.isFinite(forward) ? THREE.MathUtils.clamp(forward, -1, 1) : 0, sprint: Boolean(sprint) }; gate?.request(); };
+  const setMoveInput = (horizontal: number, forward: number, sprint = false) => { if (!options.firstPerson || dead) return; if (horizontal || forward) stopWalkingTour(); stick = { horizontal: Number.isFinite(horizontal) ? THREE.MathUtils.clamp(horizontal, -1, 1) : 0, forward: Number.isFinite(forward) ? THREE.MathUtils.clamp(forward, -1, 1) : 0, sprint: Boolean(sprint) }; gate?.request(); };
   const lockPointer = async () => { if (!options.firstPerson || !walking || dead) return false; host.focus({ preventScroll: true }); try { await host.requestPointerLock?.(); return document.pointerLockElement === host; } catch { return false; } };
   function advanceLocomotion(now: number) {
     if (!walking || !physics || !locomotion) { movementFrame = undefined; return; }
@@ -269,6 +311,7 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
     camera.position.set(...state.cameraPosition); camera.rotation.set(pitch, yaw, state.roll, 'YXZ');
     const signature = `${walking}:${document.pointerLockElement === host}:${state.moving}:${state.grounded}`;
     if (signature !== lastMovementState || now - lastMovementReport > 250) { lastMovementState = signature; lastMovementReport = now; options.onFirstPersonState?.({ ready: true, active: walking, locked: document.pointerLockElement === host, moving: state.moving, distance: state.distance, grounded: state.grounded }); }
+    if (dead) return;
     if (state.moving || forward || strafe || !state.grounded) gate?.request();
   }
   function releasePointer() {
@@ -276,10 +319,10 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
     try { if (host.hasPointerCapture(id)) host.releasePointerCapture(id); } catch { /* Pointer capture may already be gone. */ }
   }
   function destroy() {
-    if (dead) return; dead = true;
+    if (dead) return; dead = true; walking = false;
     tourPhase = 'idle'; tourFrame = null; focusFlight = undefined;
     clearTimeout(deadline); download.abort(); events.abort(); releasePointer();
-    stopInput(); if (options.firstPerson && document.pointerLockElement === host) document.exitPointerLock?.(); physics?.destroy(); physics = undefined; walkingViewpoints = [];
+    stopInput(); if (options.firstPerson && document.pointerLockElement === host) document.exitPointerLock?.(); physics?.destroy(); physics = undefined; walkingViewpoints = []; walkingTour = undefined; walkingTourPlan = undefined; walkingTourFrame = undefined;
     motion?.removeEventListener('change', motionChanged);
     gate?.destroy(); stopVisibility?.(); resizeObserver?.disconnect();
     if (oldTabIndex === null) host.removeAttribute('tabindex'); else host.setAttribute('tabindex', oldTabIndex);
@@ -306,24 +349,33 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
       lastAmbient=now;
       try {
         advanceTour(now);
+        if (dead) return;
         advanceFocus(now);
+        if (dead) return;
+        advanceWalkingTour(now);
+        if (dead) return;
         advanceLocomotion(now);
+        if (dead) return;
         renderer.render(scene, camera); camera.updateMatrixWorld();
         if (options.firstPerson && options.onFrameStats) { if (!performanceStart) performanceStart = now; performanceFrames++; if (now - performanceStart >= 1000) { options.onFrameStats({ framesPerSecond: performanceFrames * 1000 / (now - performanceStart) }); performanceStart = now; performanceFrames = 0; } }
+        if (dead) return;
         if (options.onCameraPose && (cameraReportPending || now - lastCameraReport >= 500)) { cameraReportPending = false; lastCameraReport = now; options.onCameraPose(currentPose()); }
+        if (dead) return;
         options.onPoints?.(points.map(point => {
           const projected = point.position.clone().project(camera);
           return { id: point.id, x: (projected.x + 1) * 50, y: (1 - projected.y) * 50,
             visible: Number.isFinite(projected.x + projected.y + projected.z) && projected.z >= -1 && projected.z <= 1 && Math.abs(projected.x) < .84 && Math.abs(projected.y) < .8 };
         }));
+        if (dead) return;
         if (!announced) { announced = true; options.onReady(); }
+        if (dead) return;
         if((tourPhase === 'playing' || focusFlight) && !reduced)gate?.request();
       } catch { fail('The generated world could not render on this device. Your image and story remain available.'); }
     });
     spark = new SparkRenderer({ renderer, onDirty: () => gate?.request() }); scene.add(spark);
     stopVisibility = observeViewerVisibility(host, { ...gate,
-      setVisible(value) { visible = value; if (!value) { stopInput(); cancelFocus(); pauseTour('offscreen'); } gate?.setVisible(value); },
-      setHidden(value) { hidden = value; if (value) { stopInput(); cancelFocus(); pauseTour('hidden'); } gate?.setHidden(value); },
+      setVisible(value) { visible = value; if (!value) { stopInput(); cancelFocus(); pauseTour('offscreen'); pauseWalkingTour('offscreen'); } gate?.setVisible(value); },
+      setHidden(value) { hidden = value; if (value) { stopInput(); cancelFocus(); pauseTour('hidden'); pauseWalkingTour('hidden'); } gate?.setHidden(value); },
     });
     const resize = () => {
       if (dead || !renderer) return; const { width, height } = host.getBoundingClientRect();
@@ -335,7 +387,7 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
     host.addEventListener('pointerdown', event => {
       if (dead || pointer || !event.isPrimary || event.button !== 0) return;
       if (options.firstPerson && document.pointerLockElement === host) return;
-      cancelFocus(); pauseTour('manual');
+      cancelFocus(); pauseTour('manual'); pauseWalkingTour('manual');
       pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
       try { host.setPointerCapture(event.pointerId); } catch { pointer = undefined; return; }
       host.focus({ preventScroll: true });
@@ -350,7 +402,8 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
     host.addEventListener('keydown', event => {
       if (dead || event.altKey || event.ctrlKey || event.metaKey) return;
       const key = event.key.toLowerCase(); if (!['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'w', 'a', 's', 'd', 'r', ...(options.freeFlight ? ['q', 'e'] : [])].includes(key)) return;
-      if (options.firstPerson && walking) { event.preventDefault(); if (key === 'r') reset(); else { keys.add(key); gate?.request(); } return; }
+      if (options.firstPerson && physics && walkingTour && ['playing','paused'].includes(walkingTour.state().phase)) setWalking(true);
+      if (options.firstPerson && walking) { event.preventDefault(); if (key === 'r') reset(); else { stopWalkingTour(); keys.add(key); gate?.request(); } return; }
       cancelFocus(); pauseTour('manual');
       event.preventDefault(); if (event.repeat && !walking && !options.freeFlight) return;
       if (key === 'arrowleft') look(.15, 0); else if (key === 'arrowright') look(-.15, 0);
@@ -360,7 +413,7 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
     host.addEventListener('keyup', event => { if (options.firstPerson) { keys.delete(event.key.toLowerCase()); gate?.request(); } }, { signal: events.signal });
     host.addEventListener('keydown', event => { if (options.firstPerson && event.key === 'Shift' && walking) { keys.add('shift'); gate?.request(); } }, { signal: events.signal });
     if (options.firstPerson && typeof window !== 'undefined') {
-      window.addEventListener('blur', () => { stopInput(); }, { signal: events.signal });
+      window.addEventListener('blur', () => { stopInput(); pauseWalkingTour('hidden'); }, { signal: events.signal });
       window.addEventListener('keyup', event => { keys.delete(event.key.toLowerCase()); gate?.request(); }, { signal: events.signal });
     }
     document.addEventListener('pointerlockchange', () => { if (!options.firstPerson) return; stopInput(); gate?.request(); }, { signal: events.signal });
@@ -415,21 +468,25 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
             const controller = await createFirstPersonPhysics(collider!, { ...options.firstPerson!, spawn });
             if (dead) { controller.destroy(); return; }
             physics = controller; locomotion = createFirstPersonMotion(controller.spawn, { walkSpeed: options.firstPerson?.walkSpeed || 1.6, sprintSpeed: 2.7, acceleration: 9, damping: 13, strideLength: 1.2, headSway: .009, maxHorizontalCorrection: .02 });
+            if (options.onWalkingTour) { walkingTourPlan = deriveWalkingTour(controller, initialYaw); walkingTourState(); }
+            if (dead) return;
             if (options.firstPerson?.autoCalibrate) {
               const { deriveWalkingViewpoints } = await import('./walking-viewpoints'); if (dead) return;
               walkingViewpoints = deriveWalkingViewpoints(controller, initialYaw);
             }
             options.onGardenState?.({ actors: 0, playing: false, positions: [] });
+            if (dead) return;
             camera.position.set(...controller.spawn); origin.copy(camera.position); viewAnchor.copy(camera.position); cameraReportPending = true;
-            options.onWalkingChange?.({ available: true, enabled: false }); options.onFirstPersonState?.({ ready: true, active: false, locked: false, moving: false, distance: 0, grounded: true }); gate?.request();
+            options.onWalkingChange?.({ available: true, enabled: false }); if (dead) return;
+            options.onFirstPersonState?.({ ready: true, active: false, locked: false, moving: false, distance: 0, grounded: true }); if (dead) return; gate?.request();
             if (!dead && walkingViewpoints.length) options.onWalkingViewpoints?.(walkingViewpoints.map(point => ({ ...point, position: [...point.position] as [number, number, number] })));
-          }).catch(() => { if (!dead) { options.onWalkingChange?.({ available: false, enabled: false }); options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false }); } });
+          }).catch(() => { if (!dead) { options.onWalkingChange?.({ available: false, enabled: false }); if (!dead) options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false }); } });
           return;
         }
         collider.traverse(item=>{if(item instanceof THREE.Mesh)for(const material of Array.isArray(item.material)?item.material:[item.material])material.side=THREE.DoubleSide;});
         navigation=createGroundNavigation(collider,origin);options.onWalkingChange?.({available:Boolean(navigation),enabled:false});
-      }).catch(()=>{if(!dead) { options.onWalkingChange?.({available:false,enabled:false}); if (options.firstPerson) options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false }); }});
+      }).catch(()=>{if(!dead) { options.onWalkingChange?.({available:false,enabled:false}); if (!dead && options.firstPerson) options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false }); }});
     }else options.onWalkingChange?.({available:false,enabled:false});
   } catch { fail('3D rendering is unavailable on this device. Your image and story remain available.'); }
-  return { destroy, reset, look, forward: () => move(0,1), backward: () => move(0,-1), move, elevate, setWalking, get walkingAvailable(){return Boolean(physics||navigation)&&!dead;},setAmbient,startTour,pauseTour,resumeTour,stopTour,nextTour,focusPoint,setMoveInput,lockPointer,setWalkingViewpoint };
+  return { destroy, reset, look, forward: () => move(0,1), backward: () => move(0,-1), move, elevate, setWalking, get walkingAvailable(){return Boolean(physics||navigation)&&!dead;},setAmbient,startTour,pauseTour,resumeTour,stopTour,nextTour,focusPoint,setMoveInput,lockPointer,setWalkingViewpoint,startWalkingTour,pauseWalkingTour,resumeWalkingTour,stopWalkingTour,nextWalkingTour };
 }

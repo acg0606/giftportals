@@ -47,6 +47,14 @@ async function fixture(action, options = {}, settings = {}) {
   const implementation = {
     mountWorld(host, url, options) {
       const handle = { host, url, options, calls: [], destroyed: 0, available: true, destroy() { this.destroyed++; options.onWalkingChange({ available: false, enabled: false }); }, setWalking(value) { this.calls.push(['walking', value]); options.onWalkingChange({ available: this.available, enabled: value && this.available }); return value && this.available; }, setMoveInput(...values) { this.calls.push(['move', ...values]); }, setWalkingViewpoint(id) { this.calls.push(['viewpoint', id]); return settings.viewpointAccepted !== false; }, reset() { this.calls.push(['reset']); }, lockPointer() { if (settings.deferMouse) return new Promise(resolve => { this.resolveMouse = resolve; }); return Promise.resolve(false); } };
+      Object.assign(handle, { tour: {available: true, phase: 'idle', index: 0, count: 6, estimatedDurationMs: 123000, reducedMotion: Boolean(settings.reducedMotion)},
+        startWalkingTour() {this.calls.push(['tour-start']);this.tour.phase=this.tour.reducedMotion?'paused':'playing';options.onWalkingChange({available:true,enabled:false});options.onWalkingTour({...this.tour});return true;},
+        pauseWalkingTour(reason='user') {this.calls.push(['tour-pause',reason]);if(this.tour.phase==='playing'){this.tour.phase='paused';this.tour.reason=reason;options.onWalkingTour({...this.tour});}},
+        resumeWalkingTour() {if(this.tour.reducedMotion)return false;this.calls.push(['tour-resume']);this.tour.phase='playing';options.onWalkingTour({...this.tour});return true;},
+        stopWalkingTour() {if(this.tour.phase==='idle')return;this.calls.push(['tour-stop']);this.tour.phase='idle';options.onWalkingTour({...this.tour});},
+        nextWalkingTour() {this.calls.push(['tour-next']);this.tour.index=Math.min(5,this.tour.index+1);options.onWalkingTour({...this.tour});},
+      });
+      const setWalking=handle.setWalking.bind(handle);handle.setWalking=value=>{if(value)handle.stopWalkingTour();return setWalking(value);};
       state.worlds.push(handle); if (settings.syncFailure) options.onError('The scene asset could not be loaded.'); return handle;
     },
     mountReader(host, options) { const reader = { host, options, updates: [], focused: 0, destroyed: 0, update(value) { this.updates.push(value); }, focus() { this.focused++; }, destroy() { this.destroyed++; } }; state.readers.push(reader); return reader; },
@@ -55,7 +63,7 @@ async function fixture(action, options = {}, settings = {}) {
   state.handle = mountFirstPersonPlace(state.host, { isCurrent: () => state.current, onExit: () => state.exits++, ...options });
   state.find = selector => { const value = state.host.querySelector(selector); assert.ok(value, selector); return value; };
   state.event = (type, target, values = {}) => { const event = new Event(type, { cancelable: true }); Object.defineProperties(event, Object.fromEntries(Object.entries({ target, ...values }).map(([name, value]) => [name, { value }]))); state.host.dispatchEvent(event); return event; };
-  state.ready = (world = state.worlds.at(-1)) => { world.options.onReady(); world.options.onWalkingChange({ available: true, enabled: false }); world.options.onFirstPersonState({ ready: true, active: false, locked: false, distance: 0, grounded: true }); };
+  state.ready = (world = state.worlds.at(-1)) => { world.options.onReady(); world.options.onWalkingChange({ available: true, enabled: false }); world.options.onFirstPersonState({ ready: true, active: false, locked: false, distance: 0, grounded: true }); world.options.onWalkingTour({...world.tour,available:settings.tourUnavailable!==true}); };
   try { await action(state); } finally { state.handle.destroy(); for (const [name, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, name, descriptor); else delete globalThis[name]; } }
 }
 
@@ -98,17 +106,17 @@ test('audited calibration retains the real gift geometry while legacy visitor op
   await fixture(state => { const config = state.worlds[0].options.firstPerson; assert.equal(config.spawn, spawn); assert.equal(config.metricScale, 1.9); assert.equal(config.groundOffset, -.5); assert.equal(config.gardenRoutes, routes); assert.equal(config.groundProbeY, 4); assert.equal(config.livingGarden, false); assert.equal(config.autoCalibrate, false); }, { scenes: [scene({ metricScale: 1.9, groundOffset: -.5, spawn, livingGarden: true, gardenRoutes: routes, groundProbeY: 4 })] });
 });
 
-test('movement is gated until physics and rendering are ready, stroll is bounded and input is cleared on blur/hide', async () => {
+test('movement and a longer chapter tour stay gated until ready; manual input and blur/hide clear or pause guided motion', async () => {
   await fixture(state => {
     const world = state.worlds[0], forward = state.find('[data-wp-move="forward"]');
     state.event('pointerdown', forward, { pointerId: 1 }); assert.equal(world.calls.length, 0);
     world.options.onReady(); state.event('pointerdown', forward, { pointerId: 1 }); assert.equal(world.calls.length, 0);
     state.ready(); state.find('[data-wp-stroll]').click(); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'true');
-    world.options.onFirstPersonState({ ready: true, active: true, locked: false, distance: 10.1, grounded: true }); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'false'); assert.deepEqual(world.calls.at(-1), ['move', 0, 0]);
+    world.options.onFirstPersonState({ ready: true, active: true, locked: false, distance: 10.1, grounded: true }); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'true'); assert.equal(state.find('[data-wp-tour]').hidden,false);assert.match(state.find('[data-wp-tour-count]').textContent,/Chapter 1 of 6.*2 min/);
     state.event('pointerdown', forward, { pointerId: 2 }); assert.deepEqual(world.calls.at(-1), ['move', 0, 1]); state.event('pointerup', forward, { pointerId: 2 }); assert.deepEqual(world.calls.at(-1), ['move', 0, 0]);
-    state.find('[data-wp-stroll]').click(); state.window.dispatchEvent(new Event('blur')); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'false'); assert.deepEqual(world.calls.at(-1), ['move', 0, 0]);
-    state.find('[data-wp-stroll]').click(); state.document.hidden = true; state.document.dispatchEvent(new Event('visibilitychange')); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'false'); assert.deepEqual(world.calls.at(-1), ['move', 0, 0]);
-    state.find('[data-wp-pause]').click(); assert.equal(state.find('main').dataset.state, 'ready'); state.find('[data-wp-pause]').click(); assert.equal(state.find('main').dataset.state, 'walking'); state.find('[data-wp-reset]').click(); assert.deepEqual(world.calls.at(-1), ['reset']);
+    state.find('[data-wp-stroll]').click(); state.window.dispatchEvent(new Event('blur')); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'false'); assert.deepEqual(world.calls.at(-1), ['tour-pause','hidden']);
+    state.find('[data-wp-stroll]').click(); state.document.hidden = true; state.document.dispatchEvent(new Event('visibilitychange')); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'false'); assert.deepEqual(world.calls.at(-1), ['tour-pause','hidden']);
+    state.find('[data-wp-pause]').click(); assert.equal(state.find('main').dataset.state, 'walking'); state.find('[data-wp-pause]').click(); assert.equal(state.find('main').dataset.state, 'ready'); state.find('[data-wp-reset]').click(); assert.deepEqual(world.calls.at(-1), ['reset']);
   }, { scenes: [scene()], giftTitle: 'Rio' });
 });
 
@@ -141,7 +149,7 @@ test('only single automatically calibrated gifts show validated viewpoint button
 test('viewpoint changes stop stroll, close the journal, retain pause/walk state and reset selection to Arrival', async () => {
   await fixture(state => {
     const world = state.worlds[0]; world.options.onWalkingViewpoints(viewpoints()); state.ready(); const bay = state.find('[data-wp-viewpoint="bay"]'), arrival = state.find('[data-wp-viewpoint="arrival"]');
-    state.find('[data-wp-stroll]').click(); assert.equal(state.find('main').dataset.state, 'walking'); bay.click(); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'false'); assert.equal(state.find('main').dataset.state, 'walking'); assert.deepEqual(world.calls.at(-1), ['walking', true]);
+    state.find('[data-wp-stroll]').click(); assert.equal(state.find('main').dataset.state, 'walking'); bay.click(); assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-pressed'), 'false'); assert.equal(state.find('main').dataset.state, 'ready'); assert.deepEqual(world.calls.at(-1), ['walking', false]);
     state.find('[data-wp-story]').click(); const reader = state.readers[0]; assert.equal(state.find('main').dataset.state, 'ready'); arrival.click(); assert.equal(reader.destroyed, 1); assert.equal(state.find('[data-wp-reader]').hidden, true); assert.equal(state.find('main').dataset.state, 'ready'); assert.deepEqual(world.calls.at(-1), ['walking', false]); const calls = world.calls.length; reader.options.onClose(); assert.equal(world.calls.length, calls); assert.equal(state.find('main').dataset.state, 'ready');
     bay.click(); state.find('[data-wp-reset]').click(); assert.equal(arrival.getAttribute('aria-pressed'), 'true'); assert.equal(bay.getAttribute('aria-pressed'), 'false'); assert.deepEqual(world.calls.at(-1), ['reset']); assert.equal(state.find('main').dataset.state, 'ready');
   }, { scenes: [scene()], giftTitle: 'Rio' });
@@ -164,4 +172,19 @@ test('replaced, hidden, failed or destroyed viewpoints cannot revive a stale wal
     state.ready(second); second.options.onWalkingViewpoints(viewpoints()); const button = state.find('[data-wp-viewpoint="bay"]'); state.current = false; const secondCalls = second.calls.length; state.event('click', button); assert.equal(second.calls.length, secondCalls); second.options.onWalkingViewpoints([]); assert.equal(state.find('[data-wp-viewpoints]').children.length, 2);
     state.current = true; state.handle.destroy(); second.options.onWalkingViewpoints(viewpoints()); assert.equal(state.host.children.length, 0);
   }, { scenes: [scene()], giftTitle: 'Rio' });
+});
+
+test('reduced motion offers still Next controls and a manual exit; missing connected paths keep manual walking available', async () => {
+  await fixture(state=>{state.ready();const world=state.worlds[0];state.find('[data-wp-stroll]').click();assert.equal(state.find('main').dataset.tour,'paused');assert.match(state.find('[data-wp-tour-note]').textContent,/Reduced motion/);state.find('[data-wp-tour-next]').click();assert.equal(world.tour.index,1);assert.equal(state.find('[data-wp-pause]').getAttribute('aria-label'),'Next still chapter');state.find('[data-wp-pause]').click();assert.equal(world.tour.index,2);state.find('[data-wp-tour-explore]').click();assert.equal(state.find('[data-wp-tour]').hidden,true);assert.equal(state.find('main').dataset.state,'walking');}, {scenes:[scene()]},{reducedMotion:true});
+  await fixture(state=>{state.ready();assert.equal(state.find('[data-wp-stroll]').disabled,true);assert.equal(state.find('[data-wp-start]').disabled,false);state.find('[data-wp-start]').click();assert.equal(state.find('main').dataset.state,'walking');},{scenes:[scene()]},{tourUnavailable:true});
+});
+
+test('expired media never mounts a world; expiry during a chapter destroys it and ignores late state without blocking return', async () => {
+  await fixture(state=>{assert.equal(state.worlds.length,0);assert.equal(state.find('main').dataset.state,'error');assert.equal(state.find('[data-wp-stroll]').disabled,true);state.find('[data-wp-exit]').click();assert.equal(state.exits,1);},{scenes:[scene({mediaExpiresAt:Date.now()/1000-1})]});
+  const expiring=scene({mediaExpiresAt:Date.now()/1000+60});await fixture(state=>{state.ready();const world=state.worlds[0];state.find('[data-wp-stroll]').click();expiring.mediaExpiresAt=Date.now()/1000-1;world.options.onWalkingTour({...world.tour,index:1});assert.equal(world.destroyed,1);assert.equal(state.find('main').dataset.state,'error');assert.equal(state.find('[data-wp-tour]').hidden,true);world.options.onWalkingTour({...world.tour,phase:'playing'});world.options.onReady();assert.equal(world.destroyed,1);assert.equal(state.find('main').dataset.state,'error');assert.match(state.find('[data-wp-hint]').textContent,/expired/);state.find('[data-wp-exit]').click();assert.equal(state.exits,1);},{scenes:[expiring]});
+});
+
+test('blocked tours disable ineffective resume controls while keeping explicit exploration and reset; still chapters have an accurate label',async()=>{
+ await fixture(state=>{state.ready();const world=state.worlds[0];world.options.onWalkingTour({...world.tour,phase:'paused',reason:'blocked'});for(const name of ['stroll','pause','tour-next'])assert.equal(state.find(`[data-wp-${name}]`).disabled,true);assert.equal(state.find('[data-wp-tour-explore]').disabled,false);assert.equal(state.find('[data-wp-reset]').disabled,false);state.find('[data-wp-tour-explore]').click();assert.equal(state.find('main').dataset.state,'walking');},{scenes:[scene()]});
+ await fixture(state=>{state.ready();state.find('[data-wp-stroll]').click();assert.equal(state.find('[data-wp-stroll]').getAttribute('aria-label'),'Next still chapter');},{scenes:[scene()]},{reducedMotion:true});
 });

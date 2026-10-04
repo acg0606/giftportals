@@ -5,6 +5,9 @@ insert into auth.users(id,email,raw_user_meta_data) values
  ('00000000-0000-4000-a000-000000000001','acl-owner@giftportals.invalid','{"display_name":"Fictional ACL owner"}'),
  ('00000000-0000-4000-a000-000000000002','acl-recipient@giftportals.invalid','{"display_name":"Fictional ACL recipient"}'),
  ('00000000-0000-4000-a000-000000000003','acl-outsider@giftportals.invalid','{"display_name":"Fictional ACL outsider"}');
+-- Administrative helper checks intentionally query explicit users. Browser
+-- checks below switch to authenticated with a verified caller claim instead.
+set local role service_role;
 do $$
 declare m public.gp_memories; g public.gp_gifts; j public.gp_jobs; blocked boolean;
 begin

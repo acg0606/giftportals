@@ -1,0 +1,77 @@
+{
+  "format": "giftportals-daylight-atelier-world-v1",
+  "provider": "World Labs",
+  "model": "marble-1.0",
+  "generationQuality": "standard-full",
+  "actualCredits": 1580,
+  "estimatedCredits": 1580,
+  "input": {
+    "file": "daylight-room-reference.png",
+    "mime": "image/png",
+    "width": 853,
+    "height": 1844,
+    "bytes": 2064982,
+    "sha256": "79fe7ec4fa50db5ac8fce4b4b9d0ebb14bece64f7bc7d184089e18e39f69a99d",
+    "source": "selected-daylight-atelier-clean-reference",
+    "selectionOption": 1,
+    "selectionSHA256": "88fee307647d9c62023e42100c3f00ebf5995abbae52c2b473aa34ce0b122fd2"
+  },
+  "recipe": {
+    "textPrompt": "Reconstruct the supplied Daylight Atelier reference as a complete coherent real three-dimensional home writing studio. Faithfully retain its daylight composition, close seated eye-height viewpoint, compact light-oak writing desk with crisp natural grain, warm ivory walls, tall window, soft clear daylight and refined quiet atmosphere. The initial view must work in a narrow portrait phone viewport: the compact desk and its broad uninterrupted central wooden surface remain visible, with the window rising vertically behind it and meaningful depth beside and behind the viewer. Keep the desk front edge nearby and its center entirely empty, flat, continuous and physically solid, reserved for an independent interactive three-dimensional gift that our application will add later. Do not bake any souvenir, miniature, diorama, platform, pedestal, hologram, glass case or projector into this empty area. The clean reference intentionally contains no journal or photograph frame; keep the lateral tabletop areas free as well, reserved for independent real meshes supplied by our application. Do not add a journal, book, photograph frame, laptop or other extra desktop object absent from the reference. Preserve the selected reference's oak, linen, ivory and restrained brass palette, delicate daylight shadows, believable material texture and inviting calm. Build a complete surrounding room with physically plausible floor, walls and ceiling, connected open space and straight architectural lines. Keep all surfaces sharply resolved and geometry readable at the initial close viewpoint. No oil painting, illustration, low-poly simplification, blur, depth-of-field blur, motion blur, haze, fog, bloom, glowing dust, people, visible writing, logos, interfaces or text. This is an artistic imagined room, not a scan or an exact physical reconstruction.",
+    "promptSHA256": "fb4203c1d95ef14803b61dc90c78e86612d686e90081694f529ec2bef4e60356",
+    "promptVersion": "giftportals-daylight-atelier-v1",
+    "isPano": false,
+    "disableRecaption": true
+  },
+  "operationIdentitySHA256": "775c817201fd29adb77185be8ffaf923494f3344e8ccf5796e8f7ed64c3b87f4",
+  "worldIdentitySHA256": "8a88186d40b476f0bb3ea3383f47b209927155375424f178b250d221439034a3",
+  "worldSemantics": {
+    "metricScaleFactor": 0.5552033185958862,
+    "groundPlaneOffset": 1.0559234619140625
+  },
+  "availableProviderResolutions": [
+    "500k",
+    "100k",
+    "150k",
+    "full_res"
+  ],
+  "assets": [
+    {
+      "file": "collider.glb",
+      "bytes": 6112284,
+      "sha256": "1911c8932d7bbdbb97dd005534eb5b069fcc88b2eff1753ab746810522cc67e4",
+      "mime": "model/gltf-binary"
+    },
+    {
+      "file": "panorama.png",
+      "bytes": 2704860,
+      "sha256": "de20a97cc0c8cd0ba763bbb11392929ba58cb17cd42f20bb2d7f31c8a1afbc0c",
+      "mime": "image/png",
+      "width": 2304,
+      "height": 1152
+    },
+    {
+      "file": "world-500k.spz",
+      "bytes": 7923781,
+      "sha256": "d4e71fcaaf7e6054587759cd470ff030fdcee89e4227e87d32cb798ed71d545a",
+      "mime": "application/octet-stream",
+      "points": 500000,
+      "version": 2,
+      "decodedBytes": 9500016
+    },
+    {
+      "file": "world-100k.spz",
+      "bytes": 1347156,
+      "sha256": "f78546c098b1dd246f126ef794724cfed1a34629cc0b39830a12dd997614e0f4",
+      "mime": "application/octet-stream",
+      "points": 98304,
+      "version": 2,
+      "decodedBytes": 1867792
+    }
+  ],
+  "privateURLsIncluded": false,
+  "credentialsIncluded": false,
+  "paidGenerationCalls": 1,
+  "visualQA": "pending",
+  "applicationChanged": false
+}

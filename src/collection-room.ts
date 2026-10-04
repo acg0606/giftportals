@@ -42,6 +42,7 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
   let dead = false, page = 0, epoch = 0, selected: string | null = null, mood: CollectionMood = 'sunset';
   let scene: CollectionSceneHandle | undefined, pageEvents = new AbortController(), sceneReady = false;
   let latestProjection: readonly CollectionProjection[] = [];
+  let focused: string | null = null, awaitingFocus: string | null = null;
   let expiryTimer: number | undefined;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let playing = items.length > 0 && !reducedMotion.matches, pendingIndex = 0;
@@ -52,19 +53,32 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
   host.className = 'collection-room'; host.dataset.mood = mood; host.dataset.playing = String(playing);
   host.innerHTML = `<section class="cr-stage" data-cr-stage tabindex="0" aria-label="Memory desk. Left and right arrows move between gifts; Space pauses or plays."><div class="cr-scene" data-cr-scene></div><div class="cr-hotspots" data-cr-hotspots></div></section>
     <header class="cr-header"><button class="cr-brand" type="button" data-cr-home aria-label="GiftPortals home"><img src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></button><nav aria-label="Collection actions"><button class="cr-icon-button" type="button" data-cr-home aria-label="Home" title="Home">${icon('home')}</button><button type="button" class="cr-glass-button cr-drawer-trigger" data-cr-drawer-open aria-controls="cr-drawer-${instance}" aria-expanded="false">${giftIcon}<span>Gifts <small>${items.length}</small></span></button><button class="cr-create" type="button" data-cr-create>${giftIcon}<span>Create a gift</span></button></nav></header>
-    <div class="cr-room-title"><span class="cr-eyebrow">LITTLE THINGS. LASTING CONNECTIONS.</span><h1>${esc(options.title)}</h1><p>A little world appears on your desk. Tap it to open.</p><span class="cr-sr-only">${esc(options.subtitle)}</span></div>
+    <div class="cr-room-title"><h1>${esc(options.title)}</h1><p>A little world appears on your desk.</p><span class="cr-sr-only">${esc(options.subtitle)}</span></div>
     <div class="cr-page-control" data-cr-pagination ${pages === 1 ? 'hidden' : ''}><button type="button" class="cr-icon-button" data-cr-page="previous" aria-label="Previous set" title="Previous set">${icon('left')}</button><span data-cr-page-label></span><button type="button" class="cr-icon-button" data-cr-page="next" aria-label="Next set" title="Next set">${icon('right')}</button></div>
     <div class="cr-loading" data-cr-loading><div class="cr-loading-panel"><span class="cr-loading-mark" aria-hidden="true">${giftIcon}</span><p data-cr-status role="status" aria-live="polite">Opening your 3D memory desk…</p><button type="button" class="cr-primary" data-cr-retry hidden>Try again</button><button type="button" class="cr-glass-button" data-cr-browse hidden>Browse gifts</button></div></div>
     <div class="cr-empty" data-cr-empty ${items.length ? 'hidden' : ''}>${giftIcon}<h2>A memory starts here.</h2><p>Choose a photo. Make a little world for someone.</p><button type="button" class="cr-primary" data-cr-create>${giftIcon}<span>Create a gift</span></button></div>
-    <aside class="cr-detail" data-cr-detail hidden aria-labelledby="cr-selected-title-${instance}"><button type="button" class="cr-detail-close cr-icon-button" data-cr-clear aria-label="Back to the desk" title="Back to the desk">${icon('close')}</button><div class="cr-detail-identity"><div class="cr-detail-image"><img data-cr-selected-image alt="" hidden/><span data-cr-selected-placeholder data-cr-image-placeholder>${giftIcon}</span></div><div><span class="cr-eyebrow" data-cr-selected-kind></span><h2 id="cr-selected-title-${instance}" data-cr-selected-title tabindex="-1"></h2><p data-cr-selected-subtitle></p></div></div><p class="cr-selected-story" data-cr-selected-story></p><div class="cr-detail-actions"><button type="button" class="cr-primary" data-cr-open>${giftIcon}<span>Open gift</span></button><button type="button" class="cr-glass-button" data-cr-world hidden>${icon('globe')}<span>Step inside</span></button></div></aside>
-    <footer class="cr-footer"><span class="cr-room-hint" data-cr-hint><span class="cr-live-light" aria-hidden="true"></span><span data-cr-playback-label>Memories in motion</span></span><div class="cr-controls" aria-label="Desk controls">${control('previous', 'left', 'Previous gift')}<button type="button" class="cr-icon-button cr-playback" data-cr-play aria-pressed="${playing}" aria-label="${playing ? 'Pause desk' : 'Play desk'}" title="${playing ? 'Pause desk' : 'Play desk'}">${icon(playing ? 'pause' : 'play')}</button>${control('next', 'right', 'Next gift')}<span class="cr-control-divider" aria-hidden="true"></span>${control('closer', 'closer', 'Move closer')}${control('farther', 'farther', 'Move back')}<button type="button" class="cr-icon-button cr-mood" data-cr-mood aria-pressed="false" aria-label="Switch to night lighting" title="Switch to night lighting">${icon('lamp')}</button>${control('reset', 'orbit', 'Reset view')}</div></footer>
+    <aside class="cr-detail" data-cr-detail hidden aria-labelledby="cr-selected-title-${instance}"><button type="button" class="cr-detail-close cr-icon-button" data-cr-clear aria-label="Back to the desk" title="Back to the desk">${icon('close')}</button><details class="cr-gift-details" data-cr-gift-details><summary><span>Gift details</span>${icon('right')}</summary><div class="cr-detail-body"><div class="cr-detail-identity"><div class="cr-detail-image"><img data-cr-selected-image alt="" hidden/><span data-cr-selected-placeholder data-cr-image-placeholder>${giftIcon}</span></div><div><span class="cr-eyebrow" data-cr-selected-kind></span><h2 id="cr-selected-title-${instance}" data-cr-selected-title tabindex="-1"></h2><p data-cr-selected-subtitle></p></div></div><p class="cr-selected-story" data-cr-selected-story></p><div class="cr-detail-actions"><button type="button" class="cr-primary" data-cr-open>${giftIcon}<span>Open gift</span></button><button type="button" class="cr-glass-button" data-cr-world hidden>${icon('globe')}<span>Step inside</span></button></div></div></details></aside>
+    <footer class="cr-footer"><p class="cr-gift-caption" data-cr-caption aria-live="polite" aria-atomic="true">Finding your memory…</p><div class="cr-gift-navigation" aria-label="Browse gifts">${control('previous', 'left', 'Previous gift')}<button type="button" class="cr-primary cr-open-gift" data-cr-desk-open aria-label="Open gift" disabled><span>Open gift</span>${icon('right')}</button>${control('next', 'right', 'Next gift')}</div><details class="cr-tools" data-cr-tools><summary><span>Desk controls</span><span class="cr-live-light" aria-hidden="true"></span></summary><div class="cr-tools-panel"><span class="cr-room-hint" data-cr-hint><span data-cr-playback-label>Memories in motion</span></span><div class="cr-controls" aria-label="Desk controls"><button type="button" class="cr-icon-button cr-playback" data-cr-play aria-pressed="${playing}" aria-label="${playing ? 'Pause desk' : 'Play desk'}" title="${playing ? 'Pause desk' : 'Play desk'}">${icon(playing ? 'pause' : 'play')}</button>${control('closer', 'closer', 'Move closer')}${control('farther', 'farther', 'Move back')}<button type="button" class="cr-icon-button cr-mood" data-cr-mood aria-pressed="false" aria-label="Switch to night lighting" title="Switch to night lighting">${icon('lamp')}</button>${control('reset', 'orbit', 'Reset view')}</div></div></details></footer>
     <dialog class="cr-drawer" id="cr-drawer-${instance}" data-cr-drawer aria-labelledby="cr-drawer-title-${instance}"><header><div>${giftIcon}<h2 id="cr-drawer-title-${instance}">Your gifts</h2></div><button class="cr-icon-button" type="button" data-cr-drawer-close aria-label="Close gift list" title="Close gift list">${icon('close')}</button></header><p>Choose a memory to bring it into focus.</p><ul data-cr-list></ul><footer>${options.onManage ? '<button type="button" class="cr-glass-button" data-cr-manage>Manage collection</button>' : ''}<button class="cr-primary" type="button" data-cr-create>${giftIcon}<span>Create a gift</span></button></footer></dialog>`;
   const find = <T extends HTMLElement = HTMLElement>(selector: string) => host.querySelector<T>(selector)!;
   const stage = find('[data-cr-stage]'), sceneHost = find('[data-cr-scene]'), loading = find('[data-cr-loading]'), tray = find('[data-cr-detail]'), drawer = find<HTMLDialogElement>('[data-cr-drawer]');
   const on = (selector: string, callback: (event: Event) => void, signal = events.signal) => host.querySelectorAll<HTMLElement>(selector).forEach(element => element.addEventListener('click', callback, { signal }));
-  const text = (selector: string, value: string) => { find(selector).textContent = value; };
+  const text = (selector: string, value: string) => { const element = find(selector); if (element.textContent !== value) element.textContent = value; };
   const currentItems = () => items.slice(page * 6, page * 6 + 6);
   const chosen = () => items.find(item => item.id === selected);
+
+  function updateFocus() {
+    const item = focused ? byId.get(focused) : undefined;
+    const available = roomPhase === 'ready' && Boolean(item) && !awaitingFocus;
+    const button = find<HTMLButtonElement>('[data-cr-desk-open]'), label = available && item ? `Open gift: ${item.title}` : 'Open gift';
+    button.disabled = !available;
+    if (button.getAttribute('aria-label') !== label) button.setAttribute('aria-label', label);
+    text('[data-cr-caption]', item && !awaitingFocus ? item.title : items.length ? 'Finding your memory…' : 'Your next memory starts here.');
+  }
+  function waitForFocus(id: string) {
+    awaitingFocus = focused === id ? null : id;
+    updateFocus();
+  }
 
   function syncPlayback(next: boolean, delegate = true) {
     if (!active()) return;
@@ -88,7 +102,9 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
   function stepConveyor(direction: -1 | 1) {
     if (!active() || !currentItems().length) return;
     syncPlayback(false); if (selected) selectItem(null, false);
-    scene?.step(direction); if (!sceneReady) positionPending(pendingIndex + direction);
+    positionPending(pendingIndex + direction);
+    waitForFocus(currentItems()[pendingIndex].id);
+    scene?.step(direction);
   }
 
   function closeDrawer(restore = true) {
@@ -133,18 +149,18 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
     const item = chosen(); tray.hidden = !item; host.classList.toggle('has-selection', Boolean(item));
     for (const [id, button] of hotspots) button.setAttribute('aria-pressed', String(id === selected));
     host.querySelectorAll<HTMLButtonElement>('[data-cr-list-item]').forEach(button => { if (button.dataset.crListItem === selected) button.setAttribute('aria-current', 'true'); else button.removeAttribute('aria-current'); });
-    if (!item) return;
+    if (!item) { find('[data-cr-gift-details]').removeAttribute('open'); return; }
     text('[data-cr-selected-kind]', item.demo ? 'PUBLIC DEMO' : 'SAVED GIFT'); text('[data-cr-selected-title]', item.title); text('[data-cr-selected-subtitle]', item.subtitle);
     text('[data-cr-selected-story]', item.story || 'A little world, waiting for its story.');
     find<HTMLButtonElement>('[data-cr-world]').hidden = !item.worldPath;
     setImage(find<HTMLImageElement>('[data-cr-selected-image]'), find('[data-cr-selected-placeholder]'), item);
-    if (focus) find('[data-cr-selected-title]').focus({ preventScroll: true });
+    if (focus) find('[data-cr-gift-details] summary').focus({ preventScroll: true });
   }
   function selectItem(id: string | null, focus = true, delegate = true) {
     if (!active() || id !== null && !currentItems().some(item => item.id === id)) return;
     const previous = selected;
     syncPlayback(false); selected = id;
-    if (id !== null) positionPending(currentItems().findIndex(item => item.id === id));
+    if (id !== null) { positionPending(currentItems().findIndex(item => item.id === id)); waitForFocus(id); }
     updateSelection(focus && id !== null); if (delegate) scene?.select(id);
     refreshExpiredImages();
     if (id === null && focus) {
@@ -167,10 +183,10 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
     text('[data-cr-status]', message); find('[data-cr-retry]').hidden = !failed; find('[data-cr-browse]').hidden = !failed; find('[data-cr-empty]').hidden = true;
     host.querySelectorAll<HTMLButtonElement>('[data-cr-control]').forEach(button => button.disabled = true);
     find<HTMLButtonElement>('[data-cr-mood]').disabled = true;
-    syncPlayback(playing, false);
+    focused = null; updateFocus(); syncPlayback(playing, false);
   }
   function renderConveyor() {
-    epoch++; const generation = epoch; scene?.destroy(); scene = undefined; sceneReady = false; latestProjection = [];
+    epoch++; const generation = epoch; scene?.destroy(); scene = undefined; sceneReady = false; latestProjection = []; focused = null; awaitingFocus = selected;
     pageEvents.abort(); pageEvents = new AbortController(); sceneHost.replaceChildren(); hotspots.clear();
     const pageItems = currentItems(), points = find('[data-cr-hotspots]'); points.replaceChildren(); pendingIndex = 0;
     for (const item of pageItems) {
@@ -193,9 +209,10 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
           items: pageItems, isCurrent: () => current() && !unavailable,
           onPlaybackChange: (next: boolean) => { if (mounted && current() && !unavailable) syncPlayback(next, false); },
           onSelect: (id: string) => { if (current() && !unavailable) selectItem(id, true, false); },
+          onFocus: (id: string) => { if (!current() || unavailable || !pageItems.some(item => item.id === id) || awaitingFocus && awaitingFocus !== id) return; focused = id; awaitingFocus = null; positionPending(pageItems.findIndex(item => item.id === id)); updateFocus(); },
           onPropSelect: (id: 'photo-frame' | 'travel-journal') => { if (!current() || unavailable) return; syncPlayback(false); if (id === 'photo-frame') showDrawer(); else { closeDrawer(false); options.onCreate(); } },
           onProject: (positions: readonly CollectionProjection[]) => { if (current() && !unavailable) { latestProjection = positions; if (sceneReady) project(positions); } },
-          onReady: () => { if (!current() || unavailable) return; sceneReady = true; roomPhase = 'ready'; host.dataset.roomPhase = roomPhase; stage.classList.add('is-ready'); sceneHost.inert = false; loading.hidden = true; find('[data-cr-empty]').hidden = !!items.length; host.querySelectorAll<HTMLButtonElement>('[data-cr-control]').forEach(button => button.disabled = !pageItems.length && ['previous','next'].includes(button.dataset.crControl || '')); find<HTMLButtonElement>('[data-cr-mood]').disabled = false; syncPlayback(playing, false); project(latestProjection); },
+          onReady: () => { if (!current() || unavailable) return; sceneReady = true; roomPhase = 'ready'; host.dataset.roomPhase = roomPhase; stage.classList.add('is-ready'); sceneHost.inert = false; loading.hidden = true; find('[data-cr-empty]').hidden = !!items.length; host.querySelectorAll<HTMLButtonElement>('[data-cr-control]').forEach(button => button.disabled = !pageItems.length && ['previous','next'].includes(button.dataset.crControl || '')); find<HTMLButtonElement>('[data-cr-mood]').disabled = false; syncPlayback(playing, false); updateFocus(); project(latestProjection); },
           onUnavailable: () => { if (!current() || unavailable) return; unavailable = true; scene?.destroy(); scene = undefined; loadingState('The 3D desk could not open. Try again or browse your gifts.', true); },
         });
         if (!current() || unavailable) { handle.destroy(); return; }
@@ -222,6 +239,7 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
   on('[data-cr-create]', () => { if (active()) { closeDrawer(false); options.onCreate(); } });
   on('[data-cr-manage]', () => { if (active()) { closeDrawer(false); options.onManage?.(); } });
   on('[data-cr-open]', () => { const item = chosen(); if (active() && item) options.onOpen(item, false); });
+  on('[data-cr-desk-open]', () => { const item = focused ? byId.get(focused) : undefined; if (active() && roomPhase === 'ready' && !awaitingFocus && item) { syncPlayback(false); options.onOpen(item, false); } });
   on('[data-cr-world]', () => { const item = chosen(); if (active() && item?.worldPath) options.onOpen(item, true); });
   on('[data-cr-clear]', () => selectItem(null));
   on('[data-cr-play]', togglePlayback);
@@ -239,13 +257,15 @@ export function mountCollectionRoom(host: HTMLElement, options: CollectionRoomOp
     if (!active()) return; mood = mood === 'sunset' ? 'night' : 'sunset'; host.dataset.mood = mood; scene?.setMood(mood);
     const button = find('[data-cr-mood]'), label = mood === 'night' ? 'Switch to warm lighting' : 'Switch to night lighting'; button.setAttribute('aria-pressed', String(mood === 'night')); button.setAttribute('aria-label', label); button.setAttribute('title', label);
   });
+  find('[data-cr-tools]').addEventListener('toggle', () => { if (active() && find('[data-cr-tools]').hasAttribute('open')) syncPlayback(false); }, { signal: events.signal });
   drawer.addEventListener('cancel', event => { event.preventDefault(); closeDrawer(); }, { signal: events.signal });
   drawer.addEventListener('click', event => { if (event.target === drawer) { const rect = drawer.getBoundingClientRect(); const click = event as MouseEvent; if (click.clientX < rect.left || click.clientX > rect.right || click.clientY < rect.top || click.clientY > rect.bottom) closeDrawer(); } }, { signal: events.signal });
   host.addEventListener('keydown', event => {
     if (!active() || drawer.open || event.defaultPrevented) return;
     const target = event.target instanceof HTMLElement ? event.target : null, tag = target?.tagName.toLowerCase();
+    if (event.key === 'Escape' && find('[data-cr-tools]').hasAttribute('open')) { event.preventDefault(); event.stopPropagation(); find('[data-cr-tools]').removeAttribute('open'); find('[data-cr-tools] summary').focus({ preventScroll: true }); return; }
     if (event.key === 'Escape' && selected) { event.preventDefault(); event.stopPropagation(); selectItem(null); return; }
-    if (['input', 'textarea', 'select', 'a', 'button'].includes(tag || '') || target?.isContentEditable) return;
+    if (['input', 'textarea', 'select', 'a', 'button', 'summary'].includes(tag || '') || target?.isContentEditable) return;
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); event.stopPropagation(); stepConveyor(event.key === 'ArrowLeft' ? -1 : 1); }
     else if (event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); event.stopPropagation(); togglePlayback(); }
   }, { signal: events.signal, capture: true });

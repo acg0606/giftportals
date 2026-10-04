@@ -28,6 +28,8 @@ export interface WalkScene {
   groundProbeY?: number;
   intro?: string;
   journalMode?: StoryReaderMode;
+  /** Preserve the gift's original media lifetime throughout an open walk. */
+  mediaExpiresAt?: number;
 }
 
 /** Only an internal hash route can become the return-to-gift link. */

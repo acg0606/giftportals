@@ -225,3 +225,85 @@ test('prop actions from an unavailable or externally rerouted room cannot invoke
   assert.equal(state.find('[data-cr-drawer]').open,false);assert.equal(state.creates,0);assert.equal(state.focus.length,focus);assert.equal(renderer.calls.length,calls);assert.equal(state.host.dataset.playing,playing);
  });
 });
+
+test('the primary action follows the rendered gift during autoplay without selecting or interrupting it',async()=>{
+ await fixture(async state=>{
+  const renderer=state.renderers[0],open=state.find('[data-cr-desk-open]');
+  assert.equal(open.disabled,true);renderer.options.onFocus('gift-0');assert.equal(open.disabled,true);
+  renderer.options.onReady();assert.equal(open.disabled,false);assert.equal(state.find('[data-cr-caption]').textContent,'Gift 0');
+  const calls=renderer.calls.length;renderer.options.onFocus('gift-2');
+  assert.equal(state.find('[data-cr-caption]').textContent,'Gift 2');assert.equal(state.find('[data-cr-detail]').hidden,true);
+  assert.equal(state.host.dataset.playing,'true');assert.equal(renderer.calls.length,calls);
+  open.click();assert.equal(state.opened[0].item,state.items[2]);assert.equal(state.opened[0].world,false);
+  assert.equal(state.host.dataset.playing,'false');assert.equal(state.find('[data-cr-detail]').hidden,true);
+ });
+});
+
+test('manual navigation waits for the requested rendered gift and never opens the previous or intermediate one',async()=>{
+ await fixture(async state=>{
+  const renderer=state.renderers[0],open=state.find('[data-cr-desk-open]');renderer.options.onFocus('gift-0');renderer.options.onReady();
+  state.find('[data-cr-control="next"]').click();assert.equal(open.disabled,true);open.click();assert.deepEqual(state.opened,[]);
+  state.find('[data-cr-control="next"]').click();renderer.options.onFocus('gift-1');assert.equal(open.disabled,true);
+  renderer.options.onFocus('gift-2');assert.equal(open.disabled,false);assert.equal(state.find('[data-cr-caption]').textContent,'Gift 2');
+  open.click();assert.equal(state.opened[0].item,state.items[2]);assert.equal(state.host.dataset.playing,'false');
+  state.find('[data-cr-control="previous"]').click();assert.equal(open.disabled,true);renderer.options.onFocus('gift-1');
+  open.click();assert.equal(state.opened[1].item,state.items[1]);
+  state.find('[data-cr-drawer-open]').click();state.find('[data-cr-list-item="gift-0"]').click();
+  assert.equal(state.find('[data-cr-detail]').hidden,false);assert.equal(open.disabled,true);renderer.options.onFocus('gift-0');open.click();assert.equal(state.opened[2].item,state.items[0]);
+  state.find('[data-cr-clear]').click();assert.equal(state.find('[data-cr-detail]').hidden,true);assert.equal(open.disabled,false);
+  open.click();assert.equal(state.opened[3].item,state.items[0]);
+ });
+});
+
+test('focus receipts are bounded to the current page, ready epoch and current route',async()=>{
+ await fixture(async state=>{
+  const first=state.renderers[0],open=state.find('[data-cr-desk-open]');first.options.onFocus('gift-2');first.options.onReady();
+  state.find('[data-cr-page="next"]').click();assert.equal(open.disabled,true);await flush();const second=state.renderers[1];
+  first.options.onFocus('gift-1');second.options.onFocus('gift-1');assert.equal(open.disabled,true);
+  second.options.onFocus('gift-6');assert.equal(open.disabled,true);second.options.onReady();assert.equal(open.disabled,false);
+  assert.equal(state.find('[data-cr-caption]').textContent,'Gift 6');open.click();assert.equal(state.opened[0].item,state.items[6]);
+  second.options.onUnavailable('Context loss');assert.equal(open.disabled,true);second.options.onFocus('gift-6');assert.equal(open.disabled,true);
+  state.handle.destroy();first.options.onFocus('gift-0');second.options.onFocus('gift-6');assert.equal(state.host.children.length,0);
+ },{count:7});
+ await fixture(async state=>{
+  const renderer=state.renderers[0];renderer.options.onFocus('gift-0');renderer.options.onReady();state.current=false;
+  renderer.options.onFocus('gift-1');state.find('[data-cr-desk-open]').click();assert.equal(state.find('[data-cr-caption]').textContent,'Gift 0');assert.deepEqual(state.opened,[]);
+ });
+});
+
+test('a single reduced-motion gift remains immediately openable after a manual step',async()=>{
+ await fixture(async state=>{
+  const renderer=state.renderers[0],open=state.find('[data-cr-desk-open]');renderer.options.onFocus('gift-0');renderer.options.onReady();
+  assert.equal(state.host.dataset.playing,'false');assert.equal(state.find('[data-cr-play]').disabled,true);
+  state.find('[data-cr-control="next"]').click();assert.equal(open.disabled,false);open.click();assert.equal(state.opened[0].item,state.items[0]);
+  assert.equal(renderer.calls.some(call=>call[0]==='playing'&&call[1]===true),false);
+ },{count:1,reducedMotion:true});
+});
+
+test('secondary native controls pause the desk and preserve native keyboard activation and Escape focus',async()=>{
+ await fixture(async state=>{
+  const renderer=state.renderers[0];renderer.options.onFocus('gift-0');renderer.options.onReady();
+  const tools=state.find('[data-cr-tools]'),summary=state.find('[data-cr-tools] summary');
+  tools.setAttribute('open','');tools.dispatchEvent(new Event('toggle'));assert.equal(state.host.dataset.playing,'false');
+  const calls=renderer.calls.length;assert.equal(state.key(' ',summary).defaultPrevented,false);assert.equal(state.key('ArrowRight',summary).defaultPrevented,false);assert.equal(renderer.calls.length,calls);
+  assert.equal(state.key('Escape',summary).defaultPrevented,true);assert.equal(tools.hasAttribute('open'),false);assert.equal(state.document.activeElement,summary);
+  renderer.options.onSelect('gift-0');assert.equal(state.document.activeElement,state.find('[data-cr-gift-details] summary'));
+  state.find('[data-cr-gift-details]').setAttribute('open','');state.find('[data-cr-clear]').click();assert.equal(state.find('[data-cr-gift-details]').hasAttribute('open'),false);
+ });
+});
+
+test('accessible gift names follow manual navigation and autoplay, with no repeated live-region mutations for the same frame',async()=>{
+ await fixture(async state=>{
+  const renderer=state.renderers[0],caption=state.find('[data-cr-caption]'),open=state.find('[data-cr-desk-open]');
+  assert.equal(caption.getAttribute('aria-live'),'polite');assert.equal(caption.getAttribute('aria-atomic'),'true');
+  let captionValue=caption.textContent,captionWrites=0;Object.defineProperty(caption,'textContent',{configurable:true,get(){return captionValue;},set(value){captionValue=value;captionWrites++;}});
+  renderer.options.onFocus('gift-0');renderer.options.onReady();assert.equal(open.getAttribute('aria-label'),'Open gift: Gift 0');
+  const initialWrites=captionWrites;for(let frame=0;frame<4;frame++){renderer.options.onFocus('gift-0');renderer.options.onReady();}
+  assert.equal(captionWrites,initialWrites);assert.equal(state.host.dataset.playing,'true');
+  open.focus();renderer.options.onFocus('gift-2');assert.equal(open.getAttribute('aria-label'),'Open gift: Gift 2');assert.equal(caption.textContent,'Gift 2');
+  assert.equal(captionWrites,initialWrites+1);assert.equal(state.document.activeElement,open);assert.equal(state.host.dataset.playing,'true');
+  const next=state.find('[data-cr-control="next"]');next.focus();next.click();assert.equal(open.disabled,true);assert.equal(open.getAttribute('aria-label'),'Open gift');
+  renderer.options.onFocus('gift-0');assert.equal(caption.textContent,'Gift 0');assert.equal(open.getAttribute('aria-label'),'Open gift: Gift 0');
+  assert.equal(state.document.activeElement,next);assert.equal(state.host.dataset.playing,'false');
+ });
+});

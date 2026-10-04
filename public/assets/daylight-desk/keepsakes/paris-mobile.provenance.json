@@ -1,0 +1,82 @@
+{
+  "kind": "derived-mobile-texture-variant",
+  "providerSource": "Tripo",
+  "newProviderRequests": 0,
+  "newCreditsConsumed": 0,
+  "source": {
+    "url": "/demo/v17/paris-model.glb",
+    "sha256": "fa0f2909780370ae9fa8f82e1d44e5bf2455bb9fb8fdf6e63bbfce8e9e7b3fb0",
+    "bytes": 15151704
+  },
+  "derived": {
+    "url": "/assets/daylight-desk/keepsakes/paris-mobile.glb",
+    "sha256": "100a4e04c80d6e40fa19668c45a32769758764d8e4cb90ea700ef1ba4cd5e055",
+    "bytes": 5027708
+  },
+  "technique": {
+    "tool": "Sharp",
+    "colorMaxDimension": 2048,
+    "dataMapMaxDimension": 1024,
+    "colorEncoding": "Opaque JPEG quality94 4:4:4; PNG when source has alpha",
+    "dataMapEncoding": "PNG lossless after spatial resampling",
+    "resampling": "Lanczos3"
+  },
+  "verification": {
+    "geometryBufferViewsByteExact": true,
+    "nodesMeshesAccessorsMaterialsAndTransformsUnchanged": true,
+    "sourceOriginalPreserved": true
+  },
+  "textures": [
+    {
+      "index": 0,
+      "roles": [
+        "baseColor"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        2048,
+        2048
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/jpeg",
+      "bytes": 1850832
+    },
+    {
+      "index": 1,
+      "roles": [
+        "metallicRoughness"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        1024,
+        1024
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/png",
+      "bytes": 1234880
+    },
+    {
+      "index": 2,
+      "roles": [
+        "normal"
+      ],
+      "sourcePixels": [
+        4096,
+        4096
+      ],
+      "pixels": [
+        1024,
+        1024
+      ],
+      "alphaPreserved": false,
+      "mimeType": "image/png",
+      "bytes": 871373
+    }
+  ]
+}

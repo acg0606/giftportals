@@ -34,6 +34,7 @@ export function mountMemoryScene(host: HTMLElement, options: MemorySceneOptions)
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   const focus=new THREE.Vector3(0,1.1,0);
   const home=options.theme === 'dusk' ? new THREE.Vector3(4.65,1.9,1.2) : new THREE.Vector3(0,1.9,4.8);
+  let modelMinDistance=3.8;
   camera.position.copy(home);
   const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
   let reduced=motionPreference.matches;
@@ -81,6 +82,7 @@ export function mountMemoryScene(host: HTMLElement, options: MemorySceneOptions)
   function fitWrappedGift(){
     if(!unboxing)return;
     if(unboxing.revealed){
+      if(controls)controls.minDistance=modelMinDistance;
       if(host.getBoundingClientRect().width>600)return;
       // Frame the actual model's bounds in the compact viewer, without altering
       // the decoded geometry. The same orbit/zoom controls remain available.
@@ -101,7 +103,6 @@ export function mountMemoryScene(host: HTMLElement, options: MemorySceneOptions)
         distance=Math.max(unboxing.size.length()/2+.3,distance*Math.max(horizontal/.66,vertical/.78));
       }
       camera.position.copy(focus).addScaledVector(direction,distance);
-      if(controls)controls.minDistance=Math.min(3.8,distance*.72);
       return;
     }
     const halfWidth=Math.hypot(unboxing.size.x,unboxing.size.z)/2+.12,halfHeight=unboxing.size.y/2+.34;
@@ -216,6 +217,13 @@ export function mountMemoryScene(host: HTMLElement, options: MemorySceneOptions)
       focus.y=size.y*scale/2+0.07;home.y=focus.y+0.8;
       // Keep decoded sponsor geometry and materials intact. Original photographs live in the story UI.
       content.add(object);
+      object.updateMatrixWorld(true);
+      // Every orbit, wheel, pinch and explicit zoom shares this bound. Keep the
+      // camera outside the decoded gift in every direction, with near-plane
+      // clearance, while allowing its details to fill the viewport.
+      const zoomSphere=new THREE.Box3().setFromObject(object).getBoundingSphere(new THREE.Sphere());
+      modelMinDistance=zoomSphere.radius+zoomSphere.center.distanceTo(focus)+camera.near*2;
+      if(controls&&!options.unboxing)controls.minDistance=modelMinDistance;
       atmosphere?.setComposition(focus,home);
       if(options.unboxing){
         object.updateMatrixWorld(true);const wrappedBounds=new THREE.Box3().setFromObject(object);

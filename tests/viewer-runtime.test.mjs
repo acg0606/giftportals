@@ -25,6 +25,11 @@ async function withFetch(fetch, action) {
   globalThis.fetch = fetch;
   try { return await action(); } finally { globalThis.fetch = previous; }
 }
+async function withOrigin(origin,action){
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'location');
+  Object.defineProperty(globalThis,'location',{value:{origin},configurable:true});
+  try{return await action();}finally{if(previous)Object.defineProperty(globalThis,'location',previous);else delete globalThis.location;}
+}
 const expectedError = (code) => (error) => error instanceof Error && error.message === code;
 const signal = () => new AbortController().signal;
 
@@ -124,6 +129,39 @@ test('streamed assets preserve bytes and report monotonic download and decode ph
   assert.equal(requests[0].credentials, 'omit');
   assert.equal(requests[0].redirect, 'error');
   assert.equal(requests[0].referrerPolicy, 'no-referrer');
+});
+
+test('protected same-origin static assets use their session while signed downloads and API paths omit credentials',async()=>{
+  const origin='https://giftportal-preview.example.invalid',requests=[];
+  const cases=[
+    ['/assets/daylight-desk/world-500k.spz','same-origin'],
+    [origin+'/assets/daylight-desk/shadow-receiver.glb','same-origin'],
+    ['/demo/v17/paris-model.glb?cache=1','same-origin'],
+    [origin+'/demo/rio-keepsake.glb','same-origin'],
+    [origin+'/api/instant-cloud?id=synthetic','omit'],
+    ['/other/world.spz','omit'],
+    ['/assets-private/world.spz','omit'],
+    ['/demographic/world.spz','omit'],
+    ['/assets/../api/instant-cloud','omit'],
+    ['/demo/%2e%2e/api/instant-cloud','omit'],
+    ['/assets/%2f..%2fapi/instant-cloud','omit'],
+    ['/assets/%5c..%5capi/instant-cloud','omit'],
+    ['https://storage.example.invalid/assets/world.spz?token=synthetic','omit'],
+    ['https://cdn.giftportal-preview.example.invalid/demo/gift.glb','omit'],
+    ['https://giftportal-preview.example.invalid:444/assets/world.spz','omit'],
+    ['http://giftportal-preview.example.invalid/assets/world.spz','omit'],
+    ['https://name:secret@giftportal-preview.example.invalid/assets/world.spz','omit'],
+  ];
+  await withOrigin(origin,()=>withFetch(async(url,options)=>{requests.push({url,options});return new Response(Uint8Array.of(3,4,5));},async()=>{
+    for(const[url,credentials]of cases){assert.deepEqual([...await runtime.fetchViewerBytes(url,signal())],[3,4,5]);const request=requests.at(-1);assert.equal(request.options.credentials,credentials,url);assert.equal(request.options.redirect,'error');assert.equal(request.options.referrerPolicy,'no-referrer');}
+  }));
+});
+
+test('same-origin localhost static assets also authenticate without enabling credentials for a different port',async()=>{
+  await withOrigin('http://127.0.0.1:4325',()=>withFetch(async(url,options)=>{assert.equal(options.credentials,url.startsWith('http://127.0.0.1:4326')?'omit':'same-origin');return new Response(Uint8Array.of(1));},async()=>{
+    await runtime.fetchViewerBytes('http://127.0.0.1:4325/assets/daylight-desk/lighting.webp',signal());
+    await runtime.fetchViewerBytes('http://127.0.0.1:4326/demo/rio.glb',signal());
+  }));
 });
 
 test('compressed or unknown-size responses do not report a misleading percentage denominator', async () => {
