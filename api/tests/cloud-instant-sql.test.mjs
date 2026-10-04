@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 // This file reads only the staged SQL; it never reads credentials or connects.
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const sql = await readFile(resolve(root, 'supabase/migrations/002_cloud_instant.sql'), 'utf8');
+const qualifiedPrepareMigration = await readFile(resolve(root, 'supabase/migrations/003_instant_prepare_qualified_budget.sql'), 'utf8');
 const functions = [...sql.matchAll(/create function public\.(gp_instant_\w+)\(([\s\S]*?)\) returns [\s\S]*?\bas \$\$([\s\S]*?)\$\$;/g)]
   .map(match => ({ name: match[1], args: match[2], body: match[3], source: match[0] }));
 const byName = Object.fromEntries(functions.map(fn => [fn.name, fn]));
@@ -18,6 +19,17 @@ const body = name => {
 };
 const aclRevoke = sql.match(/revoke all on function ([\s\S]*?) from public,anon,authenticated,service_role;/)?.[1];
 const aclGrant = sql.match(/grant execute on function ([\s\S]*?) to service_role;/)?.[1];
+
+test('incremental prepare repair qualifies only the two provider budgets and preserves the complete transaction', () => {
+  const previous = byName.gp_instant_prepare.source;
+  const repaired = qualifiedPrepareMigration.match(/create or replace function public\.gp_instant_prepare\([\s\S]*?end \$\$;/)?.[0];
+  assert.equal(repaired, previous.replace('create function', 'create or replace function').replace(
+    'update public.gp_instant_budgets set reserved_credits=reserved_credits+reservation_per_job;',
+    "update public.gp_instant_budgets set reserved_credits=reserved_credits+reservation_per_job where provider in('tripo','worldlabs');"
+  ));
+  assert.doesNotMatch(qualifiedPrepareMigration, /(?:alter|grant|revoke|truncate|drop)\s+(?:role|table|policy)|safeupdate\.enabled|session_preload_libraries|\bset\s+credit_limit\s*=/i);
+  assert.match(qualifiedPrepareMigration, /\bbegin;[\s\S]*notify pgrst,'reload schema';\s*commit;/);
+});
 
 test('migration isolates tables and mutations from the authenticated gift and demo schema', () => {
   const tables = [...sql.matchAll(/create table public\.(\w+)/g)].map(match => match[1]);

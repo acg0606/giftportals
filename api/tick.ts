@@ -35,7 +35,7 @@ export async function tick(){
    await checkProviderCredit(provider,Number(job.reserved_credits));let request:Row;
    if(provider==='tripo'){
     const photo=unwrap(await s.from('gp_media').select('path,bucket').eq('memory_id',m.id).eq('kind','gift-photo').eq('ready',true).order('created_at').limit(1)) as Row[];ensure(photo.length,'GIFT_PHOTO_REQUIRED');
-    const signed=unwrap(await s.storage.from(photo[0].bucket||BUCKET).createSignedUrl(photo[0].path,3600));
+    const signed=unwrap<{signedUrl:string}>(await s.storage.from(photo[0].bucket||BUCKET).createSignedUrl(photo[0].path,3600));
     request={input:signed.signedUrl,model:'v3.1-20260211',face_limit:30000,texture:true,pbr:true,geometry_quality:'detailed',texture_quality:'detailed'};
    }else{
     const snapshot=job.input_snapshot?.title?job.input_snapshot:m;
