@@ -18,7 +18,7 @@ const moduleCode=compile(await readFile(new URL('../src/collection-scene.ts',imp
  .replace("from './collection-conveyor'",`from '${conveyor}'`);
 const controller=data(moduleCode);
 const flush=async()=>{await setImmediate();await setImmediate();};
-const deferred=()=>{let resolve;const promise=new Promise(done=>resolve=done);return{promise,resolve};};
+const deferred=()=>{let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail;});return{promise,resolve,reject};};
 function glb(value={}){
  const document={asset:{version:'2.0'},buffers:[{byteLength:0}],nodes:[],...value};let text=JSON.stringify(document);text+=' '.repeat((4-text.length%4)%4);const encoded=Buffer.from(text),bytes=Buffer.alloc(28+encoded.length);bytes.writeUInt32LE(0x46546c67,0);bytes.writeUInt32LE(2,4);bytes.writeUInt32LE(bytes.length,8);bytes.writeUInt32LE(encoded.length,12);bytes.writeUInt32LE(0x4e4f534a,16);encoded.copy(bytes,20);bytes.writeUInt32LE(0,20+encoded.length);bytes.writeUInt32LE(0x004e4942,24+encoded.length);return new Uint8Array(bytes);
 }
@@ -28,7 +28,7 @@ let sequence=0;
 async function fixture(action,settings={}){
  const names=['document','window','location','devicePixelRatio','innerWidth','innerHeight','ResizeObserver','IntersectionObserver','requestAnimationFrame','cancelAnimationFrame','matchMedia','createImageBitmap','fetch','setTimeout','clearTimeout','__roomFixture','URL'];
  const saved=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
- const state={current:true,frames:new Map(),renderers:[],projects:[],selected:[],errors:[],ready:0,requests:[],environmentRequests:[],environmentBitmaps:[],worldDecodes:[],panoramaDecodes:[],sparks:[],splats:[],revoked:[],models:[],parses:[],bitmaps:[],timers:new Map(),resizeClosed:0,visibilityClosed:0,frame:0,now:0,maxParses:0,activeParses:0,playback:[]};
+ const state={current:true,frames:new Map(),renderers:[],projects:[],selected:[],errors:[],ready:0,requests:[],environmentRequests:[],environmentBitmaps:[],worldDecodes:[],panoramaDecodes:[],sorts:[],sparks:[],splats:[],revoked:[],models:[],parses:[],bitmaps:[],timers:new Map(),resizeClosed:0,visibilityClosed:0,frame:0,now:0,maxParses:0,activeParses:0,playback:[]};
  let timerId=0,frameId=0;
  class Element extends EventTarget{
   style={};dataset={};attrs=new Map();children=[];parent=null;captures=new Set();isConnected=true;
@@ -47,6 +47,7 @@ async function fixture(action,settings={}){
  }
  class SparkRenderer extends Three.Group{
   disposed=0;constructor(input){super();this.input=input;state.sparks.push(this);}dispose(){this.disposed++;}
+  async update(input){const plan=deferred();state.sorts.push({...plan,...input});if(settings.failSort)throw Error('Synthetic sort unavailable');if(settings.deferSort)await plan.promise;}
  }
  class SplatMesh extends Three.Group{
   disposed=0;constructor(input){super();this.input=input;state.splats.push(this);const plan=deferred();state.worldDecodes.push(plan);this.initialized=settings.deferWorld?plan.promise:settings.failWorldDecode?Promise.reject(Error('Synthetic decode unavailable')):Promise.resolve();}dispose(){this.disposed++;}
@@ -93,17 +94,19 @@ async function fixture(action,settings={}){
  state.scene.destroy();state.scene.destroy();assert.equal(state.splats[0].disposed,1);assert.equal(state.sparks[0].disposed,1);assert.equal(state.environmentBitmaps[0].closed,1);assert.equal(state.timers.size,0);assert.equal(state.frames.size,0);
 },{items:[item('first',{modelUrl:'/synthetic/model.glb'})]}));
 
-test('a pending World Labs decode uses the actual panorama with an honest provider state',async()=>fixture(async state=>{
- assert.equal(state.host.dataset.roomEnvironmentProvider,'panorama');assert.equal(state.host.dataset.roomEnvironmentState,'panorama');state.draw();assert.equal(state.ready,1);assert.ok(state.renderers[0].scene.background instanceof Three.Texture);
- state.worldDecodes[0].resolve();await flush();state.draw();assert.equal(state.host.dataset.roomEnvironmentProvider,'WorldLabs');assert.equal(state.host.dataset.roomEnvironmentState,'ready');assert.equal(state.ready,1);
+test('a decoded panorama only lights PBR materials and cannot reveal the pending 3D studio',async()=>fixture(async state=>{
+ const scene=state.sparks[0].parent;assert.ok(scene.environment instanceof Three.Texture);assert.ok(scene.background instanceof Three.Color);assert.equal(scene.background.getHexString(),'101c2b');
+ assert.equal(state.host.dataset.roomEnvironmentProvider,'pending');assert.equal(state.host.dataset.roomEnvironmentState,'loading');state.draw();assert.equal(state.ready,0);assert.equal(state.renderers[0].cameras.length,0);assert.equal(state.sorts.length,0);assert.equal(state.frames.size,0);
+ state.worldDecodes[0].resolve();await flush();state.draw();assert.equal(state.host.dataset.roomEnvironmentProvider,'WorldLabs');assert.equal(state.host.dataset.roomEnvironmentState,'ready');assert.equal(state.ready,1);assert.equal(state.sorts.length,1);assert.equal(state.sorts[0].scene,scene);assert.ok(scene.background instanceof Three.Color);
 },{deferWorld:true}));
 
-test('a failed SPZ keeps the decoded panorama and real souvenirs without inventing a 3D room',async()=>fixture(async state=>{
- state.draw();assert.equal(state.errors.length,0);assert.equal(state.host.dataset.roomEnvironmentProvider,'panorama');assert.equal(state.host.dataset.roomEnvironmentState,'panorama');assert.equal(state.splats.length,0);assert.equal(state.host.dataset.roomModelsReady,'1');assert.equal(state.ready,1);
- const badge=state.host.children.find(child=>child.className==='cr-environment-state');assert.match(badge.textContent,/3D room unavailable/);
-},{failWorld:true,items:[item('gift',{modelUrl:'/synthetic/gift.glb'})]}));
+test('a failed SPZ is terminal even if its panorama and real souvenirs are already decoded',async()=>fixture(async state=>{
+ assert.equal(state.host.dataset.roomModelsReady,'1');assert.equal(state.environmentBitmaps.length,1);state.draw();assert.equal(state.ready,0);
+ state.worldDecodes[0].reject(Error('Synthetic room failure'));await flush();state.draw();assert.equal(state.errors.length,1);assert.match(state.errors[0],/3D studio could not load/);assert.equal(state.ready,0);assert.equal(state.renderers[0].cameras.length,0);assert.equal(state.host.children.length,0);
+ assert.equal(state.splats[0].disposed,1);assert.equal(state.sparks[0].disposed,1);assert.equal(state.environmentBitmaps[0].closed,1);assert.equal(state.models[0].geometryDisposed,1);assert.equal(state.models[0].materialDisposed,1);assert.equal(state.frames.size,0);assert.equal(state.timers.size,0);
+},{deferWorld:true,items:[item('gift',{modelUrl:'/synthetic/gift.glb'})]}));
 
-test('missing studio and panorama produce the accessible existing photo fallback once',async()=>fixture(async state=>{
+test('missing studio reports one accessible error and disposes the renderer',async()=>fixture(async state=>{
  state.draw();assert.equal(state.ready,0);assert.equal(state.errors.length,1);assert.match(state.errors[0],/photos and gift stories/);assert.equal(state.host.children.length,0);assert.equal(state.frames.size,0);assert.equal(state.timers.size,0);assert.equal(state.renderers[0].disposed,true);
 },{failWorld:true,failPanorama:true}));
 
@@ -112,10 +115,47 @@ test('late SPZ and panorama decoding close data exactly once after exit',async()
  assert.equal(state.splats[0].disposed,1);assert.equal(state.environmentBitmaps[0].closed,1);assert.equal(state.host.dataset.roomEnvironmentProvider,undefined);assert.equal(state.frames.size,0);assert.equal(state.timers.size,0);
 },{deferWorld:true,deferPanorama:true}));
 
-test('studio decoding timeout falls back immediately even when the decoder promise is still pending',async()=>fixture(async state=>{
- const timer=[...state.timers.entries()].find(([,value])=>value.delay===45000);assert.ok(timer);state.timers.delete(timer[0]);timer[1].callback();assert.equal(state.host.dataset.roomEnvironmentProvider,'panorama');assert.match(state.host.children.find(child=>child.className==='cr-environment-state').textContent,/unavailable/);assert.equal(state.splats[0].disposed,1);
- state.worldDecodes[0].resolve();await flush();assert.equal(state.splats[0].disposed,1);assert.equal(state.errors.length,0);
+test('studio decoding deadline reports terminal failure while a late decode is disposed exactly once',async()=>fixture(async state=>{
+ const timer=[...state.timers.entries()].find(([,value])=>value.delay===45000);assert.ok(timer);state.timers.delete(timer[0]);timer[1].callback();assert.equal(state.errors.length,1);assert.equal(state.host.children.length,0);assert.equal(state.splats[0].disposed,1);assert.equal(state.ready,0);
+ state.worldDecodes[0].resolve();await flush();assert.equal(state.splats[0].disposed,1);assert.equal(state.errors.length,1);assert.equal(state.sorts.length,0);assert.equal(state.environmentBitmaps[0].closed,1);assert.equal(state.timers.size,0);assert.equal(state.frames.size,0);
 },{deferWorld:true}));
+
+test('the studio is revealed only after decoded splats finish sorting and all real models settle',async()=>fixture(async state=>{
+ assert.equal(state.sorts.length,1);assert.equal(state.parses.length,2);state.draw();assert.equal(state.ready,0);assert.equal(state.renderers[0].cameras.length,0);assert.equal(state.host.dataset.roomEnvironmentState,'loading');
+ const scene=state.sorts[0].scene;assert.equal(state.sorts[0].camera.position.z,.03);assert.ok(scene.background instanceof Three.Color);assert.ok(scene.environment instanceof Three.Texture);
+ state.sorts[0].resolve();await flush();state.draw();assert.equal(state.host.dataset.roomEnvironmentProvider,'WorldLabs');assert.equal(state.host.dataset.roomEnvironmentState,'loading');assert.equal(state.ready,0);assert.equal(state.renderers[0].cameras.length,0);
+ state.parses[0].resolve();await flush();state.draw();assert.equal(state.ready,0);assert.equal(state.renderers[0].cameras.length,0);
+ state.parses[1].resolve();await flush();state.draw();assert.equal(state.ready,1);assert.equal(state.host.dataset.roomEnvironmentState,'ready');assert.equal(state.renderers[0].cameras.length,1);assert.ok(state.renderers[0].scene.background instanceof Three.Color);assert.equal(state.host.dataset.roomModelsReady,'2');
+},{deferSort:true,deferParse:true,items:[item('first',{modelUrl:'/synthetic/first.glb'}),item('second',{modelUrl:'/synthetic/second.glb'})]}));
+
+test('an already decoded studio still waits for its first Spark sort and does not spend display time',async()=>fixture(async state=>{
+ for(let i=0;i<140;i++){state.scene.look(0);state.draw();}assert.equal(state.ready,0);assert.equal(state.host.dataset.roomModelsReady,'2');assert.equal(state.renderers[0].cameras.length,0);assert.equal(state.frames.size,0);
+ state.sorts[0].resolve();await flush();state.draw();const visible=()=>state.renderers[0].scene.children.filter(value=>value.userData.collectionId&&value.visible).map(value=>value.userData.collectionId);
+ assert.deepEqual(visible(),['first']);for(let i=0;i<109;i++)state.draw();assert.deepEqual(visible(),['first']);for(let i=0;i<3;i++)state.draw();assert.deepEqual(visible(),['second']);
+},{deferSort:true,items:[item('first',{modelUrl:'/synthetic/first.glb'}),item('second',{modelUrl:'/synthetic/second.glb'})]}));
+
+test('exit during the first Spark sort aborts downloads and prevents a late room reveal',async()=>fixture(async state=>{
+ assert.equal(state.sorts.length,1);state.scene.destroy();assert.equal(state.environmentRequests.find(request=>request.url.endsWith('.spz')).options.signal.aborted,true);state.sorts[0].resolve();await flush();state.draw();
+ assert.equal(state.ready,0);assert.equal(state.errors.length,0);assert.equal(state.splats[0].disposed,1);assert.equal(state.sparks[0].disposed,1);assert.equal(state.environmentBitmaps[0].closed,1);assert.equal(state.frames.size,0);assert.equal(state.timers.size,0);assert.equal(state.host.children.length,0);
+},{deferSort:true}));
+
+test('the initial Spark sort is included in the studio deadline and late completion cannot reopen it',async()=>fixture(async state=>{
+ assert.equal(state.sorts.length,1);const timer=[...state.timers.entries()].find(([,value])=>value.delay===45000);assert.ok(timer);state.timers.delete(timer[0]);timer[1].callback();assert.equal(state.errors.length,1);assert.equal(state.ready,0);
+ state.sorts[0].resolve();await flush();state.draw();assert.equal(state.errors.length,1);assert.equal(state.ready,0);assert.equal(state.splats[0].disposed,1);assert.equal(state.sparks[0].disposed,1);assert.equal(state.frames.size,0);assert.equal(state.timers.size,0);
+},{deferSort:true}));
+
+test('Spark sort failure cannot expose a panorama as if it were the 3D studio',async()=>fixture(async state=>{
+ assert.equal(state.sorts.length,1);assert.equal(state.ready,0);assert.equal(state.errors.length,1);assert.equal(state.renderers[0].cameras.length,0);assert.equal(state.splats[0].disposed,1);assert.equal(state.frames.size,0);assert.equal(state.timers.size,0);
+},{failSort:true}));
+
+test('a failed panorama does not prevent the actual 3D studio from rendering with scene lights',async()=>fixture(async state=>{
+ state.draw();assert.equal(state.ready,1);assert.equal(state.errors.length,0);assert.equal(state.host.dataset.roomEnvironmentProvider,'WorldLabs');assert.equal(state.renderers[0].scene.environment,null);assert.ok(state.renderers[0].scene.background instanceof Three.Color);assert.equal(state.sorts.length,1);
+},{failPanorama:true}));
+
+test('late panorama lighting never replaces the room background or changes its opening camera',async()=>fixture(async state=>{
+ state.draw();assert.equal(state.ready,1);const renderer=state.renderers[0],scene=renderer.scene,background=scene.background,position=renderer.camera.position.clone(),rotation=renderer.camera.quaternion.clone(),fov=renderer.camera.fov;assert.equal(scene.environment,null);
+ state.panoramaDecodes[0].resolve();await flush();state.draw();assert.ok(scene.environment instanceof Three.Texture);assert.equal(scene.background,background);assert.equal(state.ready,1);assert.equal(state.host.dataset.roomEnvironmentProvider,'WorldLabs');assert.ok(renderer.camera.position.equals(position));assert.ok(renderer.camera.quaternion.equals(rotation));assert.equal(renderer.camera.fov,fov);
+},{deferPanorama:true,items:[item('gift',{modelUrl:'/synthetic/gift.glb'})]}));
 
 test('mobile uses the supplied 100k world, bounded texture detail and one stable camera origin',async()=>fixture(async state=>{
  state.draw();assert.ok(state.environmentRequests.some(request=>request.url.endsWith('memory-studio-mobile.spz')));assert.equal(state.splats[0].input.maxSplats,100000);assert.equal(state.renderers[0].pixelRatio,1);assert.equal(state.models[0].texture.image.width,1024);
@@ -137,13 +177,13 @@ test('a failed real gift model keeps an honest image preview without creating re
 },{failModel:true,items:[item('failed',{imageUrl:'/synthetic/photo.png',modelUrl:'/synthetic/model.glb'})]}));
 
 test('a pending Tripo model never shows a large photo card before becoming the real desk souvenir',async()=>fixture(async state=>{
- state.draw();const renderer=state.renderers[0],group=renderer.scene.children.find(value=>value.userData.collectionId==='gift'),preview=state.host.children.find(child=>child.className==='cr-asset-preview');
- assert.equal(state.host.dataset.roomPhotosReady,'1');assert.equal(state.host.dataset.roomModelsReady,'0');assert.equal(preview.children[0].hidden,false);assert.equal(preview.hidden,true);assert.equal(group.userData.representation,'loading-real-model');assert.equal(group.children.length,0);assert.deepEqual(group.scale.toArray(),[1,1,1]);assert.match(state.host.children.find(child=>child.className==='cr-environment-state').textContent,/opening keepsakes/);
+ state.draw();const renderer=state.renderers[0],group=state.sparks[0].parent.children.find(value=>value.userData.collectionId==='gift'),preview=state.host.children.find(child=>child.className==='cr-asset-preview');
+ assert.equal(state.ready,0);assert.equal(renderer.cameras.length,0);assert.equal(state.host.dataset.roomPhotosReady,'1');assert.equal(state.host.dataset.roomModelsReady,'0');assert.equal(preview.children[0].hidden,false);assert.equal(preview.hidden,true);assert.equal(group.userData.representation,'loading-real-model');assert.equal(group.children.length,0);assert.deepEqual(group.scale.toArray(),[1,1,1]);assert.match(state.host.children.find(child=>child.className==='cr-environment-state').textContent,/opening keepsakes/);
  state.parses[0].resolve();await flush();state.draw();assert.equal(state.host.dataset.roomModelsReady,'1');assert.equal(group.children.length,1);assert.equal(preview.hidden,true);assert.equal(group.userData.representation,'cached-generated-model');assert.deepEqual(group.scale.toArray(),[1,1,1]);
 },{deferParse:true,items:[item('gift',{imageUrl:'/synthetic/photo.png',modelUrl:'/synthetic/model.glb'})]}));
 
 test('the first complete souvenir receives its whole display interval after every model has settled',async()=>fixture(async state=>{
- const visible=()=>state.renderers[0].scene.children.filter(value=>value.userData.collectionId&&value.visible).map(value=>value.userData.collectionId);
+ const visible=()=>state.sparks[0].parent.children.filter(value=>value.userData.collectionId&&value.visible).map(value=>value.userData.collectionId);
  state.draw();assert.deepEqual(visible(),['first']);assert.equal(state.parses.length,2);
  for(let i=0;i<140;i++){state.scene.look(0);state.draw();}assert.deepEqual(visible(),['first'],'Loading longer than 5.5s cannot select an undecoded gift');assert.equal(state.frames.size,0,'A pending model does not keep an idle animation loop running');
  state.parses[0].resolve();await flush();for(let i=0;i<140;i++){state.scene.look(0);state.draw();}assert.deepEqual(visible(),['first'],'The second pending model still prevents automatic replacement');
@@ -161,7 +201,7 @@ test('a model decode deadline exposes its photo fallback and disposes a late mod
  state.parses[0].resolve();await flush();state.draw();assert.equal(state.host.dataset.roomModelsReady,'0');assert.equal(preview.hidden,false);assert.equal(state.models[0].geometryDisposed,1);assert.equal(state.models[0].materialDisposed,1);
 },{deferParse:true,items:[item('gift',{imageUrl:'/synthetic/photo.png',modelUrl:'/synthetic/model.glb'})]}));
 
-test('loaded gifts do not consume shuffle time while both environment render sources are unavailable',async()=>fixture(async state=>{
+test('loaded gifts do not consume shuffle time while the actual studio is still decoding',async()=>fixture(async state=>{
  for(let i=0;i<140;i++){state.scene.look(0);state.draw();}assert.equal(state.ready,0);assert.equal(state.host.dataset.roomModelsReady,'2');
  state.worldDecodes[0].resolve();await flush();state.draw();const groups=()=>state.renderers[0].scene.children.filter(value=>value.userData.collectionId&&value.visible).map(value=>value.userData.collectionId);
  for(let i=0;i<109;i++)state.draw();assert.deepEqual(groups(),['first']);for(let i=0;i<3;i++)state.draw();assert.deepEqual(groups(),['second']);
@@ -202,7 +242,7 @@ test('gift expiry removes the actual model and DOM photo while keeping the compl
 });
 
 test('environment configuration aligns the supplied asset and gift anchor without adding room geometry',async()=>fixture(async state=>{
- state.draw();const group=state.renderers[0].scene.children.find(value=>value.userData.collectionId==='first');assert.deepEqual(group.position.toArray(),[1,-.6,-2]);assert.deepEqual(state.renderers[0].camera.position.toArray(),[.2,0,.4]);assert.deepEqual(state.splats[0].position.toArray(),[0,1.24,0]);assert.equal(state.splats[0].scale.x,1.16);assert.equal(state.renderers[0].scene.backgroundRotation.y,.2);
+ state.draw();const group=state.renderers[0].scene.children.find(value=>value.userData.collectionId==='first');assert.deepEqual(group.position.toArray(),[1,-.6,-2]);assert.deepEqual(state.renderers[0].camera.position.toArray(),[.2,0,.4]);assert.deepEqual(state.splats[0].position.toArray(),[0,1.24,0]);assert.equal(state.splats[0].scale.x,1.16);assert.equal(state.renderers[0].scene.environmentRotation.y,.2);assert.equal(state.renderers[0].scene.backgroundRotation.y,0);assert.ok(state.renderers[0].scene.background instanceof Three.Color);
 },{environment:{cameraPosition:[.2,0,.4],cameraTarget:[0,-.2,-3],objectPosition:[1,-.6,-2],worldScale:1.16,worldPosition:[0,1.24,0],panoramaYaw:.2}}));
 
 test('fair shuffle visits every gift per bag and prevents an adjacent duplicate',async()=>fixture(async state=>{

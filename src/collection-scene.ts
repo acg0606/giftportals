@@ -115,7 +115,7 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
  let dead = false, unavailable = false, announced = false, reduced = motion?.matches ?? false, selected: string | null = null, hovered: string | null = null;
  let renderer: THREE.WebGLRenderer | undefined, spark: SparkRenderer | undefined, splats: SplatMesh | undefined, panorama: THREE.Texture | undefined, panoramaBitmap: ImageBitmap | undefined;
  let gate: ReturnType<typeof createFrameGate> | undefined, stopVisibility: (() => void) | undefined, observer: ResizeObserver | undefined;
- let worldReady = false, panoramaReady = false, worldFailed = false, panoramaFailed = false, blurred = false;
+ let worldReady = false, blurred = false;
  let width = 1, height = 1, yaw = 0, wantedYaw = 0, zoomOffset = 0, fieldOfView = config.fieldOfView, wantedFov = fieldOfView, lastFrame: number | null = null;
  let pointer: {id: number; x: number; y: number; startX: number; startY: number; dragged: boolean} | undefined;
  const active = () => !dead && host.isConnected && options.isCurrent();
@@ -138,10 +138,9 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
  }
  function environmentState() {
   if (dead) return;
-  host.dataset.roomEnvironmentProvider = worldReady ? 'WorldLabs' : panoramaReady ? 'panorama' : 'pending';
-  host.dataset.roomEnvironmentState = worldReady ? 'ready' : panoramaReady ? 'panorama' : worldFailed && panoramaFailed ? 'unavailable' : 'loading';
-  status.textContent = worldReady ? pendingModels.size ? 'World Labs studio · opening keepsakes…' : 'World Labs studio · 3D' : panoramaReady ? 'Studio panorama · opening the 3D room…' : 'Opening the World Labs studio…';
-  if (worldFailed && panoramaReady) status.textContent = 'Studio panorama · 3D room unavailable';
+  host.dataset.roomEnvironmentProvider = worldReady ? 'WorldLabs' : 'pending';
+  host.dataset.roomEnvironmentState = worldReady && pendingModels.size === 0 ? 'ready' : 'loading';
+  status.textContent = worldReady ? pendingModels.size ? 'World Labs studio · opening keepsakes…' : 'World Labs studio · 3D' : 'Opening the World Labs studio…';
  }
  function invalidate() { if (active()) gate?.request(); }
  function textureMaterials(root: THREE.Object3D) {
@@ -163,7 +162,6 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   for (const name of ['roomModelsReady', 'roomModelsFailed', 'roomPhotosReady', 'roomEnvironmentProvider', 'roomEnvironmentState', 'roomEnvironmentBudget']) delete host.dataset[name];
  }
  function fail(message: string) { if (dead || unavailable) return; unavailable = true; destroy(); options.onUnavailable(message); }
- function checkEnvironmentFailure() { environmentState(); invalidate(); if (worldFailed && panoramaFailed && active()) fail('The studio could not load. Your photos and gift stories remain available.'); }
  async function environmentJob(work: (signal: AbortSignal) => Promise<void>, failed: () => void) {
   const controller = new AbortController(), abort = () => controller.abort(); downloads.signal.addEventListener('abort', abort, {once: true});
   let reported = false; const report = () => { if (!reported && active()) { reported = true; failed(); } };
@@ -177,7 +175,13 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   value.rotation.set(...config.worldRotation); value.position.set(...config.worldPosition); value.scale.setScalar(config.worldScale); value.name = 'World Labs memory studio'; scene.add(value);
   await value.initialized;
   if (!active() || signal.aborted) { scene.remove(value); disposeSplat(value); if (splats === value) splats = undefined; if (signal.aborted) throw new Error('ROOM_WORLD_TIMEOUT'); return; }
-  worldReady = true; host.dataset.roomEnvironmentBudget = String(mobile ? 100000 : 500000); environmentState(); invalidate();
+  // Decoded splats still need their first GPU update and sort. Keep the opening
+  // screen until Spark can render the actual room synchronously.
+  if (!spark) throw new Error('ROOM_WORLD_RENDERER_UNAVAILABLE');
+  scene.updateMatrixWorld(true); camera.updateMatrixWorld();
+  await spark.update({scene, camera});
+  if (!active() || signal.aborted) { scene.remove(value); disposeSplat(value); if (splats === value) splats = undefined; if (signal.aborted) throw new Error('ROOM_WORLD_TIMEOUT'); return; }
+  worldReady = true; desk.elapsed = 0; lastFrame = null; host.dataset.roomEnvironmentBudget = String(mobile ? 100000 : 500000); environmentState(); invalidate();
  }
  async function loadPanorama(signal: AbortSignal) {
   const source = viewerAssetUrl(config.panoramaUrl, location.origin), bytes = await fetchViewerBytes(source.href, signal), size = boundedImage(bytes);
@@ -185,8 +189,9 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   const bitmap = await createImageBitmap(new Blob([bytes]), {imageOrientation: 'flipY'});
   if (!active() || signal.aborted) { bitmap.close(); return; }
   panoramaBitmap = bitmap; panorama = new THREE.Texture(bitmap); panorama.mapping = THREE.EquirectangularReflectionMapping; panorama.colorSpace = THREE.SRGBColorSpace; panorama.flipY = false; panorama.needsUpdate = true;
-  scene.background = panorama; scene.environment = panorama; scene.environmentIntensity = .7; scene.backgroundRotation.y = config.panoramaYaw; scene.environmentRotation.y = config.panoramaYaw;
-  panoramaReady = true; environmentState(); invalidate();
+  // The panorama lights imported PBR materials only; it is never a visible
+  // room, a loading phase or a substitute for the World Labs splats.
+  scene.environment = panorama; scene.environmentIntensity = .7; scene.environmentRotation.y = config.panoramaYaw; invalidate();
  }
  function publishPlayback(previous: boolean) { if (active() && previous !== belt.playing) options.onPlaybackChange?.(belt.playing); }
  function focusFov() {
@@ -265,7 +270,7 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   }
   diagnostics(); environmentState(); options.onPlaybackChange?.(belt.playing);
   gate = createFrameGate(now => {
-   if (!active() || !renderer || blurred || !worldReady && !panoramaReady) return; if (lastFrame !== null && now - lastFrame < 49) { gate?.request(); return; }
+   if (!active() || !renderer || blurred || !worldReady || pendingModels.size > 0) return; if (lastFrame !== null && now - lastFrame < 49) { gate?.request(); return; }
    const dt = lastFrame === null ? 0 : clamp((now - lastFrame) / 1000, 0, .05); lastFrame = now;
    const automatic = belt.playing && !reduced && pendingModels.size === 0;
    deskShuffleAdvance(desk, dt, automatic, reduced); belt.cursor = desk.current;
@@ -288,8 +293,8 @@ export function mountCollectionScene(host: HTMLElement, options: CollectionScene
   pointerEvent('pointerup', event => { if (!pointer || pointer.id !== event.pointerId) return; const slot = !pointer.dragged && active() ? hit(event) : undefined; releasePointer(); if (slot) { setFocus(slot.item.id); options.onSelect(slot.item.id); } });
   pointerEvent('pointercancel', releasePointer); pointerEvent('lostpointercapture', releasePointer); pointerEvent('pointerleave', () => { if (!pointer) { hovered = null; host.style.cursor = ''; } });
   renderer.domElement.addEventListener('keydown', event => { if (!active() || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return; if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); event.stopPropagation(); step(event.key === 'ArrowRight' ? 1 : -1); } else if (event.code === 'Space' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setPlaying(!belt.playing); } else if (event.key === '+' || event.key === '=') { event.preventDefault(); zoom(-1); } else if (event.key === '-') { event.preventDefault(); zoom(1); } else if (event.key.toLowerCase() === 'r') { event.preventDefault(); reset(); } }, {signal: events.signal});
-  void environmentJob(loadWorld, () => { worldFailed = true; if (splats) { scene.remove(splats); disposeSplat(splats); splats = undefined; } checkEnvironmentFailure(); });
-  void environmentJob(loadPanorama, () => { panoramaFailed = true; checkEnvironmentFailure(); });
+  void environmentJob(loadWorld, () => { fail('The 3D studio could not load. Your photos and gift stories remain available.'); });
+  void environmentJob(loadPanorama, () => { /* Imported models remain usable with the scene lights. */ });
   const jobs = slots.flatMap(slot => [{slot, kind: 'photo', run: () => thumbnail(slot)}, {slot, kind: 'model', run: () => model(slot)}]);
   async function runJobs() { for (;;) { if (!active()) return; const job = jobs.shift(); if (!job) return; const timer = setTimeout(() => { job.slot.controller.abort(); if (job.kind === 'model') modelFailed(job.slot); }, VIEWER_LOAD_TIMEOUT); deadlines.add(timer); try { await job.run(); } catch { if (job.kind === 'model') modelFailed(job.slot); } finally { clearTimeout(timer); deadlines.delete(timer); if (job.kind === 'model') settleModel(job.slot); } } }
   void Promise.all([runJobs(), runJobs()]); invalidate();

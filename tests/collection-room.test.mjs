@@ -40,7 +40,7 @@ async function fixture(action, settings = {}) {
  const doc={activeElement:null,createElement:tag=>new Element(tag)};state.document=doc;
  const rendererModule={mountCollectionScene(host,options){const handle={host,options,destroyed:0,calls:[],select(id){this.calls.push(['select',id]);},setPlaying(value){this.calls.push(['playing',value]);options.onPlaybackChange?.(value);},step(direction){this.calls.push(['step',direction]);},reset(){this.calls.push(['reset']);},look(delta){this.calls.push(['look',delta]);},zoom(delta){this.calls.push(['zoom',delta]);},setMood(mood){this.calls.push(['mood',mood]);},destroy(){this.destroyed++;}};state.renderers.push(handle);if(settings.initialPlayback!==undefined)options.onPlaybackChange?.(settings.initialPlayback);if(settings.syncFailure)options.onUnavailable('WebGL unavailable');return handle;}};
  const mediaQuery=new EventTarget();mediaQuery.matches=Boolean(settings.reducedMotion);state.mediaQuery=mediaQuery;
- const globals={document:doc,HTMLElement:Element,matchMedia:()=>mediaQuery,window:{setTimeout(callback,delay){const id=++state.timerId;state.timers.set(id,{callback,delay});return id;}},clearTimeout:id=>state.timers.delete(id),__collectionFixture:{importScene(){let resolve;const promise=new Promise(done=>resolve=done);state.imports.push({promise,resolve:()=>resolve(rendererModule)});if(!settings.deferredImport)resolve(rendererModule);return promise;}}};
+ const globals={document:doc,HTMLElement:Element,matchMedia:()=>mediaQuery,window:{setTimeout(callback,delay){const id=++state.timerId;state.timers.set(id,{callback,delay});return id;}},clearTimeout:id=>state.timers.delete(id),__collectionFixture:{importScene(){let resolve,reject;const promise=new Promise((done,fail)=>{resolve=done;reject=fail;});state.imports.push({promise,resolve:()=>resolve(rendererModule),reject:()=>reject(Error('Synthetic import failure'))});if(!settings.deferredImport)resolve(rendererModule);return promise;}}};
  for(const[name,value]of Object.entries(globals))Object.defineProperty(globalThis,name,{value,configurable:true,writable:true});
  state.items=settings.items||Array.from({length:settings.count??3},(_,index)=>sample(index));state.host=new Element();state.host.className='original-host';
  state.handle=mountCollectionRoom(state.host,{items:state.items,title:'A shelf of memories',subtitle:'Public demos · no private collection',isCurrent:()=>state.current,onHome:()=>state.homes++,onCreate:()=>state.creates++,onOpen:(item,world)=>state.opened.push({item,world}),onManage:()=>state.managed++});
@@ -62,20 +62,38 @@ test('pagination disposes the old room, ignores its late callbacks, and drawer s
   state.handle.destroy();second.options.onSelect('gift-6');second.options.onReady();assert.equal(second.destroyed,1);
  },{count:7});
 });
-test('WebGL failure leaves an honest photo conveyor with accessible gifts, playback and item stepping',async()=>{
- await fixture(async state=>{const renderer=state.renderers[0];assert.equal(renderer.destroyed,1);assert.equal(state.find('[data-cr-fallback]').hidden,false);assert.match(state.find('[data-cr-status]').textContent,/Photo previews.*unavailable/);assert.equal(state.find('[data-cr-control="closer"]').disabled,true);assert.equal(state.find('[data-cr-control="next"]').disabled,false);state.find('[data-cr-control="next"]').click();assert.equal(state.host.dataset.playing,'false');assert.equal(state.host.querySelectorAll('.cr-conveyor-item')[1].style['--cr-offset'],'0');state.find('.cr-conveyor-item').click();assert.equal(state.find('[data-cr-selected-title]').textContent,'Gift 0');state.find('[data-cr-open]').click();assert.equal(state.opened[0].item,state.items[0]);state.find('[data-cr-clear]').click();assert.equal(state.find('[data-cr-detail]').hidden,true);assert.equal(state.host.dataset.playing,'false');state.find('[data-cr-play]').click();assert.equal(state.host.dataset.playing,'true');assert.equal(state.host.dataset.fallbackStatic,undefined);state.find('[data-cr-mood]').click();assert.equal(state.host.dataset.mood,'night');},{syncFailure:true});
- await fixture(async state=>{assert.equal(state.imports.length,0);assert.equal(state.find('[data-cr-empty]').hidden,false);state.find('[data-cr-create]').click();assert.equal(state.creates,1);state.find('[data-cr-home]').click();assert.equal(state.homes,1);state.find('[data-cr-drawer-open]').click();assert.equal(state.find('[data-cr-drawer]').open,true);assert.equal(state.find('[data-cr-list]').children.length,0);},{count:0});
+test('WebGL failure offers an honest error and gift list without substitute scenery or preview cards',async()=>{
+ await fixture(async state=>{
+  const renderer=state.renderers[0];assert.equal(renderer.destroyed,1);assert.equal(state.host.dataset.roomPhase,'unavailable');assert.equal(renderer.options.isCurrent(),false);
+  assert.equal(state.find('[data-cr-scene]').inert,true);assert.equal(state.find('[data-cr-stage]').classList.contains('is-ready'),false);assert.equal(state.find('[data-cr-loading]').hidden,false);
+  assert.match(state.find('[data-cr-status]').textContent,/3D desk could not open/);assert.equal(state.find('[data-cr-retry]').hidden,false);assert.equal(state.find('[data-cr-browse]').hidden,false);
+  assert.equal(state.host.querySelector('[data-cr-fallback]'),null);assert.equal(state.host.querySelector('.cr-conveyor-item'),null);assert.equal(state.find('[data-cr-stage]').querySelector('img'),null);
+  for(const button of state.host.querySelectorAll('[data-cr-control],[data-cr-play],[data-cr-mood]'))assert.equal(button.disabled,true);
+  state.find('[data-cr-browse]').click();assert.equal(state.find('[data-cr-drawer]').open,true);assert.equal(state.document.activeElement,state.find('[data-cr-list-item="gift-0"]'));
+  state.find('[data-cr-list-item="gift-0"]').click();assert.equal(state.find('[data-cr-drawer]').open,false);assert.equal(state.find('[data-cr-selected-title]').textContent,'Gift 0');
+  state.find('[data-cr-open]').click();state.find('[data-cr-world]').click();assert.deepEqual(state.opened.map(value=>value.item),[state.items[0],state.items[0]]);assert.deepEqual(state.opened.map(value=>value.world),[false,true]);
+  state.find('[data-cr-clear]').click();assert.equal(state.find('[data-cr-detail]').hidden,true);assert.equal(state.document.activeElement,state.find('[data-cr-drawer-open]'));
+ },{syncFailure:true});
+});
+test('an empty collection still loads the real room and shows creation only after readiness',async()=>{
+ await fixture(async state=>{
+  assert.equal(state.imports.length,1);assert.equal(state.renderers.length,1);const renderer=state.renderers[0];assert.deepEqual(renderer.options.items,[]);
+  assert.equal(state.find('[data-cr-empty]').hidden,true);assert.equal(state.find('[data-cr-loading]').hidden,false);assert.equal(state.host.dataset.roomPhase,'loading');
+  renderer.options.onReady();assert.equal(state.host.dataset.roomPhase,'ready');assert.equal(state.find('[data-cr-empty]').hidden,false);assert.equal(state.find('[data-cr-loading]').hidden,true);
+  assert.equal(state.find('[data-cr-control="previous"]').disabled,true);assert.equal(state.find('[data-cr-control="next"]').disabled,true);assert.equal(state.find('[data-cr-play]').disabled,true);assert.equal(state.find('[data-cr-control="closer"]').disabled,false);
+  state.find('[data-cr-create]').click();assert.equal(state.creates,1);state.find('[data-cr-home]').click();assert.equal(state.homes,1);state.find('[data-cr-drawer-open]').click();assert.equal(state.find('[data-cr-drawer]').open,true);assert.equal(state.find('[data-cr-list]').children.length,0);
+ },{count:0});
 });
 test('conveyor controls step once while paused, bound zoom and preserve lighting and pause across sets',async()=>{
  await fixture(async state=>{const first=state.renderers[0];first.options.onReady();for(const action of ['previous','next','closer','farther'])state.find(`[data-cr-control="${action}"]`).click();assert.deepEqual(first.calls.filter(call=>call[0]==='step'),[['step',-1],['step',1]]);assert.deepEqual(first.calls.filter(call=>call[0]==='zoom'),[['zoom',-.35],['zoom',.35]]);assert.equal(state.host.dataset.playing,'false');first.options.onSelect('gift-1');state.find('[data-cr-control="reset"]').click();assert.equal(state.find('[data-cr-detail]').hidden,true);assert.deepEqual(first.calls.at(-1),['reset']);state.find('[data-cr-mood]').click();assert.equal(state.host.dataset.mood,'night');state.find('[data-cr-page="next"]').click();await flush();assert.deepEqual(state.renderers[1].calls.filter(call=>call[0]==='mood'),[['mood','night']]);assert.deepEqual(state.renderers[1].calls.at(-1),['playing',false]);},{count:7,initialPlayback:true});
 });
 test('user words are inert, unsafe or expired source images stay placeholders, and keyboard can close the list and selection',async()=>{
  const item={...sample(0),title:'<img onerror=alert(1)>',story:'<script>private words</script>',imageUrl:'javascript:alert(1)',worldPath:undefined,demo:false};
- await fixture(async state=>{assert.equal(state.find('.cr-fallback-photo').querySelector('img'),null);state.find('[data-cr-drawer-open]').focus();state.find('[data-cr-drawer-open]').click();const cancel=new Event('cancel',{cancelable:true});state.find('[data-cr-drawer]').dispatchEvent(cancel);assert.equal(cancel.defaultPrevented,true);assert.equal(state.find('[data-cr-drawer]').open,false);assert.equal(state.document.activeElement,state.find('[data-cr-drawer-open]'));state.find('.cr-conveyor-item').click();assert.equal(state.find('[data-cr-selected-title]').textContent,item.title);assert.equal(state.find('[data-cr-selected-story]').textContent,item.story);assert.equal(state.find('[data-cr-world]').hidden,true);assert.equal(state.find('[data-cr-selected-kind]').textContent,'SAVED GIFT');const escape=state.key('Escape',state.find('[data-cr-open]'));assert.equal(escape.defaultPrevented,true);assert.equal(state.find('[data-cr-detail]').hidden,true);},{items:[item,{...sample(1),mediaExpiresAt:1}]});
+ await fixture(async state=>{assert.equal(state.find('[data-cr-list-item="gift-0"]').querySelector('img'),null);assert.equal(state.find('[data-cr-list-item="gift-1"]').querySelector('img'),null);state.find('[data-cr-drawer-open]').focus();state.find('[data-cr-drawer-open]').click();const cancel=new Event('cancel',{cancelable:true});state.find('[data-cr-drawer]').dispatchEvent(cancel);assert.equal(cancel.defaultPrevented,true);assert.equal(state.find('[data-cr-drawer]').open,false);assert.equal(state.document.activeElement,state.find('[data-cr-drawer-open]'));state.find('[data-cr-drawer-open]').click();state.find('[data-cr-list-item="gift-0"]').click();assert.equal(state.find('[data-cr-selected-title]').textContent,item.title);assert.equal(state.find('[data-cr-selected-story]').textContent,item.story);assert.equal(state.find('[data-cr-selected-image]').hidden,true);assert.equal(state.find('[data-cr-selected-image]').getAttribute('src'),null);assert.equal(state.find('[data-cr-selected-placeholder]').hidden,false);assert.equal(state.find('[data-cr-world]').hidden,true);assert.equal(state.find('[data-cr-selected-kind]').textContent,'SAVED GIFT');const escape=state.key('Escape',state.find('[data-cr-open]'));assert.equal(escape.defaultPrevented,true);assert.equal(state.find('[data-cr-detail]').hidden,true);},{items:[item,{...sample(1),mediaExpiresAt:1}]});
 });
 test('media expiry removes already-rendered thumbnail sources and destroys its one timer without late updates',async()=>{
  const expires=Date.now()/1000+120;
- await fixture(async state=>{assert.equal(state.timers.size,1);state.find('.cr-conveyor-item').click();assert.equal(state.timers.size,1);const image=state.find('[data-cr-selected-image]');assert.ok(image.src);Date.now=()=>expires*1000+1000;const timer=[...state.timers.values()][0];timer.callback();assert.equal(state.timers.size,0);for(const photo of state.host.querySelectorAll('[data-cr-photo-id]')){assert.equal(photo.getAttribute('src'),null);assert.equal(photo.hidden,true);}assert.equal(state.find('[data-cr-selected-placeholder]').hidden,false);assert.match(state.find('[data-cr-list-item="gift-0"] small').textContent,/expired/);state.handle.destroy();timer.callback();assert.equal(state.host.children.length,0);},{items:[{...sample(0),mediaExpiresAt:expires}]});
+ await fixture(async state=>{assert.equal(state.timers.size,1);state.find('[data-cr-drawer-open]').click();state.find('[data-cr-list-item="gift-0"]').click();assert.equal(state.timers.size,1);const image=state.find('[data-cr-selected-image]');assert.ok(image.src);Date.now=()=>expires*1000+1000;const timer=[...state.timers.values()][0];timer.callback();assert.equal(state.timers.size,0);for(const photo of state.host.querySelectorAll('[data-cr-photo-id]')){assert.equal(photo.getAttribute('src'),null);assert.equal(photo.hidden,true);}assert.equal(state.find('[data-cr-selected-placeholder]').hidden,false);assert.match(state.find('[data-cr-list-item="gift-0"] small').textContent,/expired/);state.handle.destroy();timer.callback();assert.equal(state.host.children.length,0);},{items:[{...sample(0),mediaExpiresAt:expires}]});
  await fixture(async state=>{assert.equal(state.timers.size,1);state.handle.destroy();assert.equal(state.timers.size,0);},{items:[{...sample(0),mediaExpiresAt:Date.now()/1000+120}]});
 });
 
@@ -100,12 +118,12 @@ test('keyboard transport works on the stage while native buttons, dialog and edi
  });
 });
 
-test('reduced motion keeps both ready 3D and photo fallback static, including Play and preference changes',async()=>{
+test('reduced motion preserves a static ready room and keeps unavailable transport disabled',async()=>{
  for(const syncFailure of [false,true])await fixture(async state=>{
   const renderer=state.renderers[0];if(!syncFailure)renderer.options.onReady();assert.equal(state.host.dataset.playing,'false');assert.equal(state.find('[data-cr-play]').disabled,true);assert.match(state.find('[data-cr-playback-label]').textContent,/Reduced motion/);
   state.find('[data-cr-play]').click();state.key(' ',state.find('[data-cr-stage]'));renderer.options.onPlaybackChange(true);assert.equal(state.host.dataset.playing,'false');assert.equal(renderer.calls.some(call=>call[0]==='playing'&&call[1]===true),false);
   state.find('[data-cr-control="next"]').click();assert.equal(state.host.dataset.playing,'false');
-  state.mediaQuery.matches=false;state.mediaQuery.dispatchEvent(new Event('change'));assert.equal(state.find('[data-cr-play]').disabled,false);assert.equal(state.host.dataset.playing,'false');state.find('[data-cr-play]').click();assert.equal(state.host.dataset.playing,'true');
+  state.mediaQuery.matches=false;state.mediaQuery.dispatchEvent(new Event('change'));assert.equal(state.find('[data-cr-play]').disabled,syncFailure);assert.equal(state.host.dataset.playing,'false');state.find('[data-cr-play]').click();assert.equal(state.host.dataset.playing,String(!syncFailure));
   state.mediaQuery.matches=true;state.mediaQuery.dispatchEvent(new Event('change'));assert.equal(state.host.dataset.playing,'false');assert.equal(state.find('[data-cr-play]').disabled,true);
   state.handle.destroy();state.mediaQuery.matches=false;state.mediaQuery.dispatchEvent(new Event('change'));assert.equal(state.host.dataset.playing,undefined);
  },{reducedMotion:true,syncFailure});
@@ -113,15 +131,49 @@ test('reduced motion keeps both ready 3D and photo fallback static, including Pl
 
 test('a user pause survives a delayed import and renderer playback callbacks cannot resurrect a destroyed shell',async()=>{
  await fixture(async state=>{
-  state.find('[data-cr-play]').click();assert.equal(state.host.dataset.playing,'false');state.imports[0].resolve();await flush();const renderer=state.renderers[0];assert.deepEqual(renderer.calls.at(-1),['playing',false]);
+  state.key(' ',state.find('[data-cr-stage]'));assert.equal(state.host.dataset.playing,'false');state.imports[0].resolve();await flush();const renderer=state.renderers[0];assert.deepEqual(renderer.calls.at(-1),['playing',false]);
   renderer.options.onReady();state.find('.cr-hotspot').focus();assert.equal(state.host.dataset.playing,'false');state.handle.destroy();renderer.options.onPlaybackChange(true);assert.equal(state.host.dataset.playing,undefined);assert.equal(state.host.children.length,0);
  },{deferredImport:true,initialPlayback:true});
 });
 
-test('item stepping during import and model loading reaches the same position when 3D becomes ready',async()=>{
+test('keyboard stepping during import and model loading preserves the requested gift while transport buttons are disabled',async()=>{
  await fixture(async state=>{
-  state.find('[data-cr-control="next"]').click();state.find('[data-cr-control="next"]').click();assert.equal(state.host.querySelectorAll('.cr-conveyor-item')[2].style['--cr-offset'],'0');
+  const stage=state.find('[data-cr-stage]');assert.equal(state.find('[data-cr-control="next"]').disabled,true);state.find('[data-cr-control="next"]').click();
+  state.key('ArrowRight',stage);state.key('ArrowRight',stage);assert.equal(state.host.dataset.playing,'false');
   state.imports[0].resolve();await flush();const renderer=state.renderers[0];assert.deepEqual(renderer.calls.filter(call=>call[0]==='step'),[['step',1],['step',1]]);assert.deepEqual(renderer.calls.at(-1),['playing',false]);
-  state.find('[data-cr-control="previous"]').click();assert.deepEqual(renderer.calls.at(-1),['step',-1]);assert.equal(state.host.querySelectorAll('.cr-conveyor-item')[1].style['--cr-offset'],'0');renderer.options.onReady();assert.equal(state.host.dataset.playing,'false');assert.equal(state.find('[data-cr-fallback]').hidden,true);
+  state.key('ArrowLeft',stage);assert.deepEqual(renderer.calls.at(-1),['step',-1]);renderer.options.onReady();assert.equal(state.host.dataset.playing,'false');assert.equal(state.find('[data-cr-loading]').hidden,true);assert.equal(state.find('[data-cr-control="next"]').disabled,false);
+ },{deferredImport:true});
+});
+
+test('loading keeps a layout-sized inert scene, an accessible status and no provisional gift cards or room images',async()=>{
+ await fixture(async state=>{
+  const sceneHost=state.find('[data-cr-scene]'),stage=state.find('[data-cr-stage]');
+  assert.equal(state.host.dataset.roomPhase,'loading');assert.equal(sceneHost.inert,true);assert.equal(sceneHost.hidden,false);assert.equal(sceneHost.clientWidth,1280);assert.equal(sceneHost.clientHeight,720);
+  assert.equal(stage.classList.contains('is-ready'),false);assert.equal(state.find('[data-cr-loading]').hidden,false);assert.equal(state.find('[data-cr-status]').getAttribute('role'),'status');assert.equal(state.find('[data-cr-status]').getAttribute('aria-live'),'polite');
+  assert.equal(state.find('[data-cr-retry]').hidden,true);assert.equal(state.find('[data-cr-browse]').hidden,true);assert.equal(state.find('[data-cr-empty]').hidden,true);
+  assert.equal(state.host.querySelector('[data-cr-fallback]'),null);assert.equal(state.host.querySelector('.cr-conveyor-item'),null);assert.equal(stage.querySelector('img'),null);assert.equal(state.find('[data-cr-loading]').querySelector('img'),null);
+  for(const button of state.host.querySelectorAll('[data-cr-control],[data-cr-play],[data-cr-mood]'))assert.equal(button.disabled,true);
+  assert.equal(state.find('[data-cr-create]').disabled,false);assert.equal(state.find('[data-cr-drawer-open]').disabled,false);
+  state.imports[0].resolve();await flush();const renderer=state.renderers[0];renderer.options.onProject([{id:'gift-0',x:320,y:340,visible:true}]);assert.equal(state.find('.cr-hotspot').hidden,true);assert.equal(state.host.dataset.roomPhase,'loading');
+  renderer.options.onReady();assert.equal(state.host.dataset.roomPhase,'ready');assert.equal(sceneHost.inert,false);assert.equal(state.find('[data-cr-loading]').hidden,true);assert.equal(stage.classList.contains('is-ready'),true);assert.equal(state.find('.cr-hotspot').hidden,false);
+  renderer.options.onSelect('gift-0');const focus=state.focus.length;renderer.options.onReady();assert.equal(state.host.dataset.roomPhase,'ready');assert.equal(state.find('[data-cr-detail]').hidden,false);assert.equal(state.host.dataset.playing,'false');assert.equal(state.focus.length,focus);
+ },{deferredImport:true});
+});
+
+test('retry retires the failed scene and rejects all stale callbacks while a new epoch becomes ready once',async()=>{
+ await fixture(async state=>{
+  const first=state.renderers[0];first.options.onReady();first.options.onUnavailable('Synthetic context loss');assert.equal(first.destroyed,1);assert.equal(first.options.isCurrent(),false);assert.equal(state.host.dataset.roomPhase,'unavailable');
+  state.find('[data-cr-retry]').click();state.find('[data-cr-retry]').click();assert.equal(state.imports.length,2);assert.equal(state.host.dataset.roomPhase,'loading');assert.equal(state.find('[data-cr-scene]').inert,true);assert.equal(state.find('[data-cr-retry]').hidden,true);await flush();const second=state.renderers[1];assert.equal(second.options.isCurrent(),true);assert.equal(first.destroyed,1);
+  const focus=state.focus.length,playing=state.host.dataset.playing;first.options.onReady();first.options.onUnavailable('Late failure');first.options.onSelect('gift-0');first.options.onProject([{id:'gift-0',x:320,y:340,visible:true}]);first.options.onPlaybackChange(false);
+  assert.equal(state.host.dataset.roomPhase,'loading');assert.equal(state.find('[data-cr-detail]').hidden,true);assert.equal(state.find('.cr-hotspot').hidden,true);assert.equal(state.focus.length,focus);assert.equal(state.host.dataset.playing,playing);
+  second.options.onProject([{id:'gift-1',x:400,y:300,visible:true}]);second.options.onReady();assert.equal(state.host.dataset.roomPhase,'ready');assert.equal(state.find('[data-cr-loading]').hidden,true);assert.equal(state.find('[data-cr-scene]').inert,false);second.options.onReady();assert.equal(state.renderers.length,2);
+  state.handle.destroy();second.options.onReady();second.options.onUnavailable('Retired failure');assert.equal(second.destroyed,1);assert.equal(first.destroyed,1);assert.equal(state.host.children.length,0);assert.equal(state.host.dataset.roomPhase,undefined);
+ });
+});
+
+test('a failed lazy import offers retry without mounting a renderer or adding substitute scenery',async()=>{
+ await fixture(async state=>{
+  state.imports[0].reject();await flush();assert.equal(state.renderers.length,0);assert.equal(state.host.dataset.roomPhase,'unavailable');assert.equal(state.find('[data-cr-retry]').hidden,false);assert.equal(state.host.querySelector('[data-cr-fallback]'),null);
+  state.find('[data-cr-retry]').click();assert.equal(state.imports.length,2);assert.equal(state.host.dataset.roomPhase,'loading');state.imports[1].resolve();await flush();assert.equal(state.renderers.length,1);state.renderers[0].options.onReady();assert.equal(state.host.dataset.roomPhase,'ready');
  },{deferredImport:true});
 });
