@@ -21,13 +21,15 @@ const observatoryRoutes: readonly LivingGardenRoute[] = [
   { start: [-.75, -2.25], end: [.8409902576697321, -3.8409902576697323], initialProgress: .1 },
   { start: [.75, -2.25], end: [2.3409902576697323, -3.8409902576697323], initialProgress: .35, reverse: true },
 ];
-type Profile = { name: string; title: string; intro: string; mode: 'book' | 'newspaper' | 'tablet'; scale: number; offset: number; world?: string; collider?: string; panorama?: string; routes: readonly LivingGardenRoute[]; probeY: number; viewpoints: readonly { name: string; at: readonly [number, number, number]; yaw: number }[] };
+type Profile = { name: string; title: string; intro: string; mode: 'book' | 'newspaper' | 'tablet'; scale: number; offset: number; world?: string; collider?: string; panorama?: string; routes: readonly LivingGardenRoute[]; probeY: number; viewpoints: readonly { id?: string; name: string; at: readonly [number, number, number]; yaw: number }[] };
 // Scale metadata was recovered only after SHA256 matching each public collider
 // to its completed provider receipt. Every viewpoint/reset and visitor corridor
 // was probed against that mesh with the actual Rapier controller.
 const profiles: Record<string, Profile> = {
   'rio-example': { name: 'Rio', title: 'A walk beside the bay', intro: 'Follow the water. Feel the place around you.', mode: 'newspaper', scale: 3.4777204990386963, offset: 1.5319561958312988, routes: rioRoutes, probeY: -.297626,
-    viewpoints: [{ name: 'Bay arrival', at: [0, -.897626, 0], yaw: 0 }, { name: 'The waterside path', at: [.000694, -1.317488, -4.044342], yaw: 0 }, { name: 'Looking back', at: [.001159, -1.778401, -6.056758], yaw: Math.PI }] },
+    // Entry order selects the default. Keep the clear audited view and its stable
+    // ID; the removed foreground-heavy views must not remain public options.
+    viewpoints: [{ id: 'rio-waterside', name: 'The waterside path', at: [.000694, -1.317488, -4.044342], yaw: 0 }] },
   'paris-example': { name: 'Paris', title: 'A walk toward the tower', intro: 'Walk toward the tower. Turn your head. Take your time.', mode: 'book', scale: 2.9049978, offset: 1.6893421, world: '/demo/v23/paris-approach-world.spz', collider: '/demo/v23/paris-approach-collider.glb', panorama: '/demo/v23/paris-approach-panorama.png', routes: parisRoutes, probeY: 1.5,
     viewpoints: [{ name: 'The tower gardens', at: [0, 1.329693672, 0], yaw: 0 }, { name: 'Closer to the tower', at: [-.002786, 1.341834, -4.001120], yaw: 0 }, { name: 'Across the gardens', at: [-3.540262, 1.326496, -3.536546], yaw: -Math.PI / 4 }] },
   'antikythera-example': { name: 'The observatory', title: 'A walk through human curiosity', intro: 'Explore the terrace. Follow a little curiosity.', mode: 'tablet', scale: 2.4615827, offset: 1.4774647, routes: observatoryRoutes, probeY: 2.15062,
@@ -40,7 +42,7 @@ export function createGiftWalkScenes(id: string, gift: GeneratedGiftData): reado
   if (!world || !collider) return [];
   const story = [gift.dedication?.trim(), gift.story?.trim()].filter(Boolean).join('\n\n') || 'A little place to keep close. Take your time here.';
   if (profile) return profile.viewpoints.map((viewpoint, index) => ({
-    id: `${id}-${index}`, name: viewpoint.name, title: profile.title, intro: profile.intro, story,
+    id: viewpoint.id || `${id}-${index}`, name: viewpoint.name, title: profile.title, intro: profile.intro, story,
     world, collider, panorama: profile.panorama || gift.panoramaUrl, metricScale: profile.scale, groundOffset: profile.offset,
     spawn: [...viewpoint.at] as [number, number, number], yaw: viewpoint.yaw, pitch: id === 'paris-example' ? .18 : .04,
     maxRadius: 20, walkSpeed: 1.6, livingGarden: false, gardenRoutes: profile.routes.map(route => ({ ...route, start: [...route.start] as [number, number], end: [...route.end] as [number, number] })), groundProbeY: profile.probeY, journalMode: profile.mode,

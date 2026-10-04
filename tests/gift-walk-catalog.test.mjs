@@ -18,12 +18,12 @@ const freeze = value => { if (value && typeof value === 'object') { Object.value
 const gift = extra => ({title:'The memory title',senderName:'The sender',recipientName:'The recipient',dedication:'  For the person I remember.  ',story:'  This is our own story, with its exact meaning.  ',worldUrl:'/private/world.spz',collisionUrl:'/private/collider.glb',panoramaUrl:'/private/panorama.png',...extra});
 
 for (const profile of [
-  {id:'rio-example',scale:3.4777204990386963,offset:1.5319561958312988,mode:'newspaper'},
-  {id:'paris-example',scale:2.9049978,offset:1.6893421,mode:'book'},
-  {id:'antikythera-example',scale:2.4615827,offset:1.4774647,mode:'tablet'},
-]) test(`${profile.id}: distinct audited views share the calibrated body, story and independent visitor routes`, () => {
+  {id:'rio-example',views:1,scale:3.4777204990386963,offset:1.5319561958312988,mode:'newspaper'},
+  {id:'paris-example',views:3,scale:2.9049978,offset:1.6893421,mode:'book'},
+  {id:'antikythera-example',views:3,scale:2.4615827,offset:1.4774647,mode:'tablet'},
+]) test(`${profile.id}: audited views retain the calibrated body, story and independent visitor routes`, () => {
   const input = freeze(gift()), snapshot = structuredClone(input), scenes = createGiftWalkScenes(profile.id, input);
-  assert.equal(scenes.length, 3); assert.equal(new Set(scenes.map(scene => scene.id)).size, scenes.length); assert.equal(new Set(scenes.map(scene => JSON.stringify(scene.spawn))).size, scenes.length);
+  assert.equal(scenes.length, profile.views); assert.equal(new Set(scenes.map(scene => scene.id)).size, scenes.length); assert.equal(new Set(scenes.map(scene => JSON.stringify(scene.spawn))).size, scenes.length);
   for (const scene of scenes) {
     assert.equal(scene.metricScale, profile.scale); assert.equal(scene.groundOffset, profile.offset); assert.equal(scene.journalMode, profile.mode);
     assert.equal(scene.story, 'For the person I remember.\n\nThis is our own story, with its exact meaning.');
@@ -34,8 +34,39 @@ for (const profile of [
   }
   assert.deepEqual(input, snapshot);
   scenes[0].spawn[0] = 999; scenes[0].gardenRoutes[0].start[0] = 999; scenes[0].gardenRoutes[1].end[1] = 999;
-  assert.notEqual(scenes[1].gardenRoutes[0].start[0], 999, 'Views do not share writable route vectors');
+  if (scenes.length > 1) assert.notEqual(scenes[1].gardenRoutes[0].start[0], 999, 'Views do not share writable route vectors');
   const reopened = createGiftWalkScenes(profile.id, input); assert.notEqual(reopened[0].spawn[0], 999); assert.notEqual(reopened[0].gardenRoutes[0].start[0], 999); assert.notEqual(reopened[0].gardenRoutes[1].end[1], 999);
+});
+
+test('Rio opens only its clear waterside view with a stable ID and exact audited pose/semantics', () => {
+  const scenes = createGiftWalkScenes('rio-example', freeze(gift()));
+  assert.deepEqual(scenes.map(scene => ({id:scene.id,name:scene.name,spawn:scene.spawn,yaw:scene.yaw,pitch:scene.pitch})), [{id:'rio-waterside',name:'The waterside path',spawn:[.000694,-1.317488,-4.044342],yaw:0,pitch:.04}]);
+  assert.equal(scenes[0].metricScale,3.4777204990386963); assert.equal(scenes[0].groundOffset,1.5319561958312988); assert.equal(scenes[0].groundProbeY,-.297626);
+  for (const id of ['paris-example','antikythera-example']) assert.deepEqual(createGiftWalkScenes(id,gift()).map(scene=>scene.id),[`${id}-0`,`${id}-1`,`${id}-2`], 'Other profiles retain their existing IDs/order');
+});
+
+test('Rio curated entry uses the actual provider collider for its floor, first step and reset', async () => {
+  const THREE = await import('three'), { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  const physicsSource = ts.transpileModule(await readFile(new URL('../src/first-person-physics.ts', import.meta.url), 'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText
+    .replace(/from ['"]three['"]/g, `from '${import.meta.resolve('three')}'`)
+    .replace(/from ['"]@dimforge\/rapier3d-compat['"]/g, `from '${import.meta.resolve('@dimforge/rapier3d-compat')}'`);
+  const { createFirstPersonPhysics } = await import(`data:text/javascript;base64,${Buffer.from(physicsSource).toString('base64')}`);
+  const original = JSON.parse(await readFile(resolve(assetProject,'public/demo/rio-generated-gift.json'),'utf8'));
+  const scene = createGiftWalkScenes('rio-example',original)[0];
+  assert.equal(scene.world,original.worldUrl); assert.equal(scene.collider,original.collisionUrl); assert.equal(scene.panorama,original.panoramaUrl);
+  const bytes=await readFile(resolve(assetProject,'public',scene.collider.slice(1))),glb=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+  const root=glb.scene; root.rotation.x=Math.PI; root.scale.setScalar(scene.metricScale); root.position.y=scene.groundOffset;
+  let physics;
+  try {
+    physics=await createFirstPersonPhysics(root,{spawn:scene.spawn,eyeHeight:1.65,radius:.20,maxRadius:scene.maxRadius});
+    assert.ok(physics.triangles>1000 && physics.meshes>0); assert.equal(physics.spawn[0],scene.spawn[0]); assert.equal(physics.spawn[2],scene.spawn[2]);
+    assert.ok(Math.abs(physics.spawn[1]-scene.spawn[1])<.03,'Audited camera height must remain on the same real floor');
+    let moved={position:physics.spawn,grounded:true}; for(let i=0;i<60;i++)moved=physics.advance(moved.position,[0,0,-.01],1/120);
+    assert.ok(moved.position.every(Number.isFinite)); assert.equal(moved.grounded,true); assert.ok(moved.position[2]<physics.spawn[2]-.4,'The curated entry supports a real forward step');
+    assert.deepEqual(physics.reset(),physics.spawn);
+  } finally {
+    physics?.destroy(); root.traverse(item=>{if(item instanceof THREE.Mesh){item.geometry.dispose();for(const material of Array.isArray(item.material)?item.material:[item.material])material.dispose();}});
+  }
 });
 
 test('Paris preserves its actual approved V23 walking pair while other gifts use their own assets', async () => {
