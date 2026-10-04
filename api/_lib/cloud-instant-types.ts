@@ -2,7 +2,7 @@ import type { CloudImageDeclaration, CloudImageId } from '../../shared/cloud-ins
 export type CloudStageName = 'tripo-reference' | 'tripo' | 'worldlabs';
 export interface CloudStoredAsset { id: string; path: string; mime: string; bytes: number; sha256: string }
 export interface CloudStage { state: 'submitting' | 'processing' | 'completed' | 'failed' | 'submission_uncertain'; progress?: number; taskId?: string; submittedAt?: string; resultId?: string; errorCode?: string; polls?: number; credits?: number }
-export interface CloudSafetyImage { id: CloudImageId; mime: string; bytes: Buffer; sha256: string }
+export interface CloudSafetyImage { id: CloudImageId; mime: string; bytes: Buffer; sha256: string; source?: CloudStoredAsset; quarantine?: boolean }
 export interface CloudSafetyReport { protocol: 'giftportals-cloud-vision-v1'; modelVersion: string; checkedAt: string; decision: 'allow' | 'block' | 'review'; results: { id: CloudImageId; sha256: string; modelVersion: string; decision: 'allow' | 'block' | 'review'; category: 'ordinary' | 'sexual' | 'adult-product' | 'uncertain' }[] }
 export interface CloudJobDocument {
   title: string; worldPrompt: string; story: string; dedication: string; senderName: string; recipientName: string;
@@ -26,6 +26,7 @@ export interface CloudInstantRepository {
   begin(job: CloudJob, stage: CloudStageName): Promise<CloudJob>;
   update(job: CloudJob, changes: { state: CloudJob['state']; document: CloudJobDocument; stages: CloudJob['stages']; assets: CloudJob['assets']; releaseLease?: boolean }): Promise<CloudJob>;
   signUpload(asset: CloudStoredAsset): Promise<string>; signRead(asset: CloudStoredAsset): Promise<string>;
+  signModerationRead(image: CloudSafetyImage): Promise<string>;
   download(asset: CloudStoredAsset): Promise<Buffer>; upload(asset: CloudStoredAsset, bytes: Buffer): Promise<void>;
   status(): Promise<{ canCreate: boolean; budget: Record<string, unknown> }>;
 }

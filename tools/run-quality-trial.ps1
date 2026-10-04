@@ -6,6 +6,7 @@ param(
  [switch]$ConfirmProviderSpend,
  [ValidateRange(1,2147483647)][int]$WorldLabsCreditCap=2147483647,
  [ValidateRange(1,2147483647)][int]$TripoCreditCap=2147483647,
+ [string]$VisionProject='C:\Users\admin\Documents\Codex\2026-09-29\co\work\hackador-tripothon\projects\giftportals',
  [switch]$UseProtectedVault,
  [string]$ProviderVault='C:\Users\admin\Documents\Codex\2026-09-30\com\work\tripothon-benefits\credential-vault'
 )
@@ -13,11 +14,24 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $taskProject=Split-Path -Parent $PSScriptRoot
 $taskNode='C:\Users\admin\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
-$taskNames=@('TRIPO_API_KEY','WORLD_LABS_API_KEY','LOCAL_WORLDLABS_CREDIT_CAP','LOCAL_TRIPO_CREDIT_CAP','GIFTPORTALS_LOCAL_DIR')
+$taskNames=@('TRIPO_API_KEY','WORLD_LABS_API_KEY','LOCAL_WORLDLABS_CREDIT_CAP','LOCAL_TRIPO_CREDIT_CAP','GIFTPORTALS_LOCAL_DIR','GIFTPORTALS_IMAGE_SAFETY_WORKER','GIFTPORTALS_VISION_MODEL_DIR')
 $taskPrevious=@{}
 try {
  if($Kind -ne 'balance' -and $Action -in @('create','approve') -and -not $ConfirmProviderSpend){throw 'Spend confirmation is required.'}
  foreach($taskName in $taskNames){$taskPrevious[$taskName]=[Environment]::GetEnvironmentVariable($taskName,'Process')}
+ # Snapshots intentionally exclude local weights. Reuse the installed checker
+ # through its own worker so its Python/runtime paths remain coherent. The
+ # adapter's child environment still excludes all provider credentials.
+ foreach($taskVisionCandidate in @($taskProject,$VisionProject)){
+  if([string]::IsNullOrWhiteSpace($taskVisionCandidate)){continue}
+  $taskVisionWorker=Join-Path $taskVisionCandidate 'tools/local-vision-worker.mjs'
+  $taskVisionModels=Join-Path $taskVisionCandidate '.local-giftportals/vision-models'
+  $taskVisionRuntime=Join-Path $taskVisionCandidate '.local-giftportals/vision-runtime/runtime.json'
+  if(-not((Test-Path -LiteralPath $taskVisionWorker -PathType Leaf) -and (Test-Path -LiteralPath $taskVisionRuntime -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $taskVisionModels 'manifest.json') -PathType Leaf))){continue}
+  if([string]::IsNullOrWhiteSpace($taskPrevious['GIFTPORTALS_IMAGE_SAFETY_WORKER'])){[Environment]::SetEnvironmentVariable('GIFTPORTALS_IMAGE_SAFETY_WORKER',$taskVisionWorker,'Process')}
+  if([string]::IsNullOrWhiteSpace($taskPrevious['GIFTPORTALS_VISION_MODEL_DIR']) -and [Environment]::GetEnvironmentVariable('GIFTPORTALS_IMAGE_SAFETY_WORKER','Process') -eq $taskVisionWorker){[Environment]::SetEnvironmentVariable('GIFTPORTALS_VISION_MODEL_DIR',$taskVisionModels,'Process')}
+  break
+ }
  if($UseProtectedVault){
   foreach($taskProvider in @('tripo','worldlabs')){
    $taskName=if($taskProvider -eq 'tripo'){'TRIPO_API_KEY'}else{'WORLD_LABS_API_KEY'}

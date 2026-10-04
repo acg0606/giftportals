@@ -201,6 +201,9 @@ test('portrait gift fits the actual model and never overlays or resizes sponsor 
     const bounds=new Three.Box3().setFromObject(state.model),camera=state.frames.at(-1).camera;camera.lookAt(new Three.Vector3(0,1.17,0));camera.updateMatrixWorld();
     for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){const point=new Three.Vector3(x,y,z).project(camera);assert.ok(Math.abs(point.x)<1.01,'Actual gift fits portrait width');}
     state.media.matches=true;state.media.dispatchEvent(new Event('change'));state.run(130);state.viewer.advanceUnboxing();state.run(170);state.viewer.advanceUnboxing();state.run(210);state.viewer.advanceUnboxing();state.run(250);assert.equal(state.model.visible,true);assert.equal(state.standard.map,state.texture);
+    const revealedCamera=state.frames.at(-1).camera;revealedCamera.lookAt(new Three.Vector3(0,1.17,0));revealedCamera.updateMatrixWorld();
+    for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){const point=new Three.Vector3(x,y,z).project(revealedCamera);assert.ok(Math.abs(point.x)<.71,'Revealed gift fits compact width');assert.ok(Math.abs(point.y)<.83,'Revealed gift fits compact height');}
+    const fittedDistance=revealedCamera.position.distanceTo(new Three.Vector3(0,1.17,0));state.viewer.zoom(-.1);state.run(290);assert.ok(state.frames.at(-1).camera.position.distanceTo(new Three.Vector3(0,1.17,0))<fittedDistance,'Camera fitting preserves manual zoom');
   },{width:390,height:580,modelSize:[1,2,2],options:{unboxing:true,theme:'dusk',objectRepresentation:'framed-postcard',photoUrl:'/demo/original.jpg'}});
 });
 test('studio lighting creates no geometry, fog or idle animation and restores the scene once',async()=>{

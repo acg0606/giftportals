@@ -16,13 +16,17 @@ export interface KeepsakeXRDependencies {
  loadRuntime?(): Promise<KeepsakeXRRuntime>;
  fetchBytes?: typeof fetchViewerBytes;
 }
+// Provider semantics and collider measurement from the published studio world.
+export const XR_STUDIO_METRIC_SCALE = 1.2550683;
+export const XR_STUDIO_GROUND_OFFSET = 1.2042749;
+export const XR_STUDIO_GIFT_BASE = [0, .9043136, -1.1923149] as const;
 /** Preserve source transforms and geometry; place a clone at comfortable display scale. */
 export function createKeepsakeXRDisplay(source: Three.Object3D, engine: typeof Three, modelYaw = 0): Three.Group {
  const clone = source.clone(true), centered = new engine.Group(), display = new engine.Group(); centered.add(clone); centered.updateMatrixWorld(true);
  const bounds = new engine.Box3().setFromObject(centered), size = bounds.getSize(new engine.Vector3()), longest = Math.max(size.x,size.y,size.z);
  if (!Number.isFinite(longest) || longest <= 1e-8 || ![bounds.min.x,bounds.min.y,bounds.min.z,bounds.max.x,bounds.max.y,bounds.max.z].every(Number.isFinite)) throw new Error('XR_MODEL_GEOMETRY_INVALID');
  const center = bounds.getCenter(new engine.Vector3()); centered.position.set(-center.x,-bounds.min.y,-center.z); display.add(centered); display.scale.setScalar(.42/longest);
- display.rotation.y = Number.isFinite(modelYaw) ? modelYaw : 0; display.position.set(0,1.11,-1.25); display.updateMatrixWorld(true); return display;
+ display.rotation.y = Number.isFinite(modelYaw) ? modelYaw : 0; display.position.set(...XR_STUDIO_GIFT_BASE); display.updateMatrixWorld(true); return display;
 }
 export function disposeKeepsakeXRResources(root: Three.Object3D, engine: typeof Three): void {
  const geometries = new Set<Three.BufferGeometry>(), materials = new Set<Three.Material>(), textures = new Set<Three.Texture>(), images = new Set<{close?(): void}>();
@@ -87,8 +91,10 @@ export function mountKeepsakeXR(host: HTMLElement, options: KeepsakeXROptions, d
      if(!active()||session!==granted||revision!==environmentEpoch||requestAbort.signal.aborted||!renderer)return;
      const next=await loadedRuntime.loadWorld(renderer,data);
      if(!active()||session!==granted||revision!==environmentEpoch){next.destroy();return;}
-     environment?.destroy();environment=next;next.object.position.y=floor?1.6:0;
+     environment?.destroy();environment=next;
+     next.object.position.y=memory?(floor?1.6:0):XR_STUDIO_GROUND_OFFSET-(floor?0:1.6);
      if(memory&&Number.isFinite(options.worldScale)&&options.worldScale!>0&&options.worldScale!<100)next.object.scale.setScalar(options.worldScale!);
+     else if(!memory)next.object.scale.setScalar(XR_STUDIO_METRIC_SCALE);
      scene!.add(next.object);portalMode=memory;if(gift)gift.visible=!memory;
      portalButton.textContent=memory?'Return to the desk':'Step into the memory';status.textContent=memory?'You are inside the generated World Labs memory. Look around; use the second trigger to return.':'Look around the gift. Squeeze a grip to hold it; the second trigger opens its memory.';
     }catch{if(active()&&session===granted)status.textContent='This world could not open in the headset. Your gift is still available.';}
@@ -98,7 +104,7 @@ export function mountKeepsakeXR(host: HTMLElement, options: KeepsakeXROptions, d
    portalButton.addEventListener('click',travel,{signal:events.signal});
    for(let index=0;index<2;index++){const controller=renderer.xr.getController(index),geometry=new engine.BufferGeometry().setFromPoints([new engine.Vector3(),new engine.Vector3(0,0,-2)]),line=new engine.Line(geometry,new engine.LineBasicMaterial({color:'#d4e9f1'}));controller.add(line);scene.add(controller);controller.addEventListener('select',()=>{if(!active()||session!==granted)return;if(index===1&&options.worldUrl)travel();else if(gift&&!portalMode)rotateKeepsakeXRFromController(controller,gift,engine);});
     controller.addEventListener('squeezestart',()=>{if(!gift||portalMode||changingEnvironment||gift.parent!==room)return;const rotation=new engine.Matrix4().extractRotation(controller.matrixWorld),ray=new engine.Raycaster();ray.ray.origin.setFromMatrixPosition(controller.matrixWorld);ray.ray.direction.set(0,0,-1).transformDirection(rotation);ray.far=3;if(ray.intersectObject(gift,true).length)controller.attach(gift);});
-    controller.addEventListener('squeezeend',()=>{if(gift&&gift.parent===controller){room.attach(gift);gift.position.set(0,1.11,-1.25);gift.rotation.set(0,Number.isFinite(options.modelYaw)?options.modelYaw!:0,0);}});
+    controller.addEventListener('squeezeend',()=>{if(gift&&gift.parent===controller){room.attach(gift);gift.position.set(...XR_STUDIO_GIFT_BASE);gift.rotation.set(0,Number.isFinite(options.modelYaw)?options.modelYaw!:0,0);}});
    }
    await renderer.xr.setSession(granted);if(stale(run,granted))return;
    renderer.setAnimationLoop(()=>{if(!active()){end();return;}if(granted.visibilityState==='hidden')return;if(scene&&renderer)renderer.render(scene,camera);});

@@ -2,6 +2,12 @@
 
 GiftPortals is built for Tripothon S1 with AI-assisted implementation and original demo assets. All demo people, journeys and stories are fictional; generated media is explicitly labeled.
 
+## Release 10.0.0
+
+The current welcome uses actual TapNow raster artwork. The collection renders a newly generated World Labs room with Three.js/Spark, replacing the earlier authored room props while preserving the completed Tripo keepsakes. No specific TapNow model name is asserted because the provider UI was inconsistent. Standard WebXR interaction and local print preparation reuse actual assets; physical PICO validation, HeyGears Blueprint/printing and Jupiter SR device use remain pending. [Current provenance and claim boundaries](V10-SPONSOR-AUDIT.md), [bundled release asset credits](../public/assets/v10/ASSET-CREDITS.md).
+
+The increment descriptions below preserve earlier work and generation history. They do not replace the current release audit or imply that the earlier procedural/painted room is still active.
+
 ## Prior-work declaration
 
 The project starts inside the existing `hackador-template` repository and uses the earlier Present Street prototype as a reference for lightweight Vite/TypeScript/Three.js rendering patterns. That prototype predates this GiftPortals increment. The GiftPortals sibling adds the new product flow, cloud data/auth/storage, scoped revocable gifts, persistent provider jobs, geography aggregation, galleries and memory train. Only this declared new increment is presented for judging. Existing uncommitted Present Street work is preserved separately.
@@ -24,7 +30,7 @@ The v6 Memory Portal increment adds an original continuous recipient encounter: 
 - Phosphor regular icons: bundled individual assets from the [official core repository](https://github.com/phosphor-icons/core), MIT license, with the license in `public/assets/portal-dusk/Phosphor-LICENSE.txt`.
 - Tripo API: original fictional souvenir input image and its generated textured 3D interpretation. Provenance is recorded in the generation ledger.
 - World Labs API: original fictional artistic environment; it is not a factual street reconstruction.
-- TapNow: official MCP connected; production use is claimed only if an actual output is recorded.
+- TapNow: actual Release 10.0.0 homepage raster output is bundled and recorded in the release asset credits; model-specific attribution is intentionally unclaimed.
 - Three.js: browser 3D rendering, MIT license.
 - Vite and TypeScript: build and type system.
 - Supabase and Vercel: selected cloud architecture; operational status depends on the deployment receipt.

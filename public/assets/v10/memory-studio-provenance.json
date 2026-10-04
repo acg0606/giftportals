@@ -1,0 +1,78 @@
+{
+  "format": "giftportals-worldlabs-studio-v1",
+  "provider": "World Labs",
+  "worldId": "a986cafc-e5fa-42c7-a847-58b73a621ef6",
+  "input": {
+    "provider": "TapNow",
+    "kind": "generated-single-image",
+    "artisticInterpretation": true
+  },
+  "actualCredits": 1580,
+  "semantics": {
+    "metricScaleFactor": 1.2550683,
+    "groundPlaneOffset": 1.2042749
+  },
+  "collectionCalibration": {
+    "providerExportRotationX": 3.141592653589793,
+    "cameraPosition": [
+      0,
+      0,
+      0.03
+    ],
+    "cameraTarget": [
+      0,
+      -0.3,
+      -2.8
+    ],
+    "objectPosition": [
+      0,
+      -0.239,
+      -0.95
+    ],
+    "objectSize": [
+      0.48,
+      0.4,
+      0.42
+    ],
+    "fieldOfView": 60,
+    "source": "actual transformed collider desk rays; desktop/mobile viewport review"
+  },
+  "assets": [
+    {
+      "file": "memory-studio.spz",
+      "url": "/assets/v10/memory-studio.spz",
+      "bytes": 7616521,
+      "sha256": "7c183fd16e2fe19634b84ad07047a0fe52352e85983495a66bdc0981efe5aa4a"
+    },
+    {
+      "file": "memory-studio-mobile.spz",
+      "url": "/assets/v10/memory-studio-mobile.spz",
+      "bytes": 1352468,
+      "sha256": "8e57d5bfc3b0bf2450e015a0981ad94106a645c9137742dcf015f2280dac0bb9"
+    },
+    {
+      "file": "memory-studio-full.spz",
+      "url": "/assets/v10/memory-studio-full.spz",
+      "bytes": 29253755,
+      "sha256": "0621d8484cf74d7d3d1cc1b044bc501cdd111a34ccfaa0c76c2fd513b127bf5f"
+    },
+    {
+      "file": "memory-studio-pano.png",
+      "url": "/assets/v10/memory-studio-pano.png",
+      "bytes": 11063417,
+      "sha256": "284d14e5d16826dcda7c6e56ab4e96f01fc15e5b245082567953275caab28675"
+    },
+    {
+      "file": "memory-studio-collider.glb",
+      "url": "/assets/v10/memory-studio-collider.glb",
+      "bytes": 1834760,
+      "sha256": "92653814a6bcdd0af919bd82d23f574256378d36189d7b32c3bf4f9a19c35ef9"
+    }
+  ],
+  "notClaims": [
+    "Verified physical reconstruction",
+    "Animated objects",
+    "Physical headset validation"
+  ],
+  "privateURLsIncluded": false
+}

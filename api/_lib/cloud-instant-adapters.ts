@@ -24,6 +24,17 @@ export function createCloudInstantRepository(deadline=Date.now()+165000):CloudIn
     update:(job,v)=>rpc('gp_instant_update',{p_id:job.id,p_lease_id:job.lease_id,p_revision:job.revision,p_state:v.state,p_document:v.document,p_stages:v.stages,p_assets:v.assets,p_release_lease:v.releaseLease!==false}) as any,
     signUpload:async asset=>{ensure(bucketFor(asset)==='gp-instant-private','INSTANT_ASSET_INVALID');return unwrap(await client().storage.from(bucketFor(asset)).createSignedUploadUrl(asset.path,{upsert:false})).signedUrl;},
     signRead:async asset=>unwrap(await client().storage.from(bucketFor(asset)).createSignedUrl(asset.path,3600)).signedUrl,
+    signModerationRead:async image=>{
+      const asset=image.source;ensure(asset&&['original','object','world'].includes(asset.id)&&asset.mime===image.mime&&asset.bytes===image.bytes.length&&asset.sha256===image.sha256&&hash(image.bytes)===image.sha256&&hasMagic(image.bytes,image.mime)&&image.bytes.length<=6*1024*1024,'IMAGE_CONTENT_INVALID');
+      ensure(/^[a-f0-9-]{36}\/(?:input|moderation)\/[a-z0-9-]+\.(?:png|jpg|webp)$/.test(asset.path),'INSTANT_ASSET_INVALID');
+      const storage=client().storage.from('gp-instant-private');
+      if(image.quarantine){
+        ensure(asset.path.includes('/moderation/'),'INSTANT_ASSET_INVALID');
+        const stored=await storage.upload(asset.path,image.bytes,{contentType:image.mime,upsert:false,cacheControl:'0'});
+        if(stored.error){const existing=await storage.download(asset.path);ensure(!existing.error&&existing.data,'CLOUD_STORAGE_FAILED',502);const prior=Buffer.from(await existing.data.arrayBuffer());ensure(prior.length===asset.bytes&&hash(prior)===asset.sha256,'INSTANT_ASSET_CONFLICT',409);}
+      }else ensure(asset.path.includes('/input/'),'INSTANT_ASSET_INVALID');
+      return unwrap(await storage.createSignedUrl(asset.path,120)).signedUrl;
+    },
     download:async asset=>{const blob=unwrap(await client().storage.from(bucketFor(asset)).download(asset.path));ensure(blob.size===asset.bytes&&blob.size<=25*1024*1024,'IMAGE_CONTENT_INVALID');return Buffer.from(await blob.arrayBuffer());},
     upload:async(asset:CloudStoredAsset,bytes:Buffer)=>{
       ensure(bucketFor(asset)==='gp-instant-generated','INSTANT_ASSET_INVALID');const result=await client().storage.from(bucketFor(asset)).upload(asset.path,bytes,{contentType:asset.mime,upsert:false,cacheControl:'0'});
@@ -47,14 +58,17 @@ export function createCloudRetentionRepository(deadline=Date.now()+45000):CloudR
     purge:async id=>{ensure(unwrap(await client.rpc('gp_instant_purge',{p_id:id}))===true,'INSTANT_RETENTION_FAILED',502);},
   };
 }
-export function createRemoteCloudModerator(deadline=Date.now()+165000){
+export function createRemoteCloudModerator(deadline=Date.now()+165000,repository?:Pick<CloudInstantRepository,'signModerationRead'>){
   const endpoint=process.env.GIFTPORTALS_CLOUD_MODERATION_URL,key=process.env.GIFTPORTALS_CLOUD_MODERATION_KEY;
   let url:URL|undefined;try{url=endpoint?new URL(endpoint):undefined;}catch{/* Closed gate. */}
-  const configured=Boolean(url&&url.protocol==='https:'&&!url.username&&!url.password&&key);
+  const configured=Boolean(url&&url.protocol==='https:'&&!url.username&&!url.password&&key&&key.length>=32&&repository);
   return {configured,screen:async(images:CloudSafetyImage[]):Promise<CloudSafetyReport>=>{
     ensure(configured,'PHOTO_SAFETY_UNAVAILABLE',503);
-    const response=await fetch(url!,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(cloudRemaining(deadline,45000,20000)),body:JSON.stringify({protocol:'giftportals-cloud-vision-v1',images:images.map(image=>({id:image.id,sha256:image.sha256,imageDataUrl:`data:${image.mime};base64,${image.bytes.toString('base64')}`}))})});
-    ensure(response.ok,'PHOTO_SAFETY_UNAVAILABLE',503);const raw=await cloudReadText(response,65536,'PHOTO_SAFETY_UNAVAILABLE');try{return JSON.parse(raw);}catch{throw new AppError('PHOTO_SAFETY_UNAVAILABLE',503);}
+    ensure(images.length>=1&&images.length<=3&&new Set(images.map(image=>image.id)).size===images.length,'IMAGE_CONTENT_INVALID');
+    const payload=[];for(const image of images){const imageUrl=await repository!.signModerationRead(image);let source:URL;try{source=new URL(imageUrl);}catch{throw new AppError('PHOTO_SAFETY_UNAVAILABLE',503);}const expected=new URL(process.env.SUPABASE_URL||'https://unconfigured.invalid');ensure(source.protocol==='https:'&&source.origin===expected.origin&&!source.username&&!source.password&&!source.hash&&source.pathname.startsWith('/storage/v1/object/sign/gp-instant-private/')&&Boolean(source.searchParams.get('token')),'PHOTO_SAFETY_UNAVAILABLE',503);payload.push({id:image.id,sha256:image.sha256,mime:image.mime,bytes:image.bytes.length,imageUrl});}
+    const body=JSON.stringify({protocol:'giftportals-cloud-vision-v1',images:payload});ensure(Buffer.byteLength(body)<=16384,'PHOTO_SAFETY_UNAVAILABLE',503);
+    const response=await fetch(url!,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(cloudRemaining(deadline,90000,20000)),body});
+    ensure(response.ok,'PHOTO_SAFETY_UNAVAILABLE',503);const raw=await cloudReadText(response,65536,'PHOTO_SAFETY_UNAVAILABLE');let report;try{report=JSON.parse(raw);}catch{throw new AppError('PHOTO_SAFETY_UNAVAILABLE',503);}ensure(report?.modelVersion==='giftportals-local-vision-v1:clip-text-q8+clip-vision-fp32+vit-nsfw-q8:policy-3','PHOTO_SAFETY_UNAVAILABLE',503);return report;
   }};
 }
 async function uploadImage(provider:'tripo'|'worldlabs',bytes:Buffer,mime:string,deadline:number,http:ReturnType<typeof createCloudProviderHTTP>):Promise<string>{

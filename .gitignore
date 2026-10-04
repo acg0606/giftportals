@@ -12,4 +12,5 @@ outputs/
 
 __pycache__/
 *.pyc
+api/_vision_models/
 

@@ -1,14 +1,19 @@
 {
   "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm build",
+  "buildCommand": "node tools/prepare-cloud-vision.mjs && pnpm build",
   "outputDirectory": "dist",
   "functions": {
     "api/giftportals.ts": { "maxDuration": 60 },
     "api/tick.ts": { "maxDuration": 60 },
     "api/instant-cloud.ts": { "maxDuration": 180 },
     "api/instant-cloud-tick.ts": { "maxDuration": 180 },
-    "api/instant-cloud-retention.ts": { "maxDuration": 60 }
+    "api/instant-cloud-retention.ts": { "maxDuration": 60 },
+    "api/cloud-vision.py": {
+      "maxDuration": 120,
+      "includeFiles": "{server/cloud_vision_inference.py,api/_lib/cloud-vision-*.json,api/_vision_models/**}",
+      "excludeFiles": "{public/**,dist/**,node_modules/**,src/**,tests/**,api/tests/**,tools/**,.local-giftportals/**,outputs/**}"
+    }
   },
   "crons": [
     { "path": "/api/instant-cloud-tick", "schedule": "0 1 * * *" },

@@ -6,9 +6,9 @@ Release 10.0.0 of the memory gift app for Tripothon S1. Start with a photo, plac
 
 ## Build status
 
-**Release 10.0.0** is prepared in the isolated release snapshot. The collection renders actual generated room assets and retains the completed Tripo keepsakes. Optional standard WebXR and print preparation are implemented; physical PICO, HeyGears and Jupiter validation remain pending. Live creation and private cloud features depend on configured server services.
+**Release 10.0.0** includes the reference-conditioned World Labs studio, completed Tripo keepsakes, TapNow visual direction, standard WebXR and print preparation. Physical PICO, HeyGears and Jupiter validation remain pending. Live creation uses private Supabase storage and the server's pinned image moderation models.
 
-Production URL: **pending deployment receipt**. A local preview or build is not a public deployment or hackathon submission receipt. Current evidence and exact limits are recorded in the [sponsor audit](docs/V10-SPONSOR-AUDIT.md).
+Production: [giftportals.vercel.app](https://giftportals.vercel.app). Source: [acg0606/giftportals](https://github.com/acg0606/giftportals). Current evidence and exact limits are recorded in the [sponsor audit](docs/V10-SPONSOR-AUDIT.md); publication does not constitute a hackathon submission receipt.
 
 ## Development
 
@@ -25,7 +25,7 @@ Node 22+, pnpm. Run `pnpm install`, `pnpm dev`, `pnpm typecheck`, `pnpm test`, `
 
 The anonymous Rio composer stores only an explicitly saved text draft in the current browser. Anyone using that browser profile can resume it. Its loopback preview link contains that text in the URL fragment and opens on the same device while the preview server runs. This local draft is separate from the private cloud controls below.
 
-Original private cloud media is stored in a private bucket. Every cloud write and private read needs an authenticated owner/recipient check. Cloud gift links are unpredictable, limited to one gift and revocable. Receiving a memory never records a physical visit. Privileged API keys stay server-side. The separately enabled loopback-only V10 creator supports bounded live generation without an account and stores its protected jobs in the ignored local directory; it does not enable public anonymous spending.
+Original private cloud media is stored in a private bucket. Cloud writes and private reads require the route's authorized owner/recipient or scoped capability checks. Gift links are unpredictable and limited to one gift; account invitations and anonymous instant links use their respective revocation or expiry rules. Receiving a memory never records a physical visit. Privileged API keys stay server-side. The separately enabled loopback-only creator supports bounded live generation without an account and stores protected jobs in the ignored local directory; it does not enable public anonymous spending.
 
 ## Hackathon entry
 

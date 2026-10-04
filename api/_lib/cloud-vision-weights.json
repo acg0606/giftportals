@@ -1,0 +1,68 @@
+{
+  "modelVersion": "giftportals-local-vision-v1:clip-text-q8+clip-vision-fp32+vit-nsfw-q8:policy-2",
+  "files": [
+    {
+      "model": "Xenova/mobileclip_s0",
+      "revision": "757d59c9c6870a76a4b0306f05f5061bca15c39f",
+      "file": "config.json",
+      "bytes": 344,
+      "sha256": "8e33c1f2634a33de3e38715f9809ef86742aacbe31c310c66fc2636755458d56"
+    },
+    {
+      "model": "Xenova/mobileclip_s0",
+      "revision": "757d59c9c6870a76a4b0306f05f5061bca15c39f",
+      "file": "preprocessor_config.json",
+      "bytes": 382,
+      "sha256": "b031f09fbd69e22a605b6cc7433993249ee893b7fc1b79321f669cd015493dd4"
+    },
+    {
+      "model": "Xenova/mobileclip_s0",
+      "revision": "757d59c9c6870a76a4b0306f05f5061bca15c39f",
+      "file": "tokenizer.json",
+      "bytes": 2224081,
+      "sha256": "72ed5c96db5729294468543e4bc75fce14ca63f58e37300290189ba1c1e52b85"
+    },
+    {
+      "model": "Xenova/mobileclip_s0",
+      "revision": "757d59c9c6870a76a4b0306f05f5061bca15c39f",
+      "file": "tokenizer_config.json",
+      "bytes": 763,
+      "sha256": "a7d9d24f248071b792e4a3b56ab0539c2f40eec8da56d6fd91fb3a50058acebd"
+    },
+    {
+      "model": "Xenova/mobileclip_s0",
+      "revision": "757d59c9c6870a76a4b0306f05f5061bca15c39f",
+      "file": "onnx/text_model_quantized.onnx",
+      "bytes": 42799238,
+      "sha256": "b8557b10e5c23a0126c6d2e6eba48d240484979007917d128953b31618a04211"
+    },
+    {
+      "model": "Xenova/mobileclip_s0",
+      "revision": "757d59c9c6870a76a4b0306f05f5061bca15c39f",
+      "file": "onnx/vision_model.onnx",
+      "bytes": 45543630,
+      "sha256": "17d3c037b1d488c10c50e09f6009ea5a198caef4e0e8f4ea5617b7cb2d067ac0"
+    },
+    {
+      "model": "onnx-community/nsfw-image-detector-ONNX",
+      "revision": "6626debca038a8f7aa1729b1eaee3bd4eb929ad6",
+      "file": "config.json",
+      "bytes": 805,
+      "sha256": "3119b49239b1b8ca1c7ff693c6481e58e1d1553e284a70c01db2f9e6f9edf555"
+    },
+    {
+      "model": "onnx-community/nsfw-image-detector-ONNX",
+      "revision": "6626debca038a8f7aa1729b1eaee3bd4eb929ad6",
+      "file": "preprocessor_config.json",
+      "bytes": 327,
+      "sha256": "b09d2030f83f2a59d12c717d41a9135a3f0c1ba0a2a5df694dbc40f77735daed"
+    },
+    {
+      "model": "onnx-community/nsfw-image-detector-ONNX",
+      "revision": "6626debca038a8f7aa1729b1eaee3bd4eb929ad6",
+      "file": "onnx/model_quantized.onnx",
+      "bytes": 87348425,
+      "sha256": "10354606f3442d24308c0a37d1fd6205ab7ce7bf31669e186a4fc5cf7f51b455"
+    }
+  ]
+}

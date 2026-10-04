@@ -93,7 +93,7 @@ begin
  perform pg_advisory_xact_lock(hashtext(new.owner_id::text));
  perform pg_advisory_xact_lock(hashtext('giftportals-global-storage'));
  if not exists(select 1 from gp_memories where id=new.memory_id and owner_id=new.owner_id) then raise exception 'NOT_OWNER'; end if;
- if (select count(*) from gp_media where memory_id=new.memory_id and (kind in('model','world'))=(new.kind in('model','world')) and id<>new.id)>=case when new.kind in('model','world') then 3 else 8 end then raise exception 'MEDIA_LIMIT'; end if;
+ if (select count(*) from gp_media where memory_id=new.memory_id and (kind in('model','world'))=(new.kind in('model','world')) and id<>new.id)>=(case when new.kind in('model','world') then 3 else 8 end) then raise exception 'MEDIA_LIMIT'; end if;
  if coalesce((select sum(quota_bytes) from gp_media where owner_id=new.owner_id and id<>new.id),0)+new.quota_bytes+coalesce((select sum(storage_reserved_bytes) from gp_jobs where owner_id=new.owner_id and state<>'completed' and created_at>now()-interval '45 minutes'),0)>104857600 then raise exception 'STORAGE_LIMIT'; end if;
  if coalesce((select sum(quota_bytes) from gp_media where id<>new.id),0)+new.quota_bytes+coalesce((select sum(storage_reserved_bytes) from gp_jobs where state<>'completed' and created_at>now()-interval '45 minutes'),0)>209715200 then raise exception 'STORAGE_LIMIT'; end if;
  return new; end $$;

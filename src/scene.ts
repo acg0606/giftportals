@@ -79,7 +79,31 @@ export function mountMemoryScene(host: HTMLElement, options: MemorySceneOptions)
     if(dead||!controls||!Number.isFinite(delta))return;const offset=camera.position.clone().sub(controls.target),distance=THREE.MathUtils.clamp(offset.length()*(1+THREE.MathUtils.clamp(delta,-0.5,0.5)),controls.minDistance,controls.maxDistance);offset.setLength(distance);camera.position.copy(controls.target).add(offset);controls.update();gate?.request();
   }
   function fitWrappedGift(){
-    if(!unboxing||unboxing.revealed)return;
+    if(!unboxing)return;
+    if(unboxing.revealed){
+      if(host.getBoundingClientRect().width>600)return;
+      // Frame the actual model's bounds in the compact viewer, without altering
+      // the decoded geometry. The same orbit/zoom controls remain available.
+      const direction=camera.position.clone().sub(focus).normalize();
+      let distance=camera.position.distanceTo(focus);
+      for(let pass=0;pass<6;pass++){
+        camera.position.copy(focus).addScaledVector(direction,distance);camera.lookAt(focus);camera.updateMatrixWorld();
+        let horizontal=0,vertical=0;
+        const point=new THREE.Vector3();
+        content.traverse(item=>{
+          if(!(item instanceof THREE.Mesh))return;
+          const positions=item.geometry.getAttribute('position');if(!positions)return;
+          for(let index=0;index<positions.count;index++){
+            point.fromBufferAttribute(positions,index).applyMatrix4(item.matrixWorld).project(camera);
+            horizontal=Math.max(horizontal,Math.abs(point.x));vertical=Math.max(vertical,Math.abs(point.y));
+          }
+        });
+        distance=Math.max(unboxing.size.length()/2+.3,distance*Math.max(horizontal/.66,vertical/.78));
+      }
+      camera.position.copy(focus).addScaledVector(direction,distance);
+      if(controls)controls.minDistance=Math.min(3.8,distance*.72);
+      return;
+    }
     const halfWidth=Math.hypot(unboxing.size.x,unboxing.size.z)/2+.12,halfHeight=unboxing.size.y/2+.34;
     const fit=Math.max(halfHeight,halfWidth/Math.max(.25,camera.aspect))/Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
     const offset=camera.position.clone().sub(focus),distance=Math.max(offset.length(),fit+.7);

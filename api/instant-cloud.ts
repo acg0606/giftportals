@@ -6,7 +6,7 @@ import { createCloudInstantRepository,createCloudProviderAdapter,createRemoteClo
 export const config={maxDuration:180};
 type Request=IncomingMessage&{body?:unknown};
 export const cloudInstantSettings=()=>({enabled:cloudInstantConfigured()&&process.env.ENABLE_CLOUD_GENERATION==='true',providers:{tripo:Boolean(process.env.TRIPO_API_KEY),worldlabs:Boolean(process.env.WORLD_LABS_API_KEY)},dedupeSecret:process.env.CLOUD_DEDUPE_SECRET||''});
-export const cloudInstantService=(deadline=Date.now()+165000)=>createCloudInstantService({repository:createCloudInstantRepository(deadline),providers:createCloudProviderAdapter(deadline),moderator:createRemoteCloudModerator(deadline),settings:cloudInstantSettings});
+export const cloudInstantService=(deadline=Date.now()+165000)=>{const repository=createCloudInstantRepository(deadline);return createCloudInstantService({repository,providers:createCloudProviderAdapter(deadline),moderator:createRemoteCloudModerator(deadline,repository),settings:cloudInstantSettings});};
 export function assertCloudOrigin(req:Request){
   const origin=process.env.GIFTPORTALS_CLOUD_ORIGIN;let url:URL|undefined;try{url=origin?new URL(origin):undefined;}catch{/* Closed. */}
   ensure(url?.protocol==='https:'&&!url.username&&!url.password&&url.pathname==='/'&&!url.search&&!url.hash,'CLOUD_NOT_CONFIGURED',503);

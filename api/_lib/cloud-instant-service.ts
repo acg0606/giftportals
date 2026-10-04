@@ -72,7 +72,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
   const inputAssets=(job:CloudJob)=>Object.fromEntries(job.document.images.map(image=>[image.id,{...image,path:`${job.id}/input/${image.id}-${image.sha256}.${extension(image.mime)}`}])) as Record<string,CloudStoredAsset>;
   const verifiedBytes=async(asset:CloudStoredAsset)=>{const bytes=await repo.download(asset);ensure(bytes.length===asset.bytes&&hash(bytes)===asset.sha256&&hasMagic(bytes,asset.mime),'IMAGE_CONTENT_INVALID');return bytes;};
   const approvedInputs=async(job:CloudJob)=>{
-    const images:CloudSafetyImage[]=[];for(const input of job.document.images){const asset=job.assets[input.id];ensure(asset,'IMAGE_CONTENT_INVALID');images.push({id:input.id,mime:asset.mime,sha256:asset.sha256,bytes:await verifiedBytes(asset)});}return images;
+    const images:CloudSafetyImage[]=[];for(const input of job.document.images){const asset=job.assets[input.id];ensure(asset,'IMAGE_CONTENT_INVALID');images.push({id:input.id,mime:asset.mime,sha256:asset.sha256,bytes:await verifiedBytes(asset),source:asset});}return images;
   };
   async function dto(job:CloudJob,token:string):Promise<CloudInstantJobDTO> {
     const document=job.document,read=async(key:string)=>job.assets[key]?repo.signRead(job.assets[key]):undefined;
@@ -138,7 +138,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       const result=await deps.providers.poll(selected,stage.taskId);stage={...stage,polls:(stage.polls||0)+1,progress:typeof result.progress==='number'&&Number.isFinite(result.progress)?Math.max(stage.progress||0,Math.min(100,Math.max(0,result.progress))):stage.progress};job.stages[selected]=stage;
       const completed=await deps.providers.complete(selected,result);if(!completed){await save(job);return {processed:true,state:'processing'};}
       if(selected==='tripo-reference'){
-        const reference=completed.assets.find(asset=>asset.key==='reference');ensure(reference,'PROVIDER_ASSET_INVALID',502);const image={id:'object' as const,mime:reference.mime,bytes:reference.bytes,sha256:reference.sha256};const report=await deps.moderator.screen([image]);verifyCloudSafety(report,[image]);job.document={...job.document,objectSafety:report};
+        const reference=completed.assets.find(asset=>asset.key==='reference');ensure(reference,'PROVIDER_ASSET_INVALID',502);const image={id:'object' as const,mime:reference.mime,bytes:reference.bytes,sha256:reference.sha256,source:{id:'object',path:`${job.id}/moderation/${reference.sha256}.${extension(reference.mime)}`,mime:reference.mime,bytes:reference.bytes.length,sha256:reference.sha256},quarantine:true};const report=await deps.moderator.screen([image]);verifyCloudSafety(report,[image]);job.document={...job.document,objectSafety:report};
       }
       const existingOutputs=job.assets,storedOutputBytes=Object.values(existingOutputs).filter(asset=>asset.path.includes('/generated/')).reduce((total,asset)=>total+asset.bytes,0);
       ensure(storedOutputBytes+completed.assets.reduce((total,asset)=>total+(existingOutputs[asset.key]?0:asset.bytes.length),0)<=100*1024*1024,'GENERATED_ASSET_SIZE_LIMIT',502);

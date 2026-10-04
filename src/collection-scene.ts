@@ -87,7 +87,7 @@ export interface CollectionEnvironmentConfig {
  * Calibrate these values against the completed world, never an invented desk. */
 export const DEFAULT_COLLECTION_ENVIRONMENT: CollectionEnvironmentConfig = {
  worldUrl: '/assets/v10/memory-studio.spz', mobileWorldUrl: '/assets/v10/memory-studio-mobile.spz', panoramaUrl: '/assets/v10/memory-studio-pano.png',
- cameraPosition: [0, 0, .03], cameraTarget: [0, -.30, -2.8], objectPosition: [0, -.372, -.95], objectSize: [.48, .4, .42],
+ cameraPosition: [0, 0, .03], cameraTarget: [0, -.30, -2.8], objectPosition: [0, -.239, -.95], objectSize: [.48, .4, .42],
  worldPosition: [0, 0, 0], worldRotation: [Math.PI, 0, 0], worldScale: 1, fieldOfView: 60, panoramaYaw: 0,
 };
 function environmentConfig(input: Partial<CollectionEnvironmentConfig> = {}): CollectionEnvironmentConfig {

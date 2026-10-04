@@ -8,5 +8,8 @@ node_modules/
 tests/
 api/tests/
 docs/
-tools/
+tools/**
+!tools/prepare-cloud-vision.mjs
+!tools/local-vision-policy.mjs
+api/_vision_models/
 design-qa.md
