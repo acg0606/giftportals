@@ -1,0 +1,29 @@
+.instant-camera-modal { box-sizing: border-box; width: min(640px,calc(100vw - 28px)); max-height: calc(100dvh - 28px); margin: auto; padding: 0; border: 1px solid #738472; border-radius: 25px; background: #102f35; color: #fff4df; box-shadow: 0 25px 100px #00171bdd; font-family: Inter,Arial,sans-serif; overflow: auto; }
+.instant-camera-modal::backdrop { background: #03191ddd; backdrop-filter: blur(5px); }
+.instant-camera-modal * { box-sizing: border-box; }
+.instant-camera-modal [hidden] { display: none !important; }
+.instant-camera-shell { padding: 25px; }
+.instant-camera-shell > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.instant-camera-shell > header > div > span { display: block; color: #ebc18d; font-size: 9px; letter-spacing: 1.7px; line-height: 1.7; }
+.instant-camera-shell h2 { margin: 6px 0 0; color: #fff4df; font-size: 30px; font-weight: 650; letter-spacing: -1px; line-height: 1.2; }
+.instant-camera-shell > header > button { flex: none; width: 44px; height: 44px; border: 1px solid #82927766; border-radius: 50%; background: #213f42; color: #f7e2bf; font-size: 25px; cursor: pointer; }
+.instant-camera-shell > p { margin: 13px 0 0; color: #c8d7cc; font-size: 12px; line-height: 1.8; }
+.instant-camera-stage { position: relative; width: 100%; aspect-ratio: 4/3; max-height: min(42dvh,400px); overflow: hidden; margin-top: 18px; border: 1px solid #68827555; border-radius: 17px; background: #061c23; }
+.instant-camera-stage > video,.instant-camera-stage > img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.instant-camera-placeholder { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 15px; padding: 22px; color: #c9d9c8; text-align: center; font-size: 12px; line-height: 1.8; background: radial-gradient(ellipse at 50% 50%,#b9905522,transparent 75%); }
+.instant-camera-placeholder > span:first-child { color: #ecc793; font-size: 51px; font-weight: 300; line-height: 1; }
+.instant-camera-shell > .instant-camera-status { min-height: 42px; margin-top: 14px; color: #dee4d1; font-size: 12px; }
+.instant-camera-modal[data-phase='error'] .instant-camera-status { color: #ffdfbf; }
+.instant-camera-actions { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; margin-top: 13px; }
+.instant-camera-actions > button { min-height: 48px; padding: 11px 17px; border-radius: 26px; font: inherit; font-size: 12px; font-weight: 550; line-height: 1.7; cursor: pointer; }
+.instant-camera-actions > .instant-camera-primary { grid-column: 1/-1; display: flex; justify-content: center; align-items: center; gap: 10px; border: 0; background: #fff1d7; color: #12333a; }
+.instant-camera-primary > span { font-size: 21px; line-height: 1; }
+.instant-camera-primary:disabled { opacity: .5; cursor: wait; }
+.instant-camera-retake,.instant-camera-switch { border: 1px solid #94a083; background: #204244; color: #f1d3a4; }
+.instant-camera-actions > .instant-camera-fallback { grid-column: 1/-1; border: 0; padding: 7px 0; background: transparent; color: #d1ded0; text-decoration: underline; text-underline-offset: 5px; font-weight: 400; }
+.instant-camera-actions > .instant-camera-switch { grid-column: 1/-1; justify-self: center; }
+.instant-camera-actions > .instant-camera-retake { grid-column: 1/-1; justify-self: center; min-width: 120px; }
+.instant-camera-note { display: block; margin-top: 10px; color: #a7c0b7; font-size: 10px; line-height: 1.8; text-align: center; }
+.instant-camera-modal button:focus-visible { outline: 2px solid #ffd08d; outline-offset: 3px; }
+@media (max-width: 450px) { .instant-camera-modal { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); border-radius: 21px; } .instant-camera-shell { padding: 19px; } .instant-camera-shell h2 { font-size: 27px; } .instant-camera-stage { margin-top: 15px; } }
+@media (prefers-reduced-motion: reduce) { .instant-camera-modal::backdrop { backdrop-filter: none; } }

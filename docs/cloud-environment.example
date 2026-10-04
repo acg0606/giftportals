@@ -1,0 +1,19 @@
+# Server environment TEMPLATE. No values have been obtained from local credentials.
+# Set separately for the intended Preview/Production target after user validation.
+# Never prefix private values below with VITE_ or NEXT_PUBLIC_.
+ENABLE_CLOUD_GENERATION=false
+ENABLE_GENERATION=false
+GIFTPORTALS_CLOUD_ORIGIN=https://replace-with-approved-exact-host.example
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+CLOUD_DEDUPE_SECRET=
+CRON_SECRET=
+TRIPO_API_KEY=
+WORLD_LABS_API_KEY=
+GIFTPORTALS_CLOUD_MODERATION_URL=
+GIFTPORTALS_CLOUD_MODERATION_KEY=
+# CLOUD_DEDUPE_SECRET must contain at least32 random characters; keep it stable.
+# CRON_SECRET must be a separate strong random secret used only by authorized workers.
+# SUPABASE anon key is NOT needed by the no-login cloud creator.
+# Database gp_instant_budgets caps also start at0; environment true alone cannot create.
+# No Python, local classifier path, local audio binary or local job directory is required.

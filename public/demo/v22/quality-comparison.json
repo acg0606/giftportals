@@ -1,0 +1,69 @@
+{
+  "miniature": {
+    "baseline": "/demo/v17/paris-generated-gift.json",
+    "baselineLabel": "H3.1 · single image",
+    "candidateLabel": "H3.1 · matching views",
+    "baselineDetails": [
+      "Detailed geometry and PBR textures",
+      "30,000 face limit",
+      "One volume reference"
+    ],
+    "candidateDetails": [
+      "Front, left, back and right views",
+      "Detailed geometry and PBR textures",
+      "30,000 face limit"
+    ],
+    "referenceImage": "/demo/v22/paris-tripo-reference.png",
+    "views": [
+      {
+        "label": "Front",
+        "url": "/demo/v22/paris-multiview-front.jpg"
+      },
+      {
+        "label": "Left",
+        "url": "/demo/v22/paris-multiview-left.jpg"
+      },
+      {
+        "label": "Back",
+        "url": "/demo/v22/paris-multiview-back.jpg"
+      },
+      {
+        "label": "Right",
+        "url": "/demo/v22/paris-multiview-right.jpg"
+      }
+    ],
+    "candidate": "/demo/v22/paris-multiview-gift.json",
+    "baselinePreview": "/demo/v22/paris-baseline-render.jpg",
+    "candidatePreview": "/demo/v22/paris-multiview-render.jpg"
+  },
+  "world": {
+    "baseline": "/demo/v17/paris-generated-gift.json",
+    "baselineLabel": "Marble 1.1 · one image",
+    "candidateLabel": "Marble 1.1 Plus · 3 views",
+    "baselineDetails": [
+      "One scene image and a layout prompt",
+      "500k spatial world"
+    ],
+    "candidateDetails": [
+      "3 overlapping cardinal views",
+      "New spatial layout prompt",
+      "500k spatial world",
+      "Generated collision mesh"
+    ],
+    "referenceImages": [
+      {
+        "label": "Front · 0°",
+        "url": "/demo/v22/paris-plus-front.png"
+      },
+      {
+        "label": "Right · 90°",
+        "url": "/demo/v22/paris-plus-right.png"
+      },
+      {
+        "label": "Left · 270°",
+        "url": "/demo/v22/paris-plus-left.png"
+      }
+    ],
+    "candidate": "/demo/v22/paris-plus-gift.json"
+  }
+}

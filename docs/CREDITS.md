@@ -1,0 +1,36 @@
+# Credits and prior work
+
+GiftPortals is built for Tripothon S1 with AI-assisted implementation and original demo assets. All demo people, journeys and stories are fictional; generated media is explicitly labeled.
+
+## Prior-work declaration
+
+The project starts inside the existing `hackador-template` repository and uses the earlier Present Street prototype as a reference for lightweight Vite/TypeScript/Three.js rendering patterns. That prototype predates this GiftPortals increment. The GiftPortals sibling adds the new product flow, cloud data/auth/storage, scoped revocable gifts, persistent provider jobs, geography aggregation, galleries and memory train. Only this declared new increment is presented for judging. Existing uncommitted Present Street work is preserved separately.
+
+The NEXUS v4 increment adds an original Memory Trail with explicit object/place/story fragments, session-only digital keepsakes and a continuation through the same authorized atlas. It reuses the completed GiftPortals Tripo and World Labs assets; the new trail does not claim new generation or persistent cloud progress. The earlier v3 geographic integration and its MIT/Apache notices remain declared.
+
+The v5 Memory Studio increment replaces the previous presentation with an original dark studio, authorized asset library, object/world/story workspace, exploration inspector and revised home, personal world, atlas, library and creation surfaces. The current public Tripo website informed the dark neutral hierarchy and yellow primary action; no Tripo logo, illustration, example model or proprietary interface asset was copied. Reference inspection was limited by onboarding in Tripo Studio. Actual source comparison, wireframe inspection and explicit orbit reuse the completed generated media; this increment does not spend provider credits or claim new generation.
+
+The v6 Memory Portal increment adds an original continuous recipient encounter: the existing Tripo object gives way to the existing World Labs environment and the authorized author’s words. The full-screen native modal reuses completed media and preserves the explicit fragment/keepsake loop. It creates no new provider job, cloud claim, physical visit or automatic progress.
+
+## Providers and assets
+
+- V25 living garden: two original low-poly humanoid visitors, their shared materials and animation, and the static procedural dusk sky are local Three.js rendering created for GiftPortals. The environment and route-support mesh remain the completed V23 World Labs assets. The visitors use a private `three-mesh-bvh` query structure against that exact transformed mesh; no reference character, borrowed animation, new provider output or third-party scene is presented as original generation. This increment creates no new provider job.
+- V24 first-person walking: original motion/physics integration reuses the completed V23 World Labs approach SPZ and collider. The three user-selected interactive repositories informed capsule collision, frame-driven input, pointer lock and metric scaling; no upstream application source, characters, audio or demo media were copied. [Pinned source and license review](V24-FIRST-PERSON-REFERENCES.md). Rapier `@dimforge/rapier3d-compat` 0.21.0 provides the character controller and WASM physics, Apache-2.0 license; the installed package retains its notice. The sky-only procedural gradient is original runtime rendering, separate from provider output. This increment creates no new provider job.
+- V23 Paris cinematic journey: three original English prompts generate independent Marble 1.1 Plus environments. GiftPortals directs actual SPZ camera flights and chapter transitions, and uses the same worlds' generated panoramas only as distant environment backing. The scenes are artistic interpretations with independent geometry, not a surveyed continuous Paris. The first summit attempt failed; its receipt and unresolved billing remain recorded separately. [Operator and provenance](V23-WORLD-OPERATOR.md).
+- V22 quality trials: Tripo-generated matching views and their H3.1 souvenir model use the existing original v17 Paris volume reference. Marble 1.1 Plus uses three approved perspective views derived geometrically from the existing fictional v13 Paris panorama. Both are original generated interpretations; the comparison changes the input strategy and is not an isolated model benchmark. [Execution and provenance](V22-SPONSOR-QUALITY-COMPARISON.md).
+- V10 photo to a little world: the primary local creator now submits an explicit image-to-model task to Tripo and an image/text-to-world task to World Labs. It adds actual generated-media inspection, spatial narrative points and bounded live jobs to the approved Portal at dusk presentation. The new fictional Rio output and settled use are recorded in a separate V10 receipt; earlier completed assets and their receipts remain preserved.
+- V9 Portal at dusk: an original AI-generated GiftPortals visual direction selected by the user, its interface-free artwork, transparent Rio keepsake and unmodified raster brand crops. Partiful informed entry pacing and emphasis; no Partiful brand or proprietary interface asset is included. [Asset provenance and scope](V9_PORTAL_DUSK.md).
+- Inter variable font, Rasmus Andersson: bundled from the [official distribution](https://rsms.me/inter/), SIL Open Font License, with the license in `public/assets/portal-dusk/Inter-LICENSE.txt`.
+- Phosphor regular icons: bundled individual assets from the [official core repository](https://github.com/phosphor-icons/core), MIT license, with the license in `public/assets/portal-dusk/Phosphor-LICENSE.txt`.
+- Tripo API: original fictional souvenir input image and its generated textured 3D interpretation. Provenance is recorded in the generation ledger.
+- World Labs API: original fictional artistic environment; it is not a factual street reconstruction.
+- TapNow: official MCP connected; production use is claimed only if an actual output is recorded.
+- Three.js: browser 3D rendering, MIT license.
+- Vite and TypeScript: build and type system.
+- Supabase and Vercel: selected cloud architecture; operational status depends on the deployment receipt.
+- God's Eye View, copyright 2026 Bilawal Sidhu (MIT): pinned decimal coordinate parser and adapted camera framing in v3. This is selected navigation source reuse; the upstream OSINT application and third-party datasets are excluded. [Integration and exact provenance](GODS_EYE_INTEGRATION.md).
+- CesiumJS 1.138.0 (Apache-2.0 and bundled third-party notices): the optional geographic globe. Natural Earth imagery is public domain; optional OpenStreetMap street tiles retain their visible contributor credit and independent service terms.
+
+Geographical names and sourced point positions are documented in MAP_RULES. No museum image, private photo, cloned voice, copied character or third-party composition is included without explicit provenance/permission. The earlier pastel presentation and the current Memory Studio presentation are original GiftPortals designs.
+
+Participation terms retain author IP and provide the event's stated non-exclusive promotional license. The final portal declarations must be reviewed with the actual submitted materials.

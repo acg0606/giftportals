@@ -1,0 +1,21 @@
+.gt-preview { min-height: 100dvh; padding: 24px clamp(18px,5vw,72px) 36px; color: #fff2dc; background: radial-gradient(ellipse at 50% 40%,#24193f 0,#091e29 58%,#06151c 100%); font-family: 'Manrope',sans-serif; }
+.gt-preview *, .gt-preview *::before, .gt-preview *::after { box-sizing: border-box; }
+.gt-preview header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.gt-preview header a { display: flex; align-items: center; gap: 10px; color: inherit; font: 600 25px Georgia,serif; text-decoration: none; }
+.gt-preview header a svg { width: 28px; height: 28px; }
+.gt-preview button { border: 1px solid #b6a89257; border-radius: 30px; padding: 11px 16px; min-height: 44px; font: inherit; font-size: 11px; color: #fce8c9; background: #24313970; cursor: pointer; }
+.gt-preview button:focus-visible { outline: 2px solid #f5c992; outline-offset: 4px; }
+.gt-preview main { max-width: 680px; margin: 32px auto 0; }
+.gtp-intro { text-align: center; margin-bottom: 21px; }
+.gtp-intro > span { font-size: 9px; letter-spacing: 2.3px; color: #eab676; }
+.gtp-intro h1 { font: 500 clamp(30px,5vw,45px)/1.15 Georgia,serif; letter-spacing: -.9px; margin: 12px 0; }
+.gtp-intro p { color: #b9c4c2; font-size: 12px; line-height: 1.6; margin: 0; }
+.gtp-card { border: 1px solid #d5bd8f2a; border-radius: 28px; padding: 16px; background: #0b1b2470; box-shadow: 0 30px 70px #0003; }
+.gtp-controls { display: flex; gap: 8px; justify-content: center; margin-top: 17px; flex-wrap: wrap; }
+.gtp-controls button { padding: 9px 14px; }
+.gtp-controls button[aria-pressed='true'] { background: #e8c79c; color: #112b32; border-color: #e8c79c; }
+.gtp-play { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.gtp-play > button:first-child { color: #ffdba3; border-color: #d7a65b80; }
+.gtp-disclosure, .gtp-model-note { margin: 15px auto 3px; max-width: 90%; text-align: center; color: #9fb2b7; font-size: 9px; line-height: 1.6; }
+.gtp-model-note { color: #f1d6a4; }
+@media(max-width:600px) { .gt-preview { padding: 16px 14px 28px; } .gt-preview header a { font-size: 21px; } .gt-preview header button { padding: 9px 12px; } .gt-preview main { margin-top: 30px; } .gtp-card { padding: 10px; border-radius: 23px; } .gtp-controls { gap: 6px; } .gtp-controls button { padding: 8px 10px; font-size: 10px; } }

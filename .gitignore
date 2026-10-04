@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vercel/
+coverage/
+.local-giftportals/
+.env*
+!.env.example
+
+outputs/
+*.log
+

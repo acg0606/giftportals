@@ -1,0 +1,73 @@
+{
+  "date": "2026-10-04T08:24:57.259Z",
+  "runtime": "@electric-sql/pglite 0.5.8",
+  "migration": "/C:/Users/admin/OneDrive/Documentos/Agent%20Hackas/output/giftportals-v27/sql-validation/002.fixed.sql",
+  "migrationSha256": "26d9aa9c9ea5a19d2ab668ee256b33431771bbb966fa0e0efe2e13ae2016a10d",
+  "scope": "Actual PostgreSQL WASM execution, local Supabase roles/storage schema stand-ins only. No external database, Storage service, provider, credentials or cloud account.",
+  "postgres": "PostgreSQL 18.3 (PGlite 0.5.8) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.74 (1092ec30a3fb1d46b1782ff1b4db5094d3d06ae5), 32-bit",
+  "tests": [
+    {
+      "name": "migration executes as owner, creates all functions and disabled budgets",
+      "passed": true
+    },
+    {
+      "name": "anon/authenticated denied tables and RPC; restrictive storage policy protects only dedicated buckets",
+      "passed": true
+    },
+    {
+      "name": "service role has only read/credit-limit mutation and public RPCs; internal helpers denied",
+      "passed": true
+    },
+    {
+      "name": "zero budgets reject atomically; valid prepare reserves exact budgets/storage and dedupe only once",
+      "passed": true
+    },
+    {
+      "name": "input contracts and exact immutable upload paths/hashes enforced",
+      "passed": true
+    },
+    {
+      "name": "owner/global/storage/budget quotas reject without leaks",
+      "passed": true
+    },
+    {
+      "name": "bounded claims, global lease slots and explicit job isolation execute",
+      "passed": true
+    },
+    {
+      "name": "safety required, durable submission, lease/revision CAS and task immutability",
+      "passed": true
+    },
+    {
+      "name": "both actual stage contracts complete with immutable assets; terminal release stays budget-reserved",
+      "passed": true
+    },
+    {
+      "name": "expired submitting lease becomes uncertain and cannot become another paid attempt",
+      "passed": true
+    },
+    {
+      "name": "uncertain job with separately known task can poll without reset/retry",
+      "passed": true
+    },
+    {
+      "name": "two-hour retention grace, proven-unsent refund and idempotent storage purge",
+      "passed": true
+    },
+    {
+      "name": "derived-reference generation must complete and pass matching-image moderation before Tripo",
+      "passed": true
+    },
+    {
+      "name": "safety result wrong hash/protocol/category cannot authorize paid intent",
+      "passed": true
+    },
+    {
+      "name": "missing/null asset fields, oversize generated totals and helper null inputs rejected",
+      "passed": true
+    }
+  ],
+  "failures": [],
+  "passed": 15,
+  "failed": 0
+}

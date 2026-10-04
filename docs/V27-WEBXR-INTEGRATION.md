@@ -1,0 +1,11 @@
+# Keepsake VR entry integration
+
+Three staged replacement files add a universal headset icon and `View in VR` beside `Print a keepsake`. The optional XR module is imported only when the VR panel is explicitly opened. It receives the exact authorized existing GLB URL, title and model orientation; signed credentials are not copied into HTML. The panel lives inside the existing gift modal, uses the same URL/expiry guards as Print and leaves the standard viewer alive for unsupported or cancelled browser sessions.
+
+XR owns an independent epoch. After the browser accepts the headset session, `onSessionStarting` increments only the ordinary viewer version, disposes its active object renderer and invalidates a pending object import. It never destroys the XR panel or changes the XR epoch. The XR renderer is then free to allocate its context. On session end, the current panel may restore exactly one ordinary viewer and shows a visible returning-to-keepsake status.
+
+Destroy/render/view-switch increments the XR epoch before invoking the child's destroy. Any child exit callback is therefore stale and cannot reopen the old gift. Explicit close of an accepted VR panel restores the ordinary view once; unsupported/cancelled panels never replaced it. Media expiry, a changed model URL, route invalidation, detached modal/host and cancelled lazy imports block stale mounts or restoration.
+
+All 43 generated-gift controller tests pass, including ten new VR integration tests. They execute the real parent controller with mocked DOM/import delays/child XR lifecycle and assert only one object/world/XR renderer is alive at a time. The existing 33 tests still pass. Strict browser TypeScript passes with the staged XR module and canonical read-only dependencies. The separate XR module has 11 passing real-GLB loader/session lifecycle tests.
+
+Apply only the three paths in `manifest.json`, after matching their current Batch 4 baseline hashes. The read-only typecheck helper and patch-generation script outside `files` are staging utilities and are not app changes. No canonical writes, dependencies, paid requests, deployment or hardware tests were performed. Physical PICO validation remains pending.

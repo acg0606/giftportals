@@ -1,0 +1,72 @@
+{
+  "verifiedAt": "2026-09-30T09:54:09.874280+00:00",
+  "label": "Real API generation; fictional demonstration inputs, not a personal travel record",
+  "tripo": {
+    "inputImageTaskId": "59882cca-5128-4357-9a15-e2d4318c172b",
+    "inputImageStatus": "success",
+    "inputImageCost": 5.0,
+    "modelTaskId": "422a89fb-f936-4cfe-b1d5-769b11f90538",
+    "modelStatus": "success",
+    "modelCost": 30.0
+  },
+  "worldlabs": {
+    "operationId": "b7512256-c157-4c87-8aaf-e1d3e8c67ce9",
+    "done": true,
+    "worldId": "4cccd646-8010-4e73-99a7-302faaa2c45f",
+    "model": "marble-1.0-draft",
+    "permission": "private at provider",
+    "cost": {
+      "total_credits": 230,
+      "line_items": [
+        {
+          "name": "Pano generation (text)",
+          "credits": 80
+        },
+        {
+          "name": "Draft world generation",
+          "credits": 150
+        }
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "public/demo/perdizes-gift.glb",
+      "bytes": 2246912,
+      "sha256": "c1fe979f4b4fd7ea6cde88f3e866978230e4a7a367c2c764681c763912b1b065",
+      "glbVersion": 2,
+      "meshCount": 1,
+      "extensionsUsed": []
+    },
+    {
+      "path": "public/demo/perdizes-input.png",
+      "bytes": 1267344,
+      "sha256": "5758dcb521a607a49643f9b3ba09473462baf313002a990932c07b7041fc6fe3"
+    },
+    {
+      "path": "public/demo/perdizes-world-100k.spz",
+      "bytes": 1173405,
+      "sha256": "a0b7c9b3bade94da91c5a7299a8a5e2802f6c562be44d40a029543a5e8447f38"
+    },
+    {
+      "path": "public/demo/perdizes-world-collider.glb",
+      "bytes": 9752428,
+      "sha256": "868990907325e315d137935dbd5546fe475e873693cf384102566cba4633a9cb",
+      "glbVersion": 2,
+      "meshCount": 1,
+      "extensionsUsed": []
+    },
+    {
+      "path": "public/demo/perdizes-world-pano.png",
+      "bytes": 3371199,
+      "sha256": "a2cf396afbfc12637401e948e1d17ec9fe337e599f5bc891eb892ae8b32fd5dd"
+    },
+    {
+      "path": "public/demo/perdizes-world-thumbnail.webp",
+      "bytes": 23760,
+      "sha256": "ed2401ac0cdbb7eae5c219ad4c8e641f9014ff045d9dd678c51b7ceaf5bb904a"
+    }
+  ],
+  "cloudDeployment": "NOT_DEPLOYED",
+  "submission": "DRAFT_ONLY"
+}

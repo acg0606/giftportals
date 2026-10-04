@@ -1,0 +1,31 @@
+/* WebXR is opt-in. Its capability/status surfaces share the V10 travel palette. */
+.kx-panel {
+  box-sizing: border-box; width: 100%; max-width: 560px; min-width: 0;
+  padding: 24px; border: 1px solid #d5dfe3; border-radius: 22px;
+  color: #12344a; background: #fffdf8; color-scheme: light;
+  font: 400 14px/1.65 Inter,Arial,sans-serif;
+}
+.kx-panel, .kx-panel * { box-sizing: border-box; }
+.kx-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.kx-heading > span { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 13px; color: #034a70; background: #e7eff3; font-size: 25px; }
+.kx-heading > div { min-width: 0; }
+.kx-heading h3 { margin: 0 0 5px; color: #12344a; font-size: 19px; font-weight: 650; letter-spacing: -.025em; line-height: 1.3; overflow-wrap: anywhere; }
+.kx-heading p { margin: 0; color: #526873; font-size: 13px; overflow-wrap: anywhere; }
+.kx-description { margin: 20px 0; color: #526873; font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+.kx-actions { display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.kx-actions button { min-height: 46px; max-width: 100%; padding: 12px 20px; border: 1px solid #034a70; border-radius: 28px; color: #fffdf8; background: #034a70; font: 550 13px/1.5 Inter,Arial,sans-serif; text-align: center; overflow-wrap: anywhere; cursor: pointer; }
+.kx-actions button:hover:not(:disabled) { color: #fffdf8; background: #023b59; border-color: #023b59; }
+.kx-actions button:disabled { opacity: .48; cursor: default; }
+.kx-actions button:focus-visible { outline: 3px solid #13648f; outline-offset: 4px; }
+.kx-actions [data-kx-exit] { color: #12344a; background: #fffdf8; border-color: #9fb3bd; }
+.kx-actions [data-kx-exit]:hover:not(:disabled) { color: #034a70; background: #e7eff3; border-color: #9fb3bd; }
+.kx-panel [data-kx-status] { margin: 18px 0 0; padding: 13px 15px; border: 1px solid #d5dfe3; border-radius: 13px; color: #12344a; background: #e7eff3; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.kx-note { margin: 13px 0 0; color: #526873; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.kx-canvas { display: block; width: 100%; max-height: 200px; margin-top: 16px; border: 1px solid #d5dfe3; border-radius: 14px; }
+.kx-panel [hidden] { display: none !important; }
+@media (max-width: 600px) {
+  .kx-panel { padding: 20px; border-radius: 18px; }
+  .kx-heading { gap: 11px; }
+  .kx-heading h3 { font-size: 18px; }
+  .kx-actions button { flex: 1 1 auto; min-height: 48px; }
+}

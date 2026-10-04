@@ -1,0 +1,26 @@
+{
+  "framework": "vite",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/giftportals.ts": { "maxDuration": 60 },
+    "api/tick.ts": { "maxDuration": 60 },
+    "api/instant-cloud.ts": { "maxDuration": 180 },
+    "api/instant-cloud-tick.ts": { "maxDuration": 180 },
+    "api/instant-cloud-retention.ts": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/instant-cloud-tick", "schedule": "0 1 * * *" },
+    { "path": "/api/instant-cloud-retention", "schedule": "0 2 * * *" }
+  ],
+  "headers": [{
+    "source": "/(.*)",
+    "headers": [
+      { "key": "Referrer-Policy", "value": "strict-origin" },
+      { "key": "X-Content-Type-Options", "value": "nosniff" },
+      { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+      { "key": "Permissions-Policy", "value": "geolocation=(self), camera=(self), microphone=(self)" }
+    ]
+  }]
+}

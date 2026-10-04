@@ -1,0 +1,13 @@
+{
+  "title": "A little piece of Rio",
+  "senderName": "Clara",
+  "recipientName": "Alex",
+  "dedication": "This little piece of Rio made me think of you.",
+  "story": "I wanted you to feel the warm light, the sea breeze, and the afternoon that made me think of you. Follow the light across the bay and find the little moments I left for you.",
+  "originalUrl": "/assets/portal-dusk/rio-keepsake.png",
+  "modelUrl": "/demo/rio-keepsake.glb",
+  "worldUrl": "/demo/rio-world-500k.spz",
+  "panoramaUrl": "/demo/rio-world-pano.png",
+  "collisionUrl": "/demo/rio-collider.glb",
+  "photoIntent": "object"
+}

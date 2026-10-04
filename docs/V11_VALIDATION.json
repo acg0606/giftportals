@@ -1,0 +1,94 @@
+{
+  "checkedAt": "2026-10-02T00:32:01.4883278Z",
+  "scope": "LOCAL MVP UX validation; not deployment or submission",
+  "tests": {
+    "passed": 190,
+    "failed": 0
+  },
+  "types": {
+    "frontend": "passed",
+    "server": "passed"
+  },
+  "build": {
+    "result": "passed",
+    "seconds": 25.91
+  },
+  "browser": {
+    "desktop": "1120x740",
+    "mobile": "390x844",
+    "horizontalOverflow": false,
+    "renderersPerEncounter": 1,
+    "productionExampleWithoutAccount": "Rendered GLB and SPZ; walking enabled and exercised on 4326; no browser errors."
+  },
+  "controlledGeneration": {
+    "tripo": {
+      "taskId": "4b48fe36-d04a-495d-bec5-35adf048bb3a",
+      "credits": 60
+    },
+    "createdAt": "2026-10-02T00:15:47.286Z",
+    "jobId": "646fa5cb-f492-46a3-9411-2d0e78172ef4",
+    "objectRepresentation": "framed-postcard",
+    "inputProvenance": {
+      "original": {
+        "name": "photo.jpg",
+        "mime": "image/jpeg",
+        "bytes": 476807,
+        "sha256": "67a46e243d5c88caef2a0775554e509544cbf7de04df26eccebb041aadee7868"
+      },
+      "tripo": {
+        "name": "tripo-input.jpg",
+        "mime": "image/jpeg",
+        "bytes": 327278,
+        "sha256": "edf9f327a57172700f38a3916243e54779811e98f5e26c6216e2bd5c0637644a"
+      },
+      "world": {
+        "name": "place.jpg",
+        "mime": "image/jpeg",
+        "bytes": 476807,
+        "sha256": "67a46e243d5c88caef2a0775554e509544cbf7de04df26eccebb041aadee7868"
+      },
+      "tripoDerived": true
+    },
+    "state": "completed",
+    "completedAt": "2026-10-02T00:27:28.401Z",
+    "photoIntent": "place",
+    "worldlabs": {
+      "resultId": "7831b6d4-54a9-4411-b08d-40ce4336b7ba",
+      "credits": 1580,
+      "taskId": "ffd7bbdd-26f6-4ad0-b8dc-a8d1c84ec463"
+    },
+    "assets": {
+      "photo": {
+        "name": "photo.jpg",
+        "mime": "image/jpeg",
+        "bytes": 476807,
+        "sha256": "67a46e243d5c88caef2a0775554e509544cbf7de04df26eccebb041aadee7868"
+      },
+      "model": {
+        "name": "model.glb",
+        "mime": "model/gltf-binary",
+        "bytes": 10878844,
+        "sha256": "aedb155a855e481ec06fbca27acb558c768c462430527a6416758a17d92358d8"
+      },
+      "world": {
+        "name": "world-500k.spz",
+        "mime": "application/octet-stream",
+        "bytes": 7771389,
+        "sha256": "ce2313c03b383cc0f46abff211e4e51b71dad7e58c563b68d44822985a264589"
+      },
+      "panorama": {
+        "name": "panorama.png",
+        "mime": "image/png",
+        "bytes": 15567808,
+        "sha256": "9c11d67cdb21e0f80ccaa4b40b7aaf261b96e7cc57be6fbc6f003a7f16f0bdc4"
+      },
+      "collider": {
+        "name": "collider.glb",
+        "mime": "model/gltf-binary",
+        "bytes": 2900040,
+        "sha256": "d0682046ab83d82bb885f2a8f7a7b4bd59d366e92c29f0a021ce0de6fe7c4968"
+      }
+    }
+  },
+  "presentation": "Actual Tripo frame geometry plus preserved original-photo face; World Labs SPZ and collider; ambient lights added by the app."
+}

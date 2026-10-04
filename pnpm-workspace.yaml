@@ -1,0 +1,6 @@
+allowBuilds:
+  esbuild: true
+  protobufjs: false
+overrides:
+  '@cesium/engine': 22.3.0
+  '@cesium/widgets': 14.3.0

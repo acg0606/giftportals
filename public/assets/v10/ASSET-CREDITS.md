@@ -1,0 +1,6 @@
+# GiftPortals 10.0 interface assets
+
+- Caveat variable font: Google Fonts, [official source](https://github.com/google/fonts/tree/main/ofl/caveat), SIL Open Font License 1.1. Full license included as `Caveat-OFL.txt`.
+- Inter variable font and GiftPortals brand mark: existing project assets under `/assets/portal-dusk/`; original project provenance applies.
+- `hero.jpg`: actual TapNow raster artwork, original output 3072 × 1728, downloaded for the Release 10.0.0 homepage. Recorded provider balance: 200 → 140 credits (60-credit difference). Attribution is to TapNow only because its UI showed inconsistent model naming. This image is not a Tripo model or World Labs 3D world. A second crop operation is pending with latest observed balance 68; no completed result or final settled cost is claimed for it.
+- `memory-studio.spz`, `memory-studio-mobile.spz`, `memory-studio-full.spz`, `memory-studio-pano.png` and `memory-studio-collider.glb`: actual outputs from one completed World Labs text-generated room. The generation settled at 1580 provider credits (receipt prefix `ee95db90`). The collection uses 500k/100k SPZ and panorama fallback; full resolution is optional. This is an artistic interpretation, not a verified physical reconstruction.

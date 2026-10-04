@@ -1,0 +1,14 @@
+.gu-unboxing { position:absolute; z-index:3; bottom:clamp(16px,4vh,34px); left:50%; transform:translateX(-50%); display:grid; justify-items:center; gap:9px; width:max-content; max-width:calc(100% - 32px); color:#355245; text-align:center; font:400 12px/1.5 Inter,Arial,sans-serif; pointer-events:none; }
+.gu-status { margin:0; padding:5px 10px; border-radius:20px; background:#fff5e5c7; color:#355245; backdrop-filter:blur(12px); }
+.gu-action { min-height:48px; min-width:190px; padding:12px 19px; border:1px solid #75917a75; border-radius:18px; background:#fff3dcf5; color:#355245; box-shadow:0 8px 24px #172f261a; font:550 13px/1.5 Inter,Arial,sans-serif; cursor:pointer; touch-action:none; pointer-events:auto; }
+.gu-action > span { display:flex; align-items:center; justify-content:center; gap:10px; }
+.gu-action svg { width:23px; height:23px; flex:none; }
+.gu-action:hover:not(:disabled) { background:#dce9d6; border-color:#638b6c; }
+.gu-action:focus-visible { outline:3px solid #5b927b; outline-offset:4px; }
+.gu-action:disabled { cursor:default; opacity:.65; }
+.gu-action[hidden],.gu-hint[hidden] { display:none; }
+.gu-hint { padding:2px 8px; border-radius:12px; color:#f7efde; background:#233c355e; font-size:10px; }
+.gu-unboxing.is-revealed { bottom:16px; }
+.gu-unboxing.is-revealed .gu-status { font-size:10px; background:#fff5e5b3; }
+@media(max-width:600px) { .gu-unboxing { bottom:16px; gap:7px; } .gu-action { min-height:48px; font-size:12px; } .gu-status { font-size:11px; } }
+@media(prefers-reduced-motion:reduce) { .gu-unboxing * { transition:none; animation:none; } }

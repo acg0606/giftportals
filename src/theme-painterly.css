@@ -1,0 +1,308 @@
+/* Warm interface surfaces around the existing art. Collection-room and
+   generated-gift have their own art direction; no renderer or image is tinted. */
+:root {
+  --painterly-cream: #fff7e7;
+  --painterly-paper: #fffaf1;
+  --painterly-peach: #f7ddc9;
+  --painterly-coral: #f2b79e;
+  --painterly-mint: #dfeadb;
+  --painterly-lilac: #e8def2;
+  --painterly-ink: #413f40;
+  --painterly-muted: #584d4e;
+  --painterly-accent: #7d3e33;
+  --painterly-focus: #634265;
+  --painterly-line: #c9b8a0;
+  --painterly-input-line: #96786c;
+  --painterly-shadow: 0 18px 50px #83594717, 0 3px 10px #8359470c;
+  --painterly-wash: radial-gradient(ellipse at 85% 5%, #f7ddc9 0, transparent 46%),
+    radial-gradient(ellipse at 6% 55%, #e8def270 0, transparent 48%), #fff7e7;
+}
+
+/* Only general route shells receive a light native form/background scheme. */
+html:has(#app > :is(.dusk-welcome,.instant-creator,.quality-comparison,.quality-reference-capture,.generated-loading,.narrow,.loading-state,.gt-preview,.create-page,.gallery-page,.atlas-page,.memory-page,.world-page)),
+body:has(#app > :is(.dusk-welcome,.instant-creator,.quality-comparison,.quality-reference-capture,.generated-loading,.narrow,.loading-state,.gt-preview,.create-page,.gallery-page,.atlas-page,.memory-page,.world-page)) {
+  color-scheme: light;
+  background: var(--painterly-cream);
+  color: var(--painterly-ink);
+}
+
+/* The welcome illustration stays intact. Cream copy is retained over its
+   darker mobile sky; desktop copy lives on the sunlit paper beside the art. */
+.dusk-welcome.dusk-welcome { background: var(--painterly-wash); }
+.dusk-welcome .dusk-room-link {
+  color: var(--painterly-ink); background: #fff7e7f2;
+  border-color: var(--painterly-input-line); box-shadow: 0 4px 20px #51382c1a;
+}
+.dusk-welcome .dusk-start,
+.generated-loading .dusk-start {
+  color: var(--painterly-ink); background: var(--painterly-coral);
+  box-shadow: 0 8px 28px #ba72492b;
+}
+.dusk-welcome .dusk-start:hover,
+.generated-loading .dusk-start:hover { background: var(--painterly-peach); }
+.dusk-welcome .dusk-brand { min-height: 44px; }
+.dusk-welcome :is(.dusk-explore,.dusk-signin) { color: #fff7e7; }
+.dusk-welcome :is(.dusk-brand,.dusk-explore,.dusk-signin) { text-shadow: 0 2px 8px #241d19b3; }
+.dusk-welcome :where(button,a):focus-visible { outline-color: #fff7e7; }
+@media (min-width: 600px) {
+  .dusk-welcome :is(.dusk-brand,.dusk-explore,.dusk-signin,.dusk-signin button),
+  .dusk-welcome .dusk-welcome-copy :is(h1,p) { color: var(--painterly-ink); text-shadow: none; }
+  .dusk-welcome .dusk-welcome-copy p,
+  .dusk-welcome .dusk-signin { color: var(--painterly-muted); }
+  .dusk-welcome :where(button,a):focus-visible { outline-color: var(--painterly-focus); }
+}
+
+/* Shared header, informational pages, and account/auth dialogs. */
+#app > .site-header,
+#app > .site-footer { background: var(--painterly-paper); color: var(--painterly-ink); border-color: var(--painterly-line); }
+#app > .site-header :is(.brand,.footer-brand,.quiet-button),
+#app > .site-footer a { color: var(--painterly-ink); }
+#app > .site-header .brand-mark { color: var(--painterly-ink); background: var(--painterly-coral); }
+#app > .site-header .brand small,
+#app > .site-header nav a { color: var(--painterly-muted); }
+#app > .site-header nav a.active { color: var(--painterly-accent); }
+#app > .site-header nav a.active::after { background: var(--painterly-accent); }
+#app > .site-header .avatar-button { width: 44px; height: 44px; color: var(--painterly-ink); background: var(--painterly-mint); border-color: var(--painterly-input-line); }
+#app > .service-note { color: var(--painterly-muted); background: var(--painterly-peach); border-color: var(--painterly-line); }
+#app > :is(.narrow,.loading-state,.generated-loading) { background: var(--painterly-wash); color: var(--painterly-ink); overflow-wrap: anywhere; }
+#app > .narrow p,
+#app > .generated-loading p { color: var(--painterly-muted); }
+#app > .narrow :is(.eyebrow,.fine-print) { color: var(--painterly-muted); }
+#app > .narrow :is(.text-link,a:not(.button)) { color: var(--painterly-accent); }
+#app > .narrow .text-link { margin: 12px 0; }
+#app > .generated-loading .dusk-explore { color: var(--painterly-accent); }
+.dialog-root .dialog-scrim { background: #473c3266; }
+.dialog-root .dialog-card {
+  color-scheme: light; color: var(--painterly-ink); background: var(--painterly-paper);
+  border: 1px solid var(--painterly-line); border-radius: 24px; box-shadow: var(--painterly-shadow);
+  overflow-wrap: anywhere;
+}
+.dialog-root .dialog-card :is(h2,label) { color: var(--painterly-ink); }
+.dialog-root .dialog-card :is(p,small,.eyebrow,.fine-print) { color: var(--painterly-muted); }
+.dialog-root .dialog-card :is(input:not([type=checkbox]),textarea,select) {
+  min-width: 0; max-width: 100%; color: var(--painterly-ink); background: var(--painterly-cream);
+  border-color: var(--painterly-input-line); color-scheme: light;
+}
+.dialog-root .dialog-card .dialog-close { min-width: 44px; min-height: 44px; background: var(--painterly-lilac); color: var(--painterly-ink); }
+.dialog-root .dialog-card :is(.quiet-button,.persona) { min-height: 44px; color: var(--painterly-ink); }
+.dialog-root .dialog-card .persona { background: var(--painterly-mint); border-color: var(--painterly-input-line); }
+.dialog-root .dialog-card .dialog-divider { border-color: var(--painterly-line); }
+.dialog-root .dialog-card .dialog-divider span { color: var(--painterly-muted); background: var(--painterly-paper); }
+.dialog-root .dialog-card .form-error { color: #923b32; }
+.dialog-root .dialog-card .form-status { color: #3c5d45; }
+#app > .site-header .button,
+#app > .narrow .button,
+.dialog-root .dialog-card .button {
+  min-height: 48px; border-color: var(--painterly-accent); border-radius: 24px;
+  color: var(--painterly-paper); background: var(--painterly-accent);
+}
+#app > .site-header .button:hover:not(:disabled),
+#app > .narrow .button:hover:not(:disabled),
+.dialog-root .dialog-card .button:hover:not(:disabled) { background: #713a32; }
+#app > :is(.site-header,.site-footer,.narrow) :where(button,a,input,textarea,select,summary):focus-visible,
+.dialog-root .dialog-card :where(button,a,input,textarea,select,summary):focus-visible { outline: 3px solid var(--painterly-focus); outline-offset: 3px; }
+
+/* Earlier Studio/list/atlas pages retain their features and unmodified 3D/map
+   viewports, while their surrounding cards follow the same paper palette. */
+#app > :is(.gallery-page,.world-page,.atlas-page,.memory-page,.create-page) {
+  --ink: var(--painterly-ink); --muted: var(--painterly-muted); --paper: var(--painterly-paper);
+  --line: var(--painterly-line); --border: var(--painterly-line); --accent: var(--painterly-accent);
+  color: var(--painterly-ink); min-width: 0;
+}
+#app > :is(.gallery-page,.world-page,.atlas-page,.memory-page,.create-page) :is(.memory-card,.world-note,.persona,.atlas-view-choice,.atlas-demo,.atlas-node,.atlas-badge,.memory-story,.creation-form,.archive-card,.atlas-memory-link,.record-control) {
+  color: var(--painterly-ink); background: var(--painterly-paper); border-color: var(--painterly-input-line);
+}
+#app > :is(.gallery-page,.world-page) .memory-card-art { background: var(--painterly-mint); border-color: var(--painterly-line); }
+#app > .memory-page :is(.story-body,.story-place,.memory-status,.audio-story) { color: var(--painterly-muted); }
+#app > .create-page :is(.upload-zone,.review-note) { color: var(--painterly-muted); background: var(--painterly-peach); border-color: var(--painterly-input-line); }
+#app > .create-page .creation-form :is(input:not([type=checkbox]),textarea,select) { color: var(--painterly-ink); background: var(--painterly-paper); border-color: var(--painterly-input-line); max-width: 100%; }
+#app > .atlas-page .atlas-node.is-physical { color: #3c5d45; background: var(--painterly-mint); border-color: #55765b; }
+#app > .atlas-page .atlas-node.has-memory::after { color: var(--painterly-focus); background: var(--painterly-lilac); border-color: var(--painterly-input-line); }
+#app > .atlas-page .atlas-view-choice nav { background: var(--painterly-paper); border-color: var(--painterly-input-line); }
+#app > .atlas-page .atlas-view-choice nav a { color: var(--painterly-muted); }
+#app > .atlas-page .atlas-view-choice nav a[aria-current=page] { color: var(--painterly-ink); background: var(--painterly-peach); }
+#app > :is(.gallery-page,.world-page,.atlas-page,.memory-page,.create-page) :is(.button,.quiet-button,.text-link,.atlas-button,.atlas-crumb,.filter-tabs button) { min-height: 44px; }
+#app > :is(.gallery-page,.world-page,.atlas-page,.memory-page,.create-page) :is(.quiet-button,.text-link,.atlas-button,.atlas-crumb,.filter-tabs button) { color: var(--painterly-accent); }
+#app > :is(.gallery-page,.world-page,.atlas-page,.memory-page,.create-page) .button { color: var(--painterly-paper); background: var(--painterly-accent); border-color: var(--painterly-accent); }
+#app > :is(.gallery-page,.world-page,.atlas-page,.memory-page,.create-page) :where(button,a,input,textarea,select,summary):focus-visible { outline: 3px solid var(--painterly-focus); outline-offset: 3px; }
+
+/* All four creator steps, including photo checks and native dictation. */
+.instant-creator.instant-creator {
+  --instant-ink: var(--painterly-ink); --instant-muted: var(--painterly-muted);
+  --instant-line: var(--painterly-line); --instant-accent: var(--painterly-accent);
+  background: var(--painterly-wash); color-scheme: light;
+}
+.instant-creator .instant-workspace { background: var(--painterly-paper); box-shadow: var(--painterly-shadow); }
+.instant-creator :is(.instant-step,.instant-title-gift) { border-color: var(--painterly-line); background: var(--painterly-peach); }
+.instant-creator :is(.instant-intents > button,.instant-example,.instant-example-categories button,.instant-example-navigation button) {
+  color: var(--painterly-ink); background: var(--painterly-cream); border-color: var(--painterly-input-line);
+}
+.instant-creator :is(.instant-intents > button,.instant-example,.instant-example-categories button)[aria-pressed=true] {
+  color: var(--painterly-ink); background: var(--painterly-mint); border-color: var(--painterly-accent);
+  box-shadow: inset 0 0 0 1px var(--painterly-accent);
+}
+.instant-creator :is(.instant-upload > button,.instant-selected,.instant-review-photo,.instant-model-preview) {
+  color: var(--painterly-ink); background: var(--painterly-peach); border-color: var(--painterly-input-line);
+}
+.instant-creator .instant-upload > .instant-camera { background: var(--painterly-lilac); }
+.instant-creator .instant-upload > button:hover,
+.instant-creator .instant-example-navigation button:hover:not(:disabled) { background: var(--painterly-mint); border-color: var(--painterly-accent); }
+.instant-creator .instant-examples .instant-example img { background: var(--painterly-peach); }
+.instant-creator .instant-field :is(input,textarea) { background: var(--painterly-cream); border-color: var(--painterly-input-line); }
+.instant-creator .instant-field :is(input,textarea)::placeholder { color: var(--painterly-muted); }
+.instant-creator .instant-consent { min-height: 44px; padding-block: 6px; }
+.instant-creator .instant-consent input { accent-color: var(--painterly-accent); }
+.instant-creator :is(.instant-ready-example,.instant-place-reference > button,.instant-review :is(button,a),.instant-selected > button,.instant-model-preview > div > button) { color: var(--painterly-accent); }
+.instant-creator .instant-ready-example:hover { color: #713a32; }
+.instant-creator :is(.instant-place-reference > button small,.instant-review-block p,.instant-review-block dd,.instant-wizard-back,.instant-progress-status) { color: var(--painterly-muted); }
+.instant-creator .instant-primary { color: var(--painterly-paper); background: var(--painterly-accent); }
+.instant-creator .instant-primary:hover:not(:disabled) { background: #713a32; }
+.instant-creator .instant-error { color: #923b32; background: #fbe4d7; border-color: #b66c58; }
+.instant-creator :is(.instant-wizard-progress li,.instant-model-load) { color: var(--painterly-muted); }
+.instant-creator .instant-wizard-progress li > span { background: var(--painterly-paper); border-color: var(--painterly-input-line); }
+.instant-creator .instant-wizard-progress li[data-state=active] { color: var(--painterly-accent); }
+.instant-creator .instant-wizard-progress li[data-state=active] > span { background: var(--painterly-peach); border-color: var(--painterly-accent); box-shadow: 0 0 0 3px #f2b79e33; }
+.instant-creator .instant-wizard-progress li[data-state=done] > span,
+.instant-creator .instant-progress li[data-state=completed] .instant-provider-dot { color: #3c5d45; background: var(--painterly-mint); border-color: #55765b; }
+.instant-creator .instant-progress li[data-state=failed] .instant-provider-dot { color: #923b32; border-color: #923b32; }
+.instant-creator .instant-progress li[data-state=processing] .instant-provider-dot { border-color: var(--painterly-line); border-top-color: var(--painterly-accent); }
+.instant-creator :is(.instant-wizard-card,.instant-examples > [data-instant-examples]) { scrollbar-color: var(--painterly-input-line) var(--painterly-cream); }
+.instant-creator small,
+.instant-creator :is(.instant-hint,.instant-consent,.instant-card-copy,.instant-wizard-progress > p) { font-size: 11px; line-height: 1.65; }
+.instant-creator .instant-wizard-progress li > strong { font-size: 11px; }
+.instant-creator :where(button,a,summary):not(.instant-sr-only) { min-height: 44px; }
+.instant-creator :where(button,a,input,textarea,select,summary):focus-visible { outline: 3px solid var(--painterly-focus); outline-offset: 3px; }
+.instant-creator .story-audio { color: var(--painterly-ink); background: var(--painterly-mint); border-color: var(--painterly-line); }
+.instant-creator .story-audio :is(p,small,[data-audio-count]) { color: var(--painterly-muted); }
+.instant-creator .story-audio button { min-height: 44px; background: var(--painterly-paper); border-color: var(--painterly-input-line); color: var(--painterly-ink); }
+.instant-creator .story-audio [data-audio-stop] { background: var(--painterly-peach); }
+.instant-creator .story-audio [data-audio-use] { color: var(--painterly-paper); background: #3c5d45; }
+.instant-creator .story-audio :is(select,textarea) { max-width: 100%; background: var(--painterly-paper); border-color: var(--painterly-input-line); color: var(--painterly-ink); }
+.instant-creator .gift-curiosities { background: var(--painterly-lilac); color: var(--painterly-ink); border-color: var(--painterly-line); }
+.instant-creator .gift-curiosities :is(p,.gc-discover-note,.gc-provenance) { color: var(--painterly-muted); }
+.instant-creator .gift-curiosities :is(.gc-fact > span,.gc-story-seed > span,.gc-fact a) { color: var(--painterly-accent); }
+.instant-creator .gift-curiosities :is(select,button) { color: var(--painterly-ink); background: var(--painterly-paper); border-color: var(--painterly-input-line); }
+.instant-creator .gift-curiosities .gc-discover { background: var(--painterly-coral); }
+.instant-creator .gift-curiosities input { accent-color: var(--painterly-accent); }
+
+/* Camera media keeps its original pixels and neutral letterboxing. */
+.instant-camera-modal.instant-camera-modal { color-scheme: light; color: var(--painterly-ink); background: var(--painterly-paper); border-color: var(--painterly-line); }
+.instant-camera-modal::backdrop { background: #473c3288; }
+.instant-camera-modal .instant-camera-shell :is(h2,p,small) { color: var(--painterly-ink); }
+.instant-camera-modal .instant-camera-shell > header > div > span { color: var(--painterly-accent); }
+.instant-camera-modal .instant-camera-shell > header > button,
+.instant-camera-modal :is(.instant-camera-retake,.instant-camera-switch) { color: var(--painterly-ink); background: var(--painterly-lilac); border-color: var(--painterly-input-line); }
+.instant-camera-modal .instant-camera-primary { background: var(--painterly-accent); color: var(--painterly-paper); }
+.instant-camera-modal :is(.instant-camera-fallback,.instant-camera-note) { color: var(--painterly-muted); }
+.instant-camera-modal button:focus-visible { outline-color: var(--painterly-focus); }
+
+/* Comparison panels and evidence retain unmodified photographs/renders. */
+.quality-comparison.quality-comparison {
+  --qc-ink: var(--painterly-ink); --qc-muted: var(--painterly-muted); --qc-line: var(--painterly-line);
+  color-scheme: light; background: var(--painterly-wash);
+}
+.quality-comparison .qc-eyebrow,
+.quality-comparison .qc-details li::before { color: var(--painterly-accent); }
+.quality-comparison :is(.qc-version,.qc-reference-strip figure,.qc-kind,.qc-home) { background: var(--painterly-paper); box-shadow: 0 5px 24px #8359470c; }
+.quality-comparison .qc-version-candidate { background: linear-gradient(145deg,#f7ddc977,#e8def255),var(--painterly-paper); border-color: var(--painterly-input-line); }
+.quality-comparison .qc-kind button[aria-pressed=true] { background: var(--painterly-coral); color: var(--painterly-ink); }
+.quality-comparison .qc-preview-caption { color: var(--painterly-ink); background: #fff7e7f2; border-color: var(--painterly-input-line); }
+.quality-comparison .qc-preview-empty { color: var(--painterly-muted); background: var(--painterly-mint); }
+.quality-comparison .qc-open { color: var(--painterly-paper); background: var(--painterly-accent); border-color: var(--painterly-accent); }
+.quality-comparison .qc-open:hover:not(:disabled) { background: #713a32; }
+.quality-comparison .qc-look-for p > span { color: var(--painterly-accent); background: var(--painterly-peach); }
+.quality-comparison .qc-footer { color: var(--painterly-muted); }
+.quality-comparison .qc-flight-invite { color: var(--painterly-ink); background: linear-gradient(135deg,#f7ddc9,#e8def2); border-color: var(--painterly-input-line); box-shadow: var(--painterly-shadow); }
+.quality-comparison .qc-flight-invite:hover { background-color: var(--painterly-peach); border-color: var(--painterly-accent); }
+.quality-comparison .qc-flight-invite :is(h2,.qc-flight-action) { color: var(--painterly-ink); }
+.quality-comparison .qc-flight-invite p { color: var(--painterly-muted); }
+.quality-comparison .qc-flight-symbol { color: var(--painterly-accent); background: var(--painterly-paper); border-color: var(--painterly-input-line); }
+.quality-comparison :is(.qc-home,.qc-kind button,.qc-open,.qc-flight-invite):focus-visible { outline: 3px solid var(--painterly-focus); outline-offset: 3px; }
+.quality-reference-capture.quality-reference-capture { color-scheme: light; color: var(--painterly-ink); background: var(--painterly-wash); }
+.quality-reference-capture :is(button,.qrc-panel dl > div) { border-color: var(--painterly-input-line); }
+.quality-reference-capture .qrc-eyebrow { color: var(--painterly-accent); }
+.quality-reference-capture .qrc-panel :is(p,dt,small) { color: var(--painterly-muted); }
+.quality-reference-capture .qrc-panel nav button[aria-pressed=true] { color: var(--painterly-ink); background: var(--painterly-coral); border-color: var(--painterly-accent); }
+.quality-reference-capture .qrc-download { color: var(--painterly-paper) !important; background: var(--painterly-accent) !important; }
+.quality-reference-capture :focus-visible { outline-color: var(--painterly-focus); }
+
+/* Transformation chrome only: the artistic animation/model stage is untouched. */
+.gt-preview.gt-preview { color-scheme: light; color: var(--painterly-ink); background: var(--painterly-wash); }
+.gt-preview .gtp-card { background: var(--painterly-paper); border-color: var(--painterly-line); box-shadow: var(--painterly-shadow); }
+.gt-preview :is(.gtp-intro > span,.gtp-model-note) { color: var(--painterly-accent); }
+.gt-preview :is(.gtp-intro p,.gtp-disclosure) { color: var(--painterly-muted); }
+.gt-preview button { color: var(--painterly-ink); background: var(--painterly-paper); border-color: var(--painterly-input-line); }
+.gt-preview .gtp-controls button[aria-pressed=true] { color: var(--painterly-ink); background: var(--painterly-mint); border-color: var(--painterly-accent); }
+.gt-preview .gtp-play > button:first-child { color: var(--painterly-accent); border-color: var(--painterly-accent); }
+.instant-creator .gift-transformation-caption { background: var(--painterly-lilac); color: var(--painterly-ink); padding-top: 15px; }
+.instant-creator .gift-transformation-detail { color: var(--painterly-muted); }
+.instant-creator .gift-transformation { border-color: var(--painterly-line); }
+
+/* Walking overlays remain small, opaque reading/control surfaces. No changes
+   to the world canvas, sky, shade, reticle, camera pose, or physics bounds. */
+.first-person-place :is(.wp-icon,.wp-gift,.wp-place nav button) { color: var(--painterly-ink); background: #fff7e7f2; border-color: var(--painterly-input-line); }
+.first-person-place .wp-place nav { flex-wrap: wrap; max-width: min(560px,calc(100vw - 110px)); }
+.first-person-place .wp-place h1 { max-width: 100%; overflow-wrap: anywhere; }
+.first-person-place .wp-place nav button { min-height: 44px; }
+.first-person-place .wp-place nav button[aria-pressed=true] { color: var(--painterly-ink); background: var(--painterly-coral); border-color: var(--painterly-accent); }
+.first-person-place .wp-invite { color: var(--painterly-ink); background: #fff7e7f5; border-color: var(--painterly-line); box-shadow: var(--painterly-shadow); }
+.first-person-place .wp-invite p,
+.first-person-place .wp-key-hint small { color: var(--painterly-muted); }
+.first-person-place .wp-key-hint > span { color: var(--painterly-ink); border-color: var(--painterly-input-line); }
+.first-person-place .wp-step-symbol { color: var(--painterly-accent); background: var(--painterly-peach); }
+.first-person-place .wp-invite > button { color: var(--painterly-paper); background: var(--painterly-accent); }
+.first-person-place :is(.wp-pad,.wp-actions) { color: var(--painterly-ink); background: #fff7e7f2; border-color: var(--painterly-input-line); }
+.first-person-place .wp-pad { grid-template-columns: repeat(3,44px); grid-template-rows: repeat(3,44px); }
+.first-person-place .wp-pad button { min-width: 44px; min-height: 44px; background: var(--painterly-paper); border-color: var(--painterly-input-line); }
+.first-person-place .wp-pad button:active,
+.first-person-place .wp-actions button[aria-pressed=true] { color: var(--painterly-ink); background: var(--painterly-coral); }
+.first-person-place .wp-pad > span { color: var(--painterly-accent); }
+.first-person-place .wp-actions button { min-width: 44px; min-height: 44px; }
+.first-person-place .wp-actions button:hover { background: var(--painterly-peach); }
+.first-person-place :where(button,a):focus-visible { outline: 3px solid var(--painterly-focus); outline-offset: 3px; }
+.first-person-place .wp-brand:focus-visible { outline-color: var(--painterly-cream); }
+.first-person-place .story-reader.story-reader { --sr-ink: var(--painterly-ink); --sr-muted: var(--painterly-muted); }
+.first-person-place .story-reader-controls > button { min-width: 44px; }
+.first-person-place .story-reader[data-mode=tablet] .story-reader-object { background: linear-gradient(145deg,#f7ddc9,#cabbcf); border-color: #96786c; box-shadow: 0 16px 35px #47352d3b,inset 0 0 0 3px #eadace; }
+.first-person-place .story-reader[data-mode=tablet] .story-reader-page { color: var(--painterly-ink); background: var(--painterly-paper); border-color: var(--painterly-input-line); }
+.first-person-place .story-reader[data-mode=tablet] :is(.story-reader-object-label,.story-reader-edition,.story-reader-eyebrow,.story-reader-source) { color: var(--painterly-accent); }
+.first-person-place .story-reader[data-mode=tablet] :is(.story-reader-masthead,.story-reader-controls) { border-color: var(--painterly-line); }
+.first-person-place .story-reader[data-mode=tablet] .story-reader-controls > button { border-color: var(--painterly-input-line); background: var(--painterly-cream); }
+.first-person-place .story-reader[data-mode=tablet] .story-reader-controls > button:hover { background: var(--painterly-mint); }
+.first-person-place .story-reader :where(button,a,[tabindex]):focus-visible { outline-color: var(--painterly-focus); }
+
+/* Smaller screens keep wrapping within each route rather than hiding content. */
+@media (max-width: 800px) {
+  #app > .site-header nav { background: #fff7e7f5; border-color: var(--painterly-input-line); box-shadow: var(--painterly-shadow); }
+  #app > .site-header nav a { min-height: 44px; color: var(--painterly-muted); }
+  #app > .site-header nav a.active { background: var(--painterly-peach); color: var(--painterly-accent); }
+}
+@media (max-width: 540px) {
+  .instant-creator :is(.instant-layout,.instant-workspace,.instant-wizard-card,.instant-names,.instant-review-photo,.instant-selected,.story-audio-actions) { min-width: 0; max-width: 100%; }
+  .instant-creator .instant-names { grid-template-columns: minmax(0,1fr); }
+  .instant-creator .instant-examples > [data-instant-examples] { grid-template-columns: repeat(5,minmax(135px,1fr)); }
+  .instant-creator .instant-review-photo { flex-wrap: wrap; }
+  .instant-creator .instant-review-photo > div { flex: 1; min-width: min(120px,100%); }
+  .instant-creator .instant-review-photo > button { flex-basis: 100%; text-align: left; margin-left: 0; }
+  .instant-creator :is(input:not([type=file]):not([type=checkbox]),textarea,select) { font-size: 16px; }
+  .quality-comparison .qc-flight-invite > div { min-width: 0; }
+  .quality-comparison :is(.qc-kind,.qc-header) { max-width: 100%; }
+  .quality-comparison .qc-kind button { min-width: 0; padding-inline: 14px; }
+  .dialog-root .dialog-card { width: min(100%,520px); padding: 28px 20px; }
+  .dialog-root .dialog-card .demo-signin { flex-wrap: wrap; }
+  .dialog-root .dialog-card :is(input:not([type=checkbox]),textarea,select) { font-size: 16px; }
+  #app > .site-header { min-width: 0; gap: 12px; }
+  #app > .site-header .header-actions { gap: 8px; }
+  #app > .site-header .button-small { min-height: 44px; padding-inline: 12px; }
+  .first-person-place .wp-actions { display: grid; grid-template-columns: repeat(3,44px); gap: 3px; padding: 6px; bottom: 65px; }
+  .first-person-place .wp-place { max-width: calc(100% - 102px); }
+  .first-person-place .wp-place nav { max-width: 100%; gap: 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dusk-welcome :where(button,a),
+  .instant-creator *, .instant-creator *::before, .instant-creator *::after,
+  .quality-comparison :is(.qc-home,.qc-open,.qc-flight-invite),
+  .first-person-place :is(.wp-invite,.wp-actions,.wp-pad,.story-reader) * { animation: none !important; transition: none !important; scroll-behavior: auto; }
+  .dusk-welcome .dusk-start:hover { transform: none; }
+  .instant-creator .instant-progress li[data-state=processing] .instant-provider-dot { border-color: var(--painterly-accent); }
+}

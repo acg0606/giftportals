@@ -1,0 +1,24 @@
+{
+  "title": "A world of human curiosity",
+  "senderName": "GiftPortals",
+  "recipientName": "You",
+  "dedication": "A little tribute to the people who learned to read the sky.",
+  "story": "A little tribute to the people who turned questions about the sky into gears. Imagine carrying that curiosity into a world of your own.",
+  "curiosities": [
+    {
+      "id": "antikythera-calendar",
+      "subject": "object",
+      "objectHint": "antikythera",
+      "title": "Questions about the sky, answered in gears",
+      "text": "The National Archaeological Museum describes the Antikythera Mechanism as a first-century-BC scientific instrument for astronomical and calendar forecasts. This gift is an artistic reference, not an authenticated reconstruction.",
+      "sourceTitle": "National Archaeological Museum — Collections",
+      "sourceUrl": "https://www.namuseum.gr/en/collections/"
+    }
+  ],
+  "originalUrl": "/demo/v13/antikythera-photo.jpg",
+  "modelUrl": "/demo/v13/antikythera-model.glb",
+  "worldUrl": "/demo/v13/antikythera-world.spz",
+  "panoramaUrl": "/demo/v13/antikythera-panorama.png",
+  "collisionUrl": "/demo/v13/antikythera-collider.glb",
+  "photoIntent": "object"
+}

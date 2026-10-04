@@ -1,0 +1,12 @@
+# Development evidence and private local state are not deployment inputs.
+outputs/
+.local-giftportals/
+.env*
+!.env.example
+.git/
+node_modules/
+tests/
+api/tests/
+docs/
+tools/
+design-qa.md

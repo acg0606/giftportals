@@ -1,0 +1,24 @@
+.story-audio { margin-top: 20px; padding: 20px; border: 1px solid #d9d5c8; border-radius: 19px; background: #faf7ef; color: #263e38; }
+.story-audio [hidden] { display: none !important; }
+.story-audio-heading { display: flex; gap: 12px; align-items: flex-start; }
+.story-audio-heading > span { font-size: 22px; color: #557e69; }
+.story-audio-icon { width: 18px; height: 18px; flex-shrink: 0; }
+.story-audio-heading .story-audio-icon { width: 24px; height: 24px; }
+.story-audio h3 { margin: 0 0 5px; font-size: 17px; }
+.story-audio p { margin: 0; font-size: 13px; line-height: 1.55; }
+.story-audio-actions { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+.story-audio button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #97aa94; border-radius: 11px; padding: 10px 13px; background: #e5edde; color: #263e38; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.story-audio button:disabled { opacity: .48; cursor: default; }
+.story-audio [data-audio-stop] { background: #f1dccc; border-color: #c69b80; }
+.story-audio [data-audio-use] { background: #315e4c; color: #fff9ed; }
+.story-audio label { display: flex; gap: 6px; flex-direction: column; font-size: 12px; }
+.story-audio select, .story-audio textarea { color: #263e38; background: #fffdf8; border: 1px solid #aebba7; border-radius: 9px; padding: 8px; font: inherit; }
+.story-audio-status { margin-top: 13px !important; min-height: 20px; color: #60705f; }
+.story-audio audio { display: block; width: 100%; height: 42px; margin-top: 10px; }
+.story-audio-review { margin-top: 16px; }
+.story-audio textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 90px; line-height: 1.5; }
+.story-audio [data-audio-count] { color: #71806a; font-size: 11px; }
+.story-audio small { display: block; margin-top: 14px; color: #71806a; font-size: 11px; line-height: 1.5; }
+.story-audio[data-mode="browser"] [data-audio-file-help] { margin-top: 6px; }
+.story-audio button:focus-visible, .story-audio textarea:focus-visible, .story-audio select:focus-visible { outline: 2px solid #315e4c; outline-offset: 3px; }
+@media (max-width: 600px) { .story-audio { padding: 16px; } .story-audio-actions { gap: 7px; } .story-audio button { padding: 10px; } }

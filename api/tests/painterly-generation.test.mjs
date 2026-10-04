@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createHash,randomBytes } from 'node:crypto';
+import { mkdir,mkdtemp,rm,readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createTSLoader,here } from './painterly-test-loader.mjs';
+const load=createTSLoader(),instant=await load(resolve(here,'_lib/instant.ts')),cloud=await load(resolve(here,'_lib/cloud-instant-recipes.ts'));
+const art=await load(resolve(here,'../shared/gift-art-style.ts')),safety=await load(resolve(here,'_lib/image-safety.ts'));
+const styles=['physically realistic','refined','wood grain','complete three-dimensional forms'];
+const rejectedDirection=/never photorealistic|one painterly volumetric|Reinterpret every source material|with layered oil-paint strokes|softly brushed pastel highlights|impressionistic painted strokes/;
+const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+globalThis.fetch=async()=>{throw new Error('NETWORK_DISABLED_IN_ART_PROMPT_TESTS');};
+const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
+
+test('local and cloud world prompts share mandatory art direction for text, scene, object and historical inputs',()=>{
+ for(const photoIntent of['object','place'])for(const hasPlaceReference of[false,true])for(const exampleTitle of[undefined,'Antikythera mechanism']){
+  const value=freeze({worldPrompt:'A meaningful plaza with a brass keepsake.',photoIntent,hasPlaceReference,...(exampleTitle?{example:{title:exampleTitle}}:{})}),snapshot=structuredClone(value);
+  const local=instant.composeInstantWorldPrompt(value),remote=cloud.cloudWorldPrompt({...value,exampleTitle});assert.equal(local,remote);for(const style of styles)assert.ok(local.includes(style),style);
+  for(const cue of['soft natural light','realistic light falloff','refined','continuous, level floor','unobstructed view','readable path','independent objects','behind and beside the viewpoint','without gaps in the ground'])assert.ok(local.includes(cue),cue);
+  assert.doesNotMatch(local,rejectedDirection);assert.equal(local.endsWith(art.GIFT_ART_STYLE),true);assert.deepEqual(value,snapshot);
+  if(hasPlaceReference)assert.match(local,/Preserve authentic materials/);if(exampleTitle)assert.match(local,/does not authenticate/);
+ }
+});
+test('souvenir references require a refined physical collectible with coherent fronts/sides/backs and no flat photograph substitute',()=>{
+ for(const title of['Paris memory','A seaside plaza','An imaginary greenhouse']){
+  const value=freeze({title,worldPrompt:'A recognizable place, with a small bridge and trees.'}),snapshot=structuredClone(value),local=instant.composeSouvenirReferencePrompt(value);assert.equal(local,cloud.cloudSouvenirPrompt(value));
+  for(const style of styles)assert.ok(local.includes(style),style);
+  for(const cue of['fully three-dimensional','complete physical forms','front, side, roof and hidden back surfaces','three-quarter','real air gaps','EMPTY WHITE SPACE OUTSIDE','NO vertical backdrop','no photo, postcard, picture frame','authentic dark walnut grain','natural reflections','not to a picture plane','studio product photograph'])assert.ok(local.includes(cue),cue);
+  assert.doesNotMatch(local,rejectedDirection);assert.equal(local.endsWith(art.GIFT_ART_STYLE),true);assert.deepEqual(value,snapshot);
+ }
+});
+test('source or user illustration style cannot override the realistic standard and input meaning is preserved',()=>{
+ const source={title:'My actual memory',worldPrompt:'An illustrated plaza under harsh photographic flash.'};
+ for(const prompt of[instant.composeSouvenirReferencePrompt(source),cloud.cloudSouvenirPrompt(source),instant.composeInstantWorldPrompt({...source,photoIntent:'place',hasPlaceReference:true})]){
+  assert.ok(prompt.includes(source.worldPrompt));assert.match(prompt,/style words (?:cannot|never) override/);assert.equal(prompt.endsWith(art.GIFT_ART_STYLE),true);
+ }
+ assert.equal(instant.WORLD_COMPOSITION_VERSION,art.WORLD_ART_PROMPT_VERSION);assert.equal(instant.SOUVENIR_COMPOSITION_VERSION,art.SOUVENIR_ART_PROMPT_VERSION);assert.equal(cloud.WORLD_ART_PROMPT_VERSION,art.WORLD_ART_PROMPT_VERSION);assert.equal(cloud.SOUVENIR_ART_PROMPT_VERSION,art.SOUVENIR_ART_PROMPT_VERSION);
+ assert.equal(art.GIFT_ART_STYLE_VERSION,'giftportals-cinematic-v10');
+});
+
+async function fixture(t){
+ const tempRoot=fileURLToPath(new URL('../../../test-state/',import.meta.url));await mkdir(tempRoot,{recursive:true});const directory=await mkdtemp(resolve(tempRoot,'prompt-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const original=Buffer.from([137,80,78,71,13,10,26,10,1,2,3]),reference=Buffer.from([137,80,78,71,13,10,26,10,4,5,6]),calls=[];
+ const config={enabled:true,providers:{tripo:true,worldlabs:true},worldModel:'marble-1.1',tripoBudget:1500,worldBudget:10000};
+ const moderator={status:async()=>({available:true,localOnly:true,protocol:safety.IMAGE_SAFETY_PROTOCOL,modelVersion:'offline-test'}),screen:async images=>({protocol:safety.IMAGE_SAFETY_PROTOCOL,checkedAt:new Date().toISOString(),modelVersion:'offline-test',decision:'allow',results:images.map(image=>({id:image.id,sha256:hash(image.bytes),modelVersion:'offline-test',decision:'allow',category:'ordinary',scores:{sexual:0,adultProduct:0}}))})};
+ const service=instant.createInstantService({directory,settings:()=>config,safety:moderator,credit:async(provider,reservation)=>calls.push(['credit',provider,reservation]),upload:async provider=>`uploaded-${provider}`,json:async(provider,path,method='GET',body,options)=>{calls.push([provider,path,method,body,options]);return method==='POST'?provider==='worldlabs'?{operation_id:'world-operation'}:{task_id:path.endsWith('image-to-image')?'reference-task':'model-task'}:provider==='worldlabs'?{done:false}:{task_id:path.split('/').at(-1),type:'image_to_image',status:'success',progress:100};},reference:async()=>({asset:{kind:'world',suffix:'reference',mime:'image/png',bytes:reference,sha256:hash(reference)},cost:40}),complete:async()=>null});
+ const input=extra=>({title:'My personal gift',worldPrompt:'A plaza with leafy trees and a handmade keepsake.',story:'My exact story.',dedication:'For you.',senderName:'Ana',recipientName:'Lee',imageDataUrl:`data:image/png;base64,${original.toString('base64')}`,consent:true,dedupeKey:randomBytes(32).toString('base64url'),requestToken:randomBytes(32).toString('base64url'),...extra});
+ return {service,calls,input,original};
+}
+const modelKeys=['face_limit','geometry_quality','input','model','orientation','pbr','texture','texture_quality'].sort();
+test('direct object reconstruction keeps the evidenced Tripo body and creates no new charged reference stage',async t=>{
+ const f=await fixture(t),source=f.input({photoIntent:'object'}),created=await f.service.create(source),job=await f.service.get(created.id,created.token),posts=f.calls.filter(call=>call[2]==='POST');
+ assert.equal(posts.length,2);assert.equal(posts.some(call=>call[1].endsWith('image-to-image')),false);const model=posts.find(call=>call[1].endsWith('image-to-model'))[3];assert.deepEqual(Object.keys(model).sort(),modelKeys);assert.equal(model.model,'v3.1-20260211');assert.equal(model.face_limit,30000);assert.equal(model.pbr,true);assert.equal(model.texture_quality,'detailed');assert.equal(model.prompt,undefined);assert.equal(model.text_prompt,undefined);assert.equal(model.style,undefined);
+ const world=posts.find(call=>call[0]==='worldlabs')[3];assert.equal(world.model,'marble-1.1');assert.equal(world.permission.public,false);assert.equal(world.world_prompt.type,'text');assert.deepEqual(Object.keys(world.world_prompt).sort(),['text_prompt','type']);for(const style of styles)assert.ok(world.world_prompt.text_prompt.includes(style));assert.equal(job.generation.worldlabs.promptVersion,art.WORLD_ART_PROMPT_VERSION);assert.equal(job.story,source.story);assert.deepEqual((await f.service.asset(job.id,job.token,'photo')).bytes,f.original);
+ const status=await f.service.status();assert.equal(status.budget.tripo.nextReservation,100);assert.equal(status.budget.worldlabs.nextReservation,1580);
+});
+test('automatic place reference uses realistic direction with the same supported image recipe and world schema',async t=>{
+ const f=await fixture(t),created=await f.service.create(f.input({photoIntent:'place'})),job=await f.service.get(created.id,created.token),posts=f.calls.filter(call=>call[2]==='POST');assert.equal(posts.length,3);
+ const image=posts.find(call=>call[1].endsWith('image-to-image'))[3],model=posts.find(call=>call[1].endsWith('image-to-model'))[3],world=posts.find(call=>call[0]==='worldlabs')[3];
+ assert.deepEqual(Object.keys(image).sort(),['input','model','output_format','prompt','quality','size']);assert.equal(image.model,'chat_image_2');assert.equal(image.quality,'medium');assert.equal(image.size,'1536x1024');assert.equal(image.output_format,'png');for(const style of styles)assert.ok(image.prompt.includes(style));assert.doesNotMatch(image.prompt,rejectedDirection);
+ assert.deepEqual(Object.keys(model).sort(),modelKeys);assert.equal(model.input,'reference-task');assert.equal(model.prompt,undefined);assert.equal(job.generation.tripoReference.promptVersion,art.SOUVENIR_ART_PROMPT_VERSION);
+ assert.deepEqual(Object.keys(world.world_prompt).sort(),['disable_recaption','image_prompt','is_pano','text_prompt','type']);assert.equal(world.world_prompt.is_pano,false);assert.equal(world.world_prompt.disable_recaption,true);assert.equal(world.world_prompt.image_prompt.source,'media_asset');for(const style of styles)assert.ok(world.world_prompt.text_prompt.includes(style));
+});
+test('prompt migration keeps supported task fields and reservations while operator budgets have no legacy ceiling',async()=>{
+ const staged=await readFile(resolve(here,'_lib/instant.ts'),'utf8');assert.match(staged,/const reservations = \{ tripo: 100, worldlabs: 1580 \}/);assert.match(staged,/model:'chat_image_2',quality:'medium',size:'1536x1024',output_format:'png'/);assert.match(staged,/model: 'v3.1-20260211', face_limit: 30000/);assert.match(staged,/if\(value===undefined\)return Number\.MAX_SAFE_INTEGER/);assert.match(staged,/tripoBudget:cap\(process\.env\.LOCAL_TRIPO_CREDIT_CAP\)/);assert.match(staged,/worldBudget:cap\(process\.env\.LOCAL_WORLDLABS_CREDIT_CAP\)/);
+});

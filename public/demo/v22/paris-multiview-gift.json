@@ -1,0 +1,26 @@
+{
+  "title": "An evening in Paris",
+  "senderName": "GiftPortals",
+  "recipientName": "You",
+  "dedication": "A little Paris, made for you.",
+  "story": "Imagine an evening walk along the Seine, with the city glowing around a quiet moment. A little piece of Paris to keep close.",
+  "originalUrl": "/demo/v13/paris-photo.jpg",
+  "keepsakeImageUrl": "/demo/v22/paris-tripo-reference.png",
+  "modelUrl": "/demo/v22/paris-model.glb",
+  "worldUrl": "/demo/v13/paris-world.spz",
+  "panoramaUrl": "/demo/v13/paris-panorama.png",
+  "collisionUrl": "/demo/v13/paris-collider.glb",
+  "photoIntent": "place",
+  "objectRepresentation": "souvenir-miniature",
+  "curiosities": [
+    {
+      "id": "paris-seine",
+      "subject": "region",
+      "regionId": "paris",
+      "title": "A river through many chapters",
+      "text": "The banks of the Seine bring together layers of Parisian history, including the Louvre, Notre-Dame and the Eiffel Tower. UNESCO recognizes this riverside ensemble as World Heritage.",
+      "sourceTitle": "UNESCO — Paris, Banks of the Seine",
+      "sourceUrl": "https://whc.unesco.org/en/list/600/"
+    }
+  ]
+}

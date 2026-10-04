@@ -1,0 +1,322 @@
+{
+  "version": 1,
+  "title": "Paris, beyond the postcard",
+  "status": "complete",
+  "chapters": [
+    {
+      "id": "approach",
+      "title": "Paris, coming closer",
+      "subtitle": "Follow the warm light through the gardens.",
+      "status": "complete",
+      "worldUrl": "/demo/v23/paris-approach-world.spz",
+      "worldBytes": 7954788,
+      "worldSplats": 500000,
+      "panoramaUrl": "/demo/v23/paris-approach-panorama.png",
+      "maxSplats": 500000,
+      "mobileWorldUrl": "/demo/v23/paris-approach-world-100k.spz",
+      "mobileWorldSplats": 99846,
+      "collisionUrl": "/demo/v23/paris-approach-collider.glb",
+      "route": {
+        "arrival": [
+          {
+            "position": [
+              6,
+              0.2,
+              4.8
+            ],
+            "target": [
+              0,
+              5,
+              -10
+            ],
+            "fov": 76
+          },
+          {
+            "position": [
+              3,
+              0.5,
+              2.2
+            ],
+            "target": [
+              0,
+              5,
+              -9
+            ],
+            "fov": 74
+          },
+          {
+            "position": [
+              0,
+              0.8,
+              -0.4
+            ],
+            "target": [
+              0,
+              5,
+              -8
+            ],
+            "fov": 72
+          }
+        ],
+        "viewpoints": [
+          {
+            "pointId": "reveal",
+            "pose": {
+              "position": [
+                0,
+                0.8,
+                -0.4
+              ],
+              "target": [
+                0,
+                5,
+                -8
+              ],
+              "fov": 72
+            }
+          },
+          {
+            "pointId": "discover",
+            "pose": {
+              "position": [
+                3,
+                3,
+                -3
+              ],
+              "target": [
+                0,
+                7,
+                -10
+              ],
+              "fov": 74
+            }
+          }
+        ]
+      },
+      "stories": [
+        {
+          "id": "reveal",
+          "title": "The city opens around you",
+          "body": "First, a warm glow between the trees. Then the iron arch rises above the garden and the path opens into the city. Take a breath. This little world is yours to explore.",
+          "mode": "newspaper"
+        },
+        {
+          "id": "discover",
+          "title": "Let the city come closer",
+          "body": "The path carries you between the trees. Warm lamps appear one by one, and the tower rises above the garden. Stay a little longer. There is another view waiting high above.",
+          "mode": "newspaper"
+        }
+      ]
+    },
+    {
+      "id": "summit",
+      "title": "Above the city",
+      "subtitle": "The city opens beneath your feet.",
+      "status": "complete",
+      "worldUrl": "/demo/v23/paris-summit-world.spz",
+      "worldBytes": 8131084,
+      "worldSplats": 500000,
+      "panoramaUrl": "/demo/v23/paris-summit-panorama.png",
+      "maxSplats": 500000,
+      "mobileWorldUrl": "/demo/v23/paris-summit-world-100k.spz",
+      "mobileWorldSplats": 99846,
+      "collisionUrl": "/demo/v23/paris-summit-collider.glb",
+      "route": {
+        "arrival": [
+          {
+            "position": [
+              5,
+              0,
+              3
+            ],
+            "target": [
+              0,
+              -2,
+              -8
+            ],
+            "fov": 76
+          },
+          {
+            "position": [
+              2.55,
+              0.1,
+              1.5
+            ],
+            "target": [
+              0,
+              -2,
+              -8
+            ],
+            "fov": 74
+          },
+          {
+            "position": [
+              0.1,
+              0.2,
+              0
+            ],
+            "target": [
+              0,
+              -2,
+              -8
+            ],
+            "fov": 72
+          }
+        ],
+        "viewpoints": [
+          {
+            "pointId": "reveal",
+            "pose": {
+              "position": [
+                0.1,
+                0.2,
+                0
+              ],
+              "target": [
+                0,
+                -2,
+                -8
+              ],
+              "fov": 72
+            }
+          },
+          {
+            "pointId": "discover",
+            "pose": {
+              "position": [
+                -1.6,
+                0.4,
+                -0.5
+              ],
+              "target": [
+                -8,
+                -2,
+                -5
+              ],
+              "fov": 74
+            }
+          }
+        ]
+      },
+      "stories": [
+        {
+          "id": "reveal",
+          "title": "A different scale",
+          "body": "The familiar streets become a pattern of roofs, gardens and golden lines. The river catches the last light. From here, the city feels both enormous and close enough to hold.",
+          "mode": "tablet"
+        },
+        {
+          "id": "discover",
+          "title": "A little closer to the sky",
+          "body": "Rest your hands by the railing and follow the river through the rooftops. Below, the streets hold a thousand evenings. For a moment, this wide and wonderful city belongs to your memory.",
+          "mode": "tablet"
+        }
+      ]
+    },
+    {
+      "id": "riverside",
+      "title": "Back by the water",
+      "subtitle": "Keep the last glow of Paris by the water.",
+      "status": "complete",
+      "worldUrl": "/demo/v23/paris-riverside-world.spz",
+      "worldBytes": 8143888,
+      "worldSplats": 500000,
+      "panoramaUrl": "/demo/v23/paris-riverside-panorama.png",
+      "maxSplats": 500000,
+      "mobileWorldUrl": "/demo/v23/paris-riverside-world-100k.spz",
+      "mobileWorldSplats": 99846,
+      "collisionUrl": "/demo/v23/paris-riverside-collider.glb",
+      "route": {
+        "arrival": [
+          {
+            "position": [
+              6,
+              0.2,
+              5
+            ],
+            "target": [
+              0,
+              3,
+              -8
+            ],
+            "fov": 76
+          },
+          {
+            "position": [
+              3,
+              0.45,
+              2.5
+            ],
+            "target": [
+              0,
+              3,
+              -8
+            ],
+            "fov": 74
+          },
+          {
+            "position": [
+              0,
+              0.2,
+              0
+            ],
+            "target": [
+              0,
+              3,
+              -8
+            ],
+            "fov": 74
+          }
+        ],
+        "viewpoints": [
+          {
+            "pointId": "reveal",
+            "pose": {
+              "position": [
+                0,
+                0.2,
+                0
+              ],
+              "target": [
+                0,
+                3,
+                -8
+              ],
+              "fov": 74
+            }
+          },
+          {
+            "pointId": "discover",
+            "pose": {
+              "position": [
+                2,
+                2,
+                -1
+              ],
+              "target": [
+                0,
+                5,
+                -10
+              ],
+              "fov": 74
+            }
+          }
+        ]
+      },
+      "stories": [
+        {
+          "id": "reveal",
+          "title": "A place to return to",
+          "body": "Close to the water again, small details return: the rope on a boat, the warm stone, a light across the river. Keep this moment with you. Whenever you open your gift, Paris will be waiting.",
+          "mode": "book"
+        },
+        {
+          "id": "discover",
+          "title": "Take a little of Paris home",
+          "body": "The river keeps the last colours of the evening. A quiet boat, a warm light, a tower in the distance. Carry this feeling with you, and return whenever you need a small escape.",
+          "mode": "book"
+        }
+      ]
+    }
+  ]
+}

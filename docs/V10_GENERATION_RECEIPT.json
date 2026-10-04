@@ -1,0 +1,149 @@
+{
+  "version": "V10",
+  "verifiedAt": "2026-10-01T15:35:57Z",
+  "label": "Real Tripo and World Labs generation from fictional Rio demonstration artwork; not a personal travel record",
+  "localJobId": "f141908a-0779-4323-ad0d-72351eab0334",
+  "localJobState": "completed",
+  "createdAt": "2026-10-01T15:19:39.851Z",
+  "title": "A little piece of Rio",
+  "evidence": {
+    "job": "Selective read of the persisted local job; capability values and hashes excluded",
+    "assets": "Current local bytes, SHA-256, GLB header and decompressed SPZ header independently verified; four public mirror files match their local originals",
+    "balances": "Fresh authenticated account balance GETs; no generation or purchase request made for this receipt"
+  },
+  "inputs": [
+    {
+      "purpose": "Tripo image-to-model",
+      "sourcePath": "public/assets/portal-dusk/rio-keepsake.png",
+      "localCopy": ".local-giftportals/f141908a-0779-4323-ad0d-72351eab0334/photo.png",
+      "mimeType": "image/png",
+      "bytes": 2085417,
+      "sha256": "feb6fba14974f74efbd49ff78a75f5ff03990f7d3ad10b4ba383e92c132dbf7f"
+    },
+    {
+      "purpose": "World Labs image-to-world with place description",
+      "sourcePath": "public/assets/rio/rio-panorama.png",
+      "localCopy": ".local-giftportals/f141908a-0779-4323-ad0d-72351eab0334/place.png",
+      "mimeType": "image/png",
+      "bytes": 3011598,
+      "sha256": "d22660acbc9f198897ea0bcf23aecee9c36390b695be06a7a20af88f7e9d4c1a"
+    }
+  ],
+  "tripo": {
+    "taskId": "cc1d720c-6159-40c9-b685-e98e4119eaf1",
+    "state": "completed",
+    "submittedAt": "2026-10-01T15:19:42.527Z",
+    "settledCredits": 60,
+    "reservedCredits": 100,
+    "settings": {
+      "model": "v3.1-20260211",
+      "face_limit": 30000,
+      "texture": true,
+      "pbr": true,
+      "texture_quality": "detailed",
+      "geometry_quality": "detailed",
+      "orientation": "align_image"
+    }
+  },
+  "worldlabs": {
+    "operationId": "b5b9f76b-ce60-4ad3-bac1-028b206e9bab",
+    "worldId": "9e100624-3c4d-4cec-8c71-273ef1c134b4",
+    "state": "completed",
+    "submittedAt": "2026-10-01T15:19:48.740Z",
+    "settledCredits": 1500,
+    "reservedCredits": 1580,
+    "settings": {
+      "model": "marble-1.1",
+      "reference": "image",
+      "permissionRequested": "private",
+      "splatQuality": "500k"
+    },
+    "qualityUpgrade": {
+      "verifiedAt": "2026-10-01T15:31:43.829Z",
+      "sourceOperationId": "b5b9f76b-ce60-4ad3-bac1-028b206e9bab",
+      "method": "Existing completed operation GET and asset download",
+      "additionalGenerationRequests": 0,
+      "additionalGenerationCredits": 0,
+      "original100kPreserved": true
+    }
+  },
+  "files": [
+    {
+      "kind": "model",
+      "path": ".local-giftportals/f141908a-0779-4323-ad0d-72351eab0334/model.glb",
+      "publicMirrorPath": "public/demo/rio-keepsake.glb",
+      "bytes": 17545328,
+      "sha256": "ffb29a30265b97ade97ee646f2ca14070c5bd947e8faef62a28d370b07d68bad",
+      "glbVersion": 2,
+      "meshCount": 1,
+      "extensionsUsed": []
+    },
+    {
+      "kind": "world",
+      "path": ".local-giftportals/f141908a-0779-4323-ad0d-72351eab0334/world-500k.spz",
+      "publicMirrorPath": "public/demo/rio-world-500k.spz",
+      "quality": "500k",
+      "bytes": 8138477,
+      "sha256": "81e6f09a67b478d59c3619ec127b216f328b85fd5167507c28addc010ab1195f",
+      "spzMagic": "NGSP",
+      "spzVersion": 2,
+      "splatCount": 500000
+    },
+    {
+      "kind": "panorama",
+      "path": ".local-giftportals/f141908a-0779-4323-ad0d-72351eab0334/panorama.png",
+      "publicMirrorPath": "public/demo/rio-world-pano.png",
+      "bytes": 15422864,
+      "sha256": "94df1973954a32ada0b6d8c00db96343d44601e0a513b0fe9770790030de54cd"
+    }
+  ],
+  "preservedQualityHistory": [
+    {
+      "kind": "world",
+      "path": ".local-giftportals/f141908a-0779-4323-ad0d-72351eab0334/world.spz",
+      "publicMirrorPath": "public/demo/rio-world-100k.spz",
+      "quality": "100k",
+      "bytes": 1449500,
+      "sha256": "356e9a28a37ad681566d3e9b094c0279f7735b56f7ce33a680240be6f82fc762",
+      "spzVersion": 2,
+      "splatCount": 98304
+    }
+  ],
+  "accountBalances": {
+    "baseline": {
+      "observedAt": "2026-10-01T15:13:00Z",
+      "tripoAvailable": 24965,
+      "worldLabsRemaining": 46770
+    },
+    "current": {
+      "tripo": {
+        "observedAt": "2026-10-01T15:35:26.347741Z",
+        "available": 24905,
+        "frozen": 0
+      },
+      "worldlabs": {
+        "observedAt": "2026-10-01T15:35:25.500561Z",
+        "remaining": 45270
+      }
+    },
+    "reconciliation": {
+      "tripoDecrease": 60,
+      "tripoSettledCost": 60,
+      "worldLabsDecrease": 1500,
+      "worldLabsSettledCost": 1500,
+      "matches": true
+    },
+    "scope": "Account balances, not a separate statement of hackathon coupon grant or redemption"
+  },
+  "runtime": {
+    "generation": "Explicit anonymous local-MVP create action; server-only existing provider credentials",
+    "maxImageBytes": 6291456,
+    "maxGeneratedAssetBytes": 26214400,
+    "maxWorldSplats": 600000,
+    "localBuildCreditCaps": { "tripo": 1500, "worldlabs": 10000 },
+    "worldLabsMinimumCreditCushion": 1000,
+    "paidRetries": "No automatic replacement of a submitted or ambiguous paid task"
+  },
+  "cloudDeployment": "NOT_DEPLOYED",
+  "submission": "No submission action performed by this generation run; existing submission receipts unchanged"
+}

@@ -1,0 +1,99 @@
+{
+  "auditedAt": "2026-10-04T08:10:37.753Z",
+  "method": "Local original GLB validation, same Three GLTFLoader with material texture definitions omitted only for Node offline decode, unchanged original mesh data/hierarchy, staged STL exporter at 80mm yaw=0. No texture appearance, Blueprint, printer, wall thickness or manufacturing validation.",
+  "assets": [
+    {
+      "title": "Rio",
+      "path": "/demo/rio-keepsake.glb",
+      "originalBytes": 17545328,
+      "sha256": "ffb29a30265b97ade97ee646f2ca14070c5bd947e8faef62a28d370b07d68bad",
+      "embeddedImages": 3,
+      "skins": 0,
+      "animations": 0,
+      "exported": true,
+      "stlBytes": 1456934,
+      "stlSha256": "92f9443124e378a83ceca7ed0579e762e8512e0f371fbc4bd0ee83590ddaf85a",
+      "report": {
+        "units": "mm",
+        "longestAxisMm": 80,
+        "dimensionsMm": [
+          80,
+          59.47090370849698,
+          79.8110067539846
+        ],
+        "triangles": 29137,
+        "diagnostic": {
+          "weldedVertices": 14460,
+          "edges": 43702,
+          "openEdges": 3,
+          "nonManifoldEdges": 8,
+          "inconsistentWindingEdges": 0,
+          "degenerateTriangles": 0,
+          "weldToleranceMm": 0.00001
+        }
+      }
+    },
+    {
+      "title": "Paris",
+      "path": "/demo/v17/paris-model.glb",
+      "originalBytes": 15151704,
+      "sha256": "fa0f2909780370ae9fa8f82e1d44e5bf2455bb9fb8fdf6e63bbfce8e9e7b3fb0",
+      "embeddedImages": 3,
+      "skins": 0,
+      "animations": 0,
+      "exported": true,
+      "stlBytes": 1459384,
+      "stlSha256": "7eab022812c4d0fd393830405e9291af500db092c94e3a7320b36e54cb304f91",
+      "report": {
+        "units": "mm",
+        "longestAxisMm": 80,
+        "dimensionsMm": [
+          80,
+          50.96157166638634,
+          79.946126916808
+        ],
+        "triangles": 29186,
+        "diagnostic": {
+          "weldedVertices": 13860,
+          "edges": 43771,
+          "openEdges": 9,
+          "nonManifoldEdges": 16,
+          "inconsistentWindingEdges": 1,
+          "degenerateTriangles": 0,
+          "weldToleranceMm": 0.00001
+        }
+      }
+    },
+    {
+      "title": "Antikythera",
+      "path": "/demo/v13/antikythera-model.glb",
+      "originalBytes": 15649720,
+      "sha256": "0510a48850fba5eb326371d1cecbec606dd22dc487654a44793129ecc1cd83b1",
+      "embeddedImages": 3,
+      "skins": 0,
+      "animations": 0,
+      "exported": true,
+      "stlBytes": 1362134,
+      "stlSha256": "92ae32d810177091082887847641655e70ed096b7eba6b1782e6deff9d662f53",
+      "report": {
+        "units": "mm",
+        "longestAxisMm": 80,
+        "dimensionsMm": [
+          77.56461800626637,
+          73.44189861308024,
+          80
+        ],
+        "triangles": 27241,
+        "diagnostic": {
+          "weldedVertices": 13486,
+          "edges": 40859,
+          "openEdges": 4,
+          "nonManifoldEdges": 7,
+          "inconsistentWindingEdges": 0,
+          "degenerateTriangles": 0,
+          "weldToleranceMm": 0.00001
+        }
+      }
+    }
+  ]
+}
