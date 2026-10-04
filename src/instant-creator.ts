@@ -156,6 +156,8 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   const events = new AbortController();
   const reportedComplete = new Set<string>();
   let dead = false, submitting = false, readingSource = false, status: InstantStatus | null = null, currentJob: InstantJob | null = null;
+  let statusChecking = false, statusEpoch = 0;
+  let creationPause = '';
   let source: File | InstantExample | null = null, placePhoto: File | null = null, previewUrl: string | null = null, placePreviewUrl: string | null = null;
   let pollTimer: number | undefined, dedupeKey = '', requestToken = '', sourceEpoch = 0;
   const intent: InstantPhotoIntent = 'place';
@@ -216,7 +218,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
           <section class="instant-upload-recovery" data-instant-upload-recovery hidden aria-label="Finish uploading your gift"><p>Your gift is saved, but a photo upload was interrupted. Continue with the same photos; photos already received are kept.</p>${(['original', 'object', 'world'] as const).map(id => `<label class="instant-field" data-instant-resume-field="${id}" hidden>${id === 'original' ? 'Original gift photo' : id === 'object' ? 'Souvenir reference photo' : 'Place reference photo'}<input type="file" accept="image/jpeg,image/png,image/webp" data-instant-resume-file="${id}"/></label>`).join('')}<small>In this tab, your photo may still be available. After reopening, choose the same file again. If you used an example, save that example photo first.</small><button class="instant-primary" type="button" data-instant-resume-upload>Resume this gift</button><p class="instant-error" data-instant-upload-error role="alert" hidden></p></section>
           <section class="instant-model-preview" data-instant-model-preview hidden aria-label="Your completed 3D keepsake"><div><span>${objectIcon}<strong>Your keepsake is ready.</strong></span><button type="button" data-instant-preview-toggle>Reset 3D view ↺</button></div><p class="instant-model-load" data-instant-preview-load role="status" hidden>Opening your 3D keepsake…</p><small data-instant-preview-note>Drag to turn it. Pinch or scroll to bring it closer.</small></section>
           <ol data-instant-provider-progress aria-label="Generation progress"><li data-instant-provider="tripo"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-tripo-label></strong><small>Tripo · 3D keepsake</small></div></li><li data-instant-provider="worldlabs"><span class="instant-provider-dot" aria-hidden="true"></span><div><strong data-instant-worldlabs-label></strong><small>World Labs · spatial world</small></div></li></ol><p class="instant-progress-status" data-instant-job-status role="status" aria-live="polite"></p><button class="instant-primary" type="button" data-instant-open hidden>${giftIcon}Open your gift <span aria-hidden="true">↗</span></button><button class="instant-secondary" type="button" data-instant-recheck hidden>Check again</button><button class="instant-secondary" type="button" data-instant-edit hidden>${giftIcon}Start a different gift</button><small data-instant-job-note>Creating a world can take a few minutes. Your original photo stays available.</small></section>
-        <div class="instant-unavailable" data-instant-unavailable hidden><p>Live creation is taking a pause. You can still choose your photo and write your story.</p><button class="instant-secondary" type="button" data-instant-status-retry>Check the creator again</button>${options.onExploreExample ? `<button class="instant-secondary" type="button" data-instant-explore>${giftIcon}Step into a ready-made gift ↗</button>` : ''}</div>
+        <div class="instant-unavailable" data-instant-unavailable hidden><p data-instant-unavailable-message>Live creation is taking a pause. You can still choose your photo and write your story.</p><button class="instant-secondary" type="button" data-instant-status-retry>Check availability</button>${options.onExploreExample ? `<button class="instant-secondary" type="button" data-instant-explore>${giftIcon}Step into a ready-made gift ↗</button>` : ''}</div>
       </section>
     </main>`;
 
@@ -487,9 +489,12 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     goToStep(instantWizardDestination(step, 1, Boolean(source)));
   }
   function availability() {
-    create.disabled = wizardBusy() || readingSource || step !== 'review' || !source || !status?.available || photoDecision==='block' || photoDecision==='review';
-    text('[data-instant-availability]', pendingReference ? 'Confirming the last creation before starting another gift.' : photoDecision==='block'||photoDecision==='review' ? 'Choose another photo before creating your gift.' : status?.safety && !status.safety.available ? 'Photo checking is unavailable. Creation will wait until it is ready.' : status?.available ? 'Photos are screened before Tripo + World Labs. No account needed.' : 'Live creation is currently unavailable.');
-    unavailable.hidden = Boolean(status?.available) || Boolean(currentJob);
+    const pause = creationPause;
+    create.disabled = wizardBusy() || readingSource || statusChecking || step !== 'review' || !source || !status?.available || Boolean(pause) || photoDecision==='block' || photoDecision==='review';
+    text('[data-instant-availability]', pendingReference ? 'Confirming the last creation before starting another gift.' : pause || (statusChecking ? 'Checking availability…' : photoDecision==='block'||photoDecision==='review' ? 'Choose another photo before creating your gift.' : status?.safety && !status.safety.available ? 'Photo checking is unavailable. Creation will wait until it is ready.' : status?.available ? 'Photos are screened before Tripo + World Labs. No account needed.' : 'Live creation is currently unavailable.'));
+    text('[data-instant-unavailable-message]', pause || 'Live creation is taking a pause. You can still choose your photo and write your story.');
+    host.querySelector<HTMLButtonElement>('[data-instant-status-retry]')!.disabled = statusChecking;
+    unavailable.hidden = Boolean(status?.available && !pause) || Boolean(currentJob);
     renderWizard();
   }
   function updateExamples() {
@@ -676,10 +681,17 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     catch (cause) { if (!active()) return; text('[data-instant-job-status]', cause instanceof Error ? cause.message : 'Could not check this gift. Check again to resume.'); host.querySelector<HTMLButtonElement>('[data-instant-recheck]')!.hidden = false; }
   }
   async function loadStatus() {
-    if (!active()) return;
-    text('[data-instant-availability]', 'Checking the creator…');
-    try { const next = await service.status(events.signal); if (!active()) return; status = next; updateExamples(); availability(); }
-    catch { if (!active()) return; status = null; availability(); }
+    if (!active() || statusChecking) return;
+    const request = ++statusEpoch;
+    statusChecking = true; availability();
+    try {
+      const next = await service.status(events.signal); if (!active() || request !== statusEpoch) return;
+      status = next;
+      if (creationPause && next.available) { creationPause = ''; showError(); }
+      updateExamples();
+    }
+    catch { if (!active() || request !== statusEpoch) return; status = null; }
+    finally { if (active() && request === statusEpoch) { statusChecking = false; availability(); } }
   }
   async function resumeUpload() {
     if (!active() || recoveringUpload || currentJob?.uploadState !== 'pending' || !service.resumeUpload) return;
@@ -786,7 +798,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     if (!active() || wizardBusy()) return;
     if (step !== 'review') { continueWizard(); return; }
     if (!source) return;
-    if (!status?.available) { showError('Live creation is unavailable right now. Your photo and story remain here.'); return; }
+    if (statusChecking || !status?.available || creationPause) { showError(creationPause || 'Live creation is unavailable right now. Your photo and story remain here.'); return; }
     if (photoDecision === 'block' || photoDecision === 'review') { showError('Choose another photo before creating your gift.'); return; }
     const textIssues = validateInstantText(field('title').value, field('worldPrompt').value);
     for (const name of ['title', 'worldPrompt'] as const) field(name).setCustomValidity(textIssues[name]);
@@ -818,7 +830,18 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
         const message = cause instanceof Error ? cause.message : 'Your little world could not start. Your photo remains here.';
         // A lost response may leave a paid job running. A network failure keeps the
         // capability and editing locked; only a confirmed missing job releases it.
-        if (sent) await confirmPending(message);
+        const rejected = cause && typeof cause === 'object' && 'creationRejected' in cause && cause.creationRejected === true && 'code' in cause && typeof cause.code === 'string' && ['GENERATION_QUOTA', 'GENERATION_BUDGET', 'STORAGE_LIMIT', 'PROVIDER_INSUFFICIENT_CREDITS'].includes(cause.code);
+        if (rejected) {
+          // A rejected cloud prepare reserved no gift. Preserve the reviewed
+          // photos, words and consent; checking availability never creates one.
+          pendingReference = null; dedupeKey = ''; requestToken = '';
+          try { sessionStorage.removeItem(pendingStorageKey); } catch { /* This draft stays in memory. */ }
+          creationPause = message;
+          showError(creationPause);
+          await loadStatus();
+          showError(creationPause);
+        }
+        else if (sent) await confirmPending(message);
         else { changeKey(); showError(message); }
       }
       finally { if (active()) { submitting = false; readingSource = false; inputs.disabled = Boolean(pendingReference); create.innerHTML = makeGiftLabel; availability(); } }

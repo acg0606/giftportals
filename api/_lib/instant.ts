@@ -21,6 +21,7 @@ interface StoredAsset { name: string; mime: string; bytes: number; sha256: strin
 type ReferenceSettings={output_format:'png';prompt:string;promptVersion:string}&({model:'seedream_v5';size:'2048x2048'}|{model:'chat_image_2';quality:'medium';size:'1536x1024'});
 interface StoredJob {
  id: string; tokenHash: string; dedupeHash: string; inputHash: string; state: JobState;
+ queued?: boolean;
  title: string; worldPrompt: string; story: string; dedication: string; senderName: string; recipientName: string;
  createdAt: string; updatedAt: string; tripo: Stage; worldlabs: Stage;
  assets: Record<string, StoredAsset>; worldPhoto?: StoredAsset; objectPhoto?:StoredAsset;
@@ -46,7 +47,7 @@ export interface InstantJobDTO {
  exampleId?:string;
 }
 interface Input { imageDataUrl?: unknown; objectImageDataUrl?:unknown;objectImageRole?:unknown;worldImageDataUrl?: unknown;photoIntent?:unknown; title?: unknown; worldPrompt?: unknown; story?: unknown; dedication?: unknown; senderName?: unknown; recipientName?: unknown; dedupeKey?: unknown; requestToken?: unknown; consent?: unknown;curiosityIds?:unknown;exampleId?:unknown }
-interface Settings { enabled: boolean; providers: { tripo: boolean; worldlabs: boolean }; worldModel: string; tripoBudget: number; worldBudget: number }
+interface Settings { enabled: boolean; providers: { tripo: boolean; worldlabs: boolean }; worldModel: string }
 interface Dependencies {
  directory?: string;
  settings?: () => Settings;
@@ -60,6 +61,7 @@ interface Dependencies {
  now?: () => number;
 }
 const reservations = { tripo: 100, worldlabs: 1580 };
+const LOCAL_GENERATION_CONCURRENCY = 2;
 const nowISO = (now: () => number) => new Date(now()).toISOString();
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 export function composeSouvenirReferencePrompt(input:{worldPrompt:string;title:string}):string{
@@ -93,13 +95,8 @@ export function composeInstantWorldPrompt(input:{worldPrompt:string;photoIntent:
  ].join('\n\n');
 }
 export function instantSettings(): Settings {
- const cap=(value:string|undefined)=>{
-  if(value===undefined)return Number.MAX_SAFE_INTEGER;
-  ensure(/^[1-9]\d{0,15}$/.test(value)&&Number.isSafeInteger(Number(value)),'LOCAL_CREDIT_CAP_INVALID',503,'The local generation credit budget must be a positive safe integer.');
-  return Number(value);
- };
  return { enabled: process.env.ENABLE_LOCAL_GENERATION === 'true', providers: { tripo: Boolean(process.env.TRIPO_API_KEY), worldlabs: Boolean(process.env.WORLD_LABS_API_KEY) },
-  worldModel: process.env.WORLDLABS_MODEL === 'marble-1.0' ? 'marble-1.0' : 'marble-1.1',tripoBudget:cap(process.env.LOCAL_TRIPO_CREDIT_CAP),worldBudget:cap(process.env.LOCAL_WORLDLABS_CREDIT_CAP) };
+  worldModel: process.env.WORLDLABS_MODEL === 'marble-1.0' ? 'marble-1.0' : 'marble-1.1' };
 }
 export function parseInstantImage(value: unknown): { bytes: Buffer; mime: string; extension: string } {
  ensure(typeof value === 'string' && value.length <= MAX_INSTANT_IMAGE_BYTES * 4 / 3 + 80, 'IMAGE_SIZE_LIMIT', 413, 'Choose an image smaller than 6 MB.');
@@ -192,6 +189,15 @@ export function createInstantService(deps: Dependencies = {}) {
   locks.set(id, pending); void pending.finally(() => { if (locks.get(id) === pending) locks.delete(id); }).catch(() => undefined); return pending;
  };
  const ledgerLock=async<T>(action:()=>Promise<T>):Promise<T>=>{await mkdir(directory,{recursive:true});return fileLock(join(directory,'.creation-ledger-lock'),action);};
+ const activeJobs=(jobs:StoredJob[])=>jobs.filter(job=>job.state==='processing'&&!job.queued).length;
+ // Queue acceptance has no lifetime or credit quota. The durable ledger only
+ // allocates execution slots so separate local services cannot exceed concurrency.
+ const admitQueuedJobs=()=>ledgerLock(async()=>{
+  const jobs=await all(),ready=jobs.filter(job=>job.state==='processing'&&job.queued).sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));
+  const admitted=ready.slice(0,Math.max(0,LOCAL_GENERATION_CONCURRENCY-activeJobs(jobs)));
+  for(const job of admitted)await locked(job.id,async()=>{const current=await read(job.id);if(current.state==='processing'&&current.queued){current.queued=false;await save(current);}});return admitted.map(job=>job.id);
+ });
+ const drainQueue=async()=>{for(const id of await admitQueuedJobs())await locked(id,async()=>start(await read(id)));};
  const assetPath=(job:StoredJob,entry:StoredAsset)=>{
   ensure(/^[a-zA-Z0-9_.-]+$/.test(entry.name)&&entry.name!=='.'&&entry.name!=='..','ASSET_UNAVAILABLE',404);
   const owner=entry.sourceJobId||job.id;ensure(/^[0-9a-f-]{36}$/.test(owner),'ASSET_UNAVAILABLE',404);
@@ -225,6 +231,7 @@ export function createInstantService(deps: Dependencies = {}) {
   if(job.tripoReference?.state==='completed')ensure(job.objectPhoto&&job.objectPhoto.sha256===job.tripoReference.referenceSha256,'PHOTO_SAFETY_REQUIRED',503);
  };
  async function start(job: StoredJob) {
+  if(job.queued)return;
   for (const provider of ['tripo', 'worldlabs'] as const) {
    const stage = job[provider]; if (stage.state !== 'pending') continue;
    try {
@@ -277,12 +284,12 @@ export function createInstantService(deps: Dependencies = {}) {
  const status = async () => {
   const config = settings(),photoSafety=await safety.status(),jobs=await all(),trials=await qualityTrialCommitments(directory);
   const budget=Object.fromEntries((['tripo','worldlabs'] as const).map(provider=>{
-   const cap=provider==='tripo'?config.tripoBudget:config.worldBudget,committed=trials[provider]+jobs.reduce((total,job)=>total+(job[provider].credits??reservations[provider]),0);
-   return[provider,{cap,committed,remaining:Math.max(0,cap-committed),nextReservation:reservations[provider]}];
-  })) as Record<Provider,{cap:number;committed:number;remaining:number;nextReservation:number}>;
-  const canCreate=budget.tripo.remaining>=reservations.tripo&&budget.worldlabs.remaining>=reservations.worldlabs&&jobs.length<24&&jobs.filter(job=>job.state==='processing').length<2;
+   const committed=trials[provider]+jobs.reduce((total,job)=>total+(job[provider].credits??reservations[provider]),0);
+   return[provider,{committed,nextReservation:reservations[provider]}];
+  })) as Record<Provider,{committed:number;nextReservation:number}>;
+  const canCreate=true;
   return { available: config.enabled && config.providers.tripo && config.providers.worldlabs && photoSafety.available&&canCreate,budget:{...budget,canCreate}, safety:photoSafety, localOnly: true, generationEnabled: config.enabled, providers: config.providers, maxImageBytes: MAX_INSTANT_IMAGE_BYTES,
-   examples: INSTANT_EXAMPLES.map(example=>({...example,...(example.curiosityIds?{curiosityIds:[...example.curiosityIds]}:{})})) };
+   queue:{active:activeJobs(jobs),waiting:jobs.filter(job=>job.state==='processing'&&job.queued).length,concurrency:LOCAL_GENERATION_CONCURRENCY},examples: INSTANT_EXAMPLES.map(example=>({...example,...(example.curiosityIds?{curiosityIds:[...example.curiosityIds]}:{})})) };
  };
  const triage=async(input:Input):Promise<ImageSafetyReport>=>{
   const image=parseInstantImage(input.imageDataUrl),objectImage=input.objectImageDataUrl?parseInstantImage(input.objectImageDataUrl):undefined,worldImage=input.worldImageDataUrl?parseInstantImage(input.worldImageDataUrl):undefined;
@@ -352,14 +359,8 @@ export function createInstantService(deps: Dependencies = {}) {
     if (input.requestToken) { authorize(prior, token); return dto(prior, token); }
     throw new AppError('JOB_ALREADY_CREATED', 409, 'This request already created a gift. Resume its saved job instead of generating again.');
    }
-   ensure(jobs.length < 24 && jobs.filter(job => job.state === 'processing').length < 2, 'GENERATION_QUEUE_FULL', 429, 'Two gifts are being created. Wait for one to finish.');
-   const trialCredits=await qualityTrialCommitments(directory);
-   for (const provider of ['tripo', 'worldlabs'] as const) {
-    const used = trialCredits[provider]+jobs.reduce((total, job) => total + (job[provider].credits ?? reservations[provider]), 0);
-    ensure(used + reservations[provider] <= (provider === 'tripo' ? config.tripoBudget : config.worldBudget), 'LOCAL_GENERATION_BUDGET', 429, 'The local generation budget is reached. Existing gifts remain available.');
-   }
    const id = randomUUID(), at = nowISO(now), photoName = `photo.${image.extension}`;
-   const job: StoredJob = { id, ...clean, tokenHash: giftHash(token), dedupeHash, inputHash, createdAt: at, updatedAt: at, state: 'processing',photoIntent,photoSafety,
+   const job: StoredJob = { id, ...clean, tokenHash: giftHash(token), dedupeHash, inputHash, createdAt: at, updatedAt: at, state: 'processing',queued:activeJobs(jobs)>=LOCAL_GENERATION_CONCURRENCY,photoIntent,photoSafety,
     objectRepresentation:photoIntent==='place'?'souvenir-miniature':objectImage?'derived-object':'original-object',
     generation: { tripo: { model: 'v3.1-20260211', face_limit: 30000, texture: true, pbr: true, texture_quality: 'detailed', geometry_quality: 'detailed', orientation: 'align_image' }, worldlabs: { model: config.worldModel, reference: worldImage ? 'image' : 'text',promptVersion:WORLD_COMPOSITION_VERSION,textPrompt:composeInstantWorldPrompt({worldPrompt:clean.worldPrompt,photoIntent,hasPlaceReference:Boolean(worldImage),example}),contextSource:example?'catalog-selection':'user-context',...(worldImage?{isPano:false as const,disableRecaption:true}:{}) } },
     tripo: { state: 'pending', progress: 0 }, worldlabs: { state: 'pending', progress: 0 }, assets: { photo: { name: photoName, mime: image.mime, bytes: image.bytes.length, sha256: sha(image.bytes) } } };
@@ -375,7 +376,8 @@ export function createInstantService(deps: Dependencies = {}) {
  };
  const refresh = async (id: unknown, allowPaid:boolean):Promise<StoredJob> => {
   const initial = await read(id);
-  return locked(initial.id, async () => {
+  if(allowPaid&&initial.queued)await drainQueue();
+  const result=await locked(initial.id, async () => {
    const job = await read(initial.id);
    if (allowPaid&&(job.tripo.state === 'pending' || job.worldlabs.state === 'pending')) await start(job);
    await pollReference(job);
@@ -398,6 +400,8 @@ export function createInstantService(deps: Dependencies = {}) {
    }
    derive(job); await save(job); return job;
   });
+  if(allowPaid&&result.state!=='processing')void drainQueue().catch(()=>undefined);
+  return result;
  };
  const get=async(id:unknown,token:unknown)=>{const initial=await read(id),capability=authorize(initial,token);return dto(await refresh(id,true),capability);};
  const snapshot=async(id:unknown,token:unknown)=>{const job=await read(id),capability=authorize(job,token);return dto(job,capability);};
@@ -471,11 +475,9 @@ export function createInstantService(deps: Dependencies = {}) {
    return ledgerLock(async()=>{
     const dedupeHash=sha(`keepsake-remake:${text(input.dedupeKey,120,8)}`),inputHash=sha(`${source.id}:${sha(original)}:${objectImage?sha(objectImage.bytes):'automatic'}:${Boolean(input.pauseAfterReference)}:${SOUVENIR_COMPOSITION_VERSION}`),jobs=await all();
     const prior=jobs.find(job=>job.dedupeHash===dedupeHash);if(prior){ensure(prior.inputHash===inputHash,'DEDUPE_MISMATCH',409);await locked(prior.id,async()=>start(await read(prior.id)));return ownedSummary(await read(prior.id));}
-    ensure(jobs.length<24&&jobs.filter(job=>job.state==='processing').length<2,'GENERATION_QUEUE_FULL',429);
-    ensure((await qualityTrialCommitments(directory)).tripo+jobs.reduce((total,job)=>total+(job.tripo.credits??reservations.tripo),0)+reservations.tripo<=config.tripoBudget,'LOCAL_GENERATION_BUDGET',429);
     const id=randomUUID(),at=nowISO(now),photo={...source.assets.photo,sourceJobId:source.assets.photo.sourceJobId||source.id};
     const assets:Record<string,StoredAsset>={photo};for(const key of ['world','panorama','collider'])if(source.assets[key])assets[key]={...source.assets[key],sourceJobId:source.assets[key].sourceJobId||source.id};
-    const job:StoredJob={id,tokenHash:giftHash(newGiftToken()),dedupeHash,inputHash,state:'processing',title:source.title,worldPrompt:source.worldPrompt,story:source.story,dedication:source.dedication,senderName:source.senderName,recipientName:source.recipientName,curiosities:source.curiosities,exampleId:source.exampleId,
+    const job:StoredJob={id,tokenHash:giftHash(newGiftToken()),dedupeHash,inputHash,state:'processing',queued:activeJobs(jobs)>=LOCAL_GENERATION_CONCURRENCY,title:source.title,worldPrompt:source.worldPrompt,story:source.story,dedication:source.dedication,senderName:source.senderName,recipientName:source.recipientName,curiosities:source.curiosities,exampleId:source.exampleId,
      createdAt:at,updatedAt:at,photoIntent:'place',objectRepresentation:'souvenir-miniature',photoSafety,assets,remakeSourceJobId:source.id,
      generation:{tripo:{model:'v3.1-20260211',face_limit:30000,texture:true,pbr:true,texture_quality:'detailed',geometry_quality:'detailed',orientation:'align_image'},worldlabs:{...source.generation.worldlabs}},
      tripo:{state:'pending',progress:0},worldlabs:{...source.worldlabs,credits:0},reusedWorld:{sourceJobId:source.id,operationId:source.worldlabs.taskId,worldId:source.worldlabs.resultId,originalCredits:source.worldlabs.credits,newCredits:0}};

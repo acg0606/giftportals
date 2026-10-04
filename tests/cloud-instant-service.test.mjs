@@ -25,7 +25,7 @@ const pending = signal => new Promise((_resolve, reject) => {
   if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
 });
 const flush = async () => { await setImmediate(); await setImmediate(); };
-const until = async predicate => { for (let i = 0; i < 30 && !predicate(); i++) await flush(); assert.ok(predicate(), 'Expected transport stage was not reached'); };
+const until = async predicate => { const deadline = performance.now() + 1500; while (!predicate() && performance.now() < deadline) await flush(); assert.ok(predicate(), 'Expected transport stage was not reached'); };
 
 function harness(options = {}) {
   const calls = [];
@@ -166,6 +166,42 @@ test('unavailable, local and malformed status or missing consent cannot start pr
   await assert.rejects(transport.service.create(input({ consent: false }), new AbortController().signal)); assert.deepEqual(transport.actions(), ['status']);
   const error = harness({ statusResponse: () => failure('CLOUD_NOT_READY') });
   await assert.rejects(error.service.status(new AbortController().signal), value => value.code === 'CLOUD_NOT_READY');
+});
+
+test('available infrastructure is not blocked by obsolete daily counters or internal credit caps', async () => {
+  for (const limits of [undefined, null, { owner: { used: 2, limit: 2, remaining: 0 }, global: { used: 20, limit: 20, remaining: 0 }, resetAt: '2030-01-02T00:00:00Z' }]) {
+    const transport = harness({ status: { ...status, limits, budget: { canCreate: false, tripo: { cap: 100, remaining: 0 } } } });
+    const result = await transport.service.status(new AbortController().signal); assert.equal(result.available, true);
+    for (let index = 0; index < 3; index++) await transport.service.create(input(), new AbortController().signal);
+    assert.equal(transport.actions().filter(action => action === 'prepare').length, 3, 'Every explicit creation reaches the backend rather than a browser cap');
+  }
+});
+
+test('capacity prepare rejections carry human copy and a definitive marker without uploads or job recovery', async () => {
+  for (const code of ['GENERATION_QUOTA', 'GENERATION_BUDGET', 'STORAGE_LIMIT', 'PROVIDER_INSUFFICIENT_CREDITS']) {
+    const transport = harness({ prepareResponse: () => new Response(JSON.stringify({ ok: false, error: { code, message: 'The request could not be completed.', resetAt: '2030-01-02T00:00:00Z', retryAfterSeconds: 3600 } }), { status: 429 }) });
+    await assert.rejects(transport.service.create(input(), new AbortController().signal), error => {
+      assert.equal(error.code, code); assert.equal(error.httpStatus, 429); assert.equal(error.creationRejected, true);
+      assert.doesNotMatch(error.message, /The request could not be completed|GENERATION_|STORAGE_LIMIT/);
+      assert.equal(error.resetAt, undefined); assert.equal(error.retryAfterSeconds, undefined); assert.doesNotMatch(error.message, /today|daily|reset/i);
+      if (code === 'PROVIDER_INSUFFICIENT_CREDITS') assert.match(error.message, /generation service does not have enough credits/);
+      return true;
+    });
+    assert.deepEqual(transport.actions(), ['status', 'prepare']);
+  }
+});
+
+test('capacity errors after preparation and unclassified prepare failures never claim that an existing draft was rejected', async () => {
+  const finalized = harness({ finalizeResponse: () => failure('GENERATION_QUOTA', 429) });
+  await assert.rejects(finalized.service.create(input(), new AbortController().signal), error => error.code === 'GENERATION_QUOTA' && error.creationRejected === false);
+  assert.deepEqual(finalized.actions(), ['status', 'prepare', 'upload', 'finalize']);
+  const recovered = await finalized.service.job({ dedupeKey: input().dedupeKey, token }, new AbortController().signal);
+  assert.equal(recovered.id, id); assert.deepEqual(finalized.actions(), ['status', 'prepare', 'upload', 'finalize', 'job']);
+  for (const [code, http] of [['GENERATION_QUOTA', 500], ['DATABASE_REQUEST_FAILED', 409], ['JOB_UNAVAILABLE', 404]]) {
+    const rejected = harness({ prepareResponse: () => failure(code, http) });
+    await assert.rejects(rejected.service.create(input(), new AbortController().signal), error => error.code === code && error.creationRejected === false);
+    assert.deepEqual(rejected.actions(), ['status', 'prepare']);
+  }
 });
 
 test('interrupted upload never finalizes or advances a partially uploaded draft', async () => {

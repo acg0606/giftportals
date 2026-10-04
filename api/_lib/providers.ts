@@ -20,7 +20,7 @@ export async function providerJSON(provider:Provider,path:string,method:'GET'|'P
 export async function checkProviderCredit(provider:Provider,reservation:number){
  const result=await providerJSON(provider,provider==='tripo'?'/account/balance':'/credits');
  const available=provider==='tripo'?Number(result.balance)-Number(result.frozen||0):Number(result.remaining_credits);
- ensure(Number.isFinite(available)&&available>=reservation+(provider==='worldlabs'?1000:0),'PROVIDER_CREDIT_FLOOR',403);
+ ensure(Number.isFinite(available)&&available>=reservation,'PROVIDER_INSUFFICIENT_CREDITS',403);
 }
 export interface Asset {suffix:string;kind:'model'|'world';mime:string;bytes:Buffer;sha256:string;}
 export async function downloadAsset(url:unknown,provider:Provider,suffix:string,kind:Asset['kind'],mime:string,options:{maxSplats?:150000|600000;maxBytes?:number}={}):Promise<Asset>{

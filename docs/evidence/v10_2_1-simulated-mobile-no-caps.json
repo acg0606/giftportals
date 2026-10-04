@@ -1,0 +1,146 @@
+{
+  "label": "SIMULATED — NOT PRODUCTION",
+  "evidence": "Actual frontend and cloud client in Chromium, API/job/uploads/asset readiness mocked. No live generation, provider credit balance, real location or real model quality was exercised.",
+  "viewport": {
+    "width": 390,
+    "height": 900
+  },
+  "assertions": 126,
+  "successfulCreations": 3,
+  "pageErrors": 0,
+  "paidProviderRequests": 0,
+  "nativeGpsRequests": 0,
+  "results": [
+    {
+      "mode": "three-explicit-creations",
+      "explicitSuccessfulCreations": 3,
+      "deskAfterReload": 3,
+      "myMemories": 3,
+      "legacyLimitsIgnored": true,
+      "legacyBudgetIgnored": true,
+      "horizontalOverflow": 0,
+      "pageErrors": 0,
+      "blockedExternalRequests": 0
+    },
+    {
+      "mode": "infra-readiness",
+      "calls": [
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "status",
+          "method": "GET"
+        }
+      ],
+      "retainedDraft": true,
+      "horizontalOverflow": 0,
+      "pageErrors": 0,
+      "blockedExternalRequests": 0
+    },
+    {
+      "mode": "definite-backend-rejection",
+      "calls": [
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "prepare",
+          "method": "POST"
+        },
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "status",
+          "method": "GET"
+        }
+      ],
+      "retainedDraft": true,
+      "horizontalOverflow": 0,
+      "pageErrors": 0,
+      "blockedExternalRequests": 0
+    },
+    {
+      "mode": "ambiguous-lost-response",
+      "calls": [
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "prepare",
+          "method": "POST"
+        },
+        {
+          "action": "job",
+          "method": "GET"
+        },
+        {
+          "action": "job",
+          "method": "GET"
+        }
+      ],
+      "retainedDraft": true,
+      "horizontalOverflow": 0,
+      "pageErrors": 0,
+      "blockedExternalRequests": 0
+    },
+    {
+      "mode": "provider-failure",
+      "calls": [
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "status",
+          "method": "GET"
+        },
+        {
+          "action": "prepare",
+          "method": "POST"
+        },
+        {
+          "action": "upload",
+          "method": "PUT"
+        },
+        {
+          "action": "finalize",
+          "method": "POST"
+        },
+        {
+          "action": "job",
+          "method": "GET"
+        },
+        {
+          "action": "job",
+          "method": "GET"
+        }
+      ],
+      "retainedDraft": true,
+      "horizontalOverflow": 0,
+      "pageErrors": 0,
+      "blockedExternalRequests": 0
+    }
+  ]
+}

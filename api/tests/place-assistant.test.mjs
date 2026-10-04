@@ -76,12 +76,34 @@ test('credit exhaustion, rate limits and malformed generative output degrade wit
 
 function request(extra={}){return Object.assign(new EventEmitter(),{url:'/api/place-assistant?action=suggest',method:'POST',headers:{host:'127.0.0.1:4323',origin:'http://127.0.0.1:4323','sec-fetch-site':'same-origin','content-type':'application/json'},socket:{remoteAddress:'127.0.0.1'},body:JSON.stringify({language:'pt'}),...extra});}
 function response(){return Object.assign(new EventEmitter(),{headers:{},writableEnded:false,destroyed:false,setHeader(k,v){this.headers[k]=v;},end(body){this.writableEnded=true;this.body=JSON.parse(body);}});}
-test('HTTP handler blocks cross-origin, oversized bodies and repeated requests before calling an upstream',async()=>{
+test('HTTP handler rejects invalid origins and payloads while valid repeated suggestions remain available',async()=>{
  let calls=0;const handler=createPlaceAssistantHandler({status:()=>({available:true}),suggest:async()=>{calls++;return{provider:'template'};}});
  for(const [extra,code]of [[{headers:{host:'evil.invalid',origin:'https://evil.invalid'}},'ORIGIN_DENIED'],[{headers:{host:'127.0.0.1:4323',origin:'https://evil.invalid'}},'ORIGIN_DENIED'],[{socket:{remoteAddress:'192.168.0.1'}},'ORIGIN_DENIED'],[{body:'x'.repeat(a.MAX_ASSISTANT_BODY_BYTES+1)},'BODY_TOO_LARGE'],[{method:'GET'},'METHOD_NOT_ALLOWED']]){const output=response();await handler(request(extra),output);assert.equal(output.body.error.code,code);}
  assert.equal(calls,0);
- for(let n=0;n<12;n++){const output=response();await handler(request(),output);assert.equal(output.body.ok,true);}
- const blocked=response();await handler(request(),blocked);assert.equal(blocked.body.error.code,'ASSISTANT_RATE_LIMIT');assert.equal(calls,12);
+ for(let n=0;n<20;n++){const output=response();await handler(request(),output);assert.equal(output.statusCode,200);assert.equal(output.body.ok,true);}
+ assert.equal(calls,20);
+ // Other users sharing this function instance cannot exhaust a global identity allowance.
+ for(let n=0;n<520;n++){const output=response();await handler(request({headers:{...request().headers,'x-vercel-forwarded-for':`synthetic-peer-${n}`}}),output);assert.equal(output.statusCode,200);assert.equal(output.body.ok,true);}
+ assert.equal(calls,540);
+});
+
+test('different photos can be suggested concurrently and an identical in-flight photo still shares one provider request',async()=>{
+ let finish,started,requests=0;const waiting=new Promise(resolve=>{finish=resolve;}),bothStarted=new Promise(resolve=>{started=resolve;});
+ const secondPhoto='data:image/png;base64,'+Buffer.from([137,80,78,71,13,10,26,10,0,0,0,1]).toString('base64');
+ const service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async(url,init)=>{
+  assert.equal(String(url),'https://ai-gateway.vercel.sh/v1/chat/completions');
+  requests++;if(requests===2)started();await waiting;
+  const original=JSON.parse(init.body).messages[0].content[1].image_url.url;
+  return json({choices:[{message:{content:JSON.stringify({...gatewayResult,title:original===photo?'First photo':'Second photo'})}}]});
+ }});
+ const first=service.suggest({imageDataUrl:photo,photoConsent:true});
+ const duplicate=service.suggest({imageDataUrl:photo,photoConsent:true});
+ const second=service.suggest({imageDataUrl:secondPhoto,photoConsent:true});
+ await bothStarted;assert.equal(requests,2);finish();
+ const results=await Promise.all([first,duplicate,second]);
+ assert.deepEqual(results.map(value=>value.title),['First photo','First photo','Second photo']);
+ for(const value of results){assert.equal(value.provider,'vercel');assert.equal(value.photoAnalyzed,true);assert.equal(value.generationFailure,undefined);assert.equal(value.warnings.includes('PHOTO_ANALYSIS_UNAVAILABLE'),false);}
+ assert.equal(requests,2);
 });
 
 test('the named São Paulo square uses reviewed municipal evidence only after an exact user choice',async()=>{

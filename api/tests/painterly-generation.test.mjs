@@ -44,10 +44,10 @@ test('Tripo reference prompt preserves every mandatory instruction within its ac
  const maximum=cloud.cloudSouvenirPrompt(cases[0]);assert.ok(maximum.includes('A'.repeat(30)));assert.ok(maximum.includes('B'.repeat(100)));assert.equal(maximum.length,1800);assert.equal(art.SOUVENIR_ART_PROMPT_VERSION,'giftportals-souvenir-cinematic-v10-compact1');
 });
 
-async function fixture(t){
+async function fixture(t,legacySettings={}){
  const tempRoot=fileURLToPath(new URL('../../../test-state/',import.meta.url));await mkdir(tempRoot,{recursive:true});const directory=await mkdtemp(resolve(tempRoot,'prompt-'));t.after(()=>rm(directory,{recursive:true,force:true}));
  const original=Buffer.from([137,80,78,71,13,10,26,10,1,2,3]),reference=Buffer.from([137,80,78,71,13,10,26,10,4,5,6]),calls=[];
- const config={enabled:true,providers:{tripo:true,worldlabs:true},worldModel:'marble-1.1',tripoBudget:1500,worldBudget:10000};
+ const config={enabled:true,providers:{tripo:true,worldlabs:true},worldModel:'marble-1.1',...legacySettings};
  const moderator={status:async()=>({available:true,localOnly:true,protocol:safety.IMAGE_SAFETY_PROTOCOL,modelVersion:'offline-test'}),screen:async images=>({protocol:safety.IMAGE_SAFETY_PROTOCOL,checkedAt:new Date().toISOString(),modelVersion:'offline-test',decision:'allow',results:images.map(image=>({id:image.id,sha256:hash(image.bytes),modelVersion:'offline-test',decision:'allow',category:'ordinary',scores:{sexual:0,adultProduct:0}}))})};
  const service=instant.createInstantService({directory,settings:()=>config,safety:moderator,credit:async(provider,reservation)=>calls.push(['credit',provider,reservation]),upload:async provider=>`uploaded-${provider}`,json:async(provider,path,method='GET',body,options)=>{calls.push([provider,path,method,body,options]);return method==='POST'?provider==='worldlabs'?{operation_id:'world-operation'}:{task_id:path.endsWith('image-to-image')?'reference-task':'model-task'}:provider==='worldlabs'?{done:false}:{task_id:path.split('/').at(-1),type:'image_to_image',status:'success',progress:100};},reference:async()=>({asset:{kind:'world',suffix:'reference',mime:'image/png',bytes:reference,sha256:hash(reference)},cost:40}),complete:async()=>null});
  const input=extra=>({title:'My personal gift',worldPrompt:'A plaza with leafy trees and a handmade keepsake.',story:'My exact story.',dedication:'For you.',senderName:'Ana',recipientName:'Lee',imageDataUrl:`data:image/png;base64,${original.toString('base64')}`,consent:true,dedupeKey:randomBytes(32).toString('base64url'),requestToken:randomBytes(32).toString('base64url'),...extra});
@@ -67,6 +67,10 @@ test('automatic place reference uses realistic direction with the same supported
  assert.deepEqual(Object.keys(model).sort(),modelKeys);assert.equal(model.input,'reference-task');assert.equal(model.prompt,undefined);assert.equal(job.generation.tripoReference.promptVersion,art.SOUVENIR_ART_PROMPT_VERSION);
  assert.deepEqual(Object.keys(world.world_prompt).sort(),['disable_recaption','image_prompt','is_pano','text_prompt','type']);assert.equal(world.world_prompt.is_pano,false);assert.equal(world.world_prompt.disable_recaption,true);assert.equal(world.world_prompt.image_prompt.source,'media_asset');for(const style of styles)assert.ok(world.world_prompt.text_prompt.includes(style));
 });
-test('prompt migration keeps supported task fields and reservations while operator budgets have no legacy ceiling',async()=>{
- const staged=await readFile(resolve(here,'_lib/instant.ts'),'utf8');assert.match(staged,/const reservations = \{ tripo: 100, worldlabs: 1580 \}/);assert.match(staged,/model:'chat_image_2',quality:'medium',size:'1536x1024',output_format:'png'/);assert.match(staged,/model: 'v3.1-20260211', face_limit: 30000/);assert.match(staged,/if\(value===undefined\)return Number\.MAX_SAFE_INTEGER/);assert.match(staged,/tripoBudget:cap\(process\.env\.LOCAL_TRIPO_CREDIT_CAP\)/);assert.match(staged,/worldBudget:cap\(process\.env\.LOCAL_WORLDLABS_CREDIT_CAP\)/);
+test('realistic prompt migration keeps actual provider reservations and task recipes when stale local caps are present',async t=>{
+ const f=await fixture(t,{tripoBudget:1,worldBudget:1}),created=await f.service.create(f.input({photoIntent:'place'}));await f.service.get(created.id,created.token);
+ assert.deepEqual(f.calls.filter(call=>call[0]==='credit'),[['credit','tripo',100],['credit','worldlabs',1580],['credit','tripo',60]]);
+ const posts=f.calls.filter(call=>call[2]==='POST'),reference=posts.find(call=>call[1].endsWith('image-to-image'))[3],model=posts.find(call=>call[1].endsWith('image-to-model'))[3],world=posts.find(call=>call[0]==='worldlabs')[3];
+ assert.equal(reference.model,'chat_image_2');assert.equal(reference.quality,'medium');assert.equal(reference.size,'1536x1024');assert.equal(model.model,'v3.1-20260211');assert.equal(model.face_limit,30000);assert.equal(world.model,'marble-1.1');
+ for(const prompt of[reference.prompt,world.world_prompt.text_prompt]){for(const style of styles)assert.ok(prompt.includes(style));assert.doesNotMatch(prompt,rejectedDirection);}
 });

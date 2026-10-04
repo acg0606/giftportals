@@ -15,17 +15,18 @@ const MiB = 1024 * 1024;
 const item = (kind = 'gift-photo', type = 'image/png', size = 1) => ({ kind, file: { type, size } });
 const code = (files) => validateOriginalFiles(files)?.code ?? null;
 
-test('a postcard requires a gift photo and limits gift angles to four', () => {
+test('a postcard requires a gift photo and accepts additional original angles without a count allowance', () => {
   assert.equal(code([]), 'NO_GIFT_PHOTO');
   assert.equal(code([item('place-photo')]), 'NO_GIFT_PHOTO');
   assert.equal(code(Array.from({ length: 4 }, () => item())), null);
-  assert.equal(code(Array.from({ length: 5 }, () => item())), 'GIFT_PHOTO_COUNT');
+  assert.equal(code(Array.from({ length: 41 }, () => item())), null);
 });
 
-test('narration and place photos share the eight-original capacity', () => {
+test('narration and place photos remain valid beyond the retired eight-original allowance', () => {
   const files = [item(), ...Array.from({ length: 6 }, () => item('place-photo')), item('audio', 'audio/mpeg')];
   assert.equal(code(files), null);
-  assert.equal(code([...files, item('place-photo')]), 'TOTAL_COUNT');
+  assert.equal(code([...files, ...Array.from({ length: 40 }, () => item('place-photo'))]), null);
+  assert.equal(code([...files, item('place-photo', 'image/png', 8 * MiB + 1)]), 'FILE_TOO_LARGE');
 });
 
 test('4 MiB narration is accepted but one extra byte is rejected before cloud save', () => {

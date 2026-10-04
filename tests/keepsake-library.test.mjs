@@ -58,19 +58,31 @@ test('expiry follows the server deadline, removes stale capabilities and never e
   assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job(), now + 601), undefined);
 });
 
-test('unfinished, invalid and overlarge records are rejected; storage failures do not interrupt a ready gift', () => {
+test('unfinished and invalid records are rejected; storage failures do not interrupt a ready gift', () => {
   const storage = memoryStorage();
   assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job('synthetic-gift-a', { state: 'partial' }), now), undefined);
   assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job('invalid/token'), now), undefined);
   assert.deepEqual(library.readKeepsakeReferences(JSON.stringify([{ id: 'synthetic-gift-a', token: 'short', expiresAt: now + 10 }]), now), []);
-  assert.deepEqual(library.readKeepsakeReferences(JSON.stringify(Array.from({ length: 101 }, () => ({ id: 'synthetic-gift-a', token: 'a'.repeat(43), expiresAt: now + 10 }))), now), []);
+  assert.equal(library.readKeepsakeReferences(JSON.stringify(Array.from({ length: 101 }, () => ({ id: 'synthetic-gift-a', token: 'a'.repeat(43), expiresAt: now + 10 }))), now).length, 1, 'Large repeated records are deduplicated instead of discarding the library');
   const blocked = { getItem() { throw new Error('Blocked'); }, setItem() { throw new Error('Blocked'); }, removeItem() { throw new Error('Blocked'); } };
   assert.equal(library.rememberCreatedKeepsake(blocked, 'anonymous', job(), now).id, 'synthetic-gift-a');
   const readOnly = { getItem: () => JSON.stringify([{ id: 'synthetic-gift-a', token: 'a'.repeat(43), expiresAt: now + 10 }]), setItem() { throw new Error('Read only'); }, removeItem() { throw new Error('Read only'); } };
   assert.equal(library.storedKeepsakeReferences(readOnly, 'anonymous', now).length, 1);
   for (let i = 0; i < 105; i++) library.rememberCreatedKeepsake(storage, 'anonymous', job(`synthetic-gift-${i}`), now);
-  assert.equal(library.storedKeepsakeReferences(storage, 'anonymous', now).length, 100);
-  assert.equal(library.storedKeepsakeReferences(storage, 'anonymous', now)[0].id, 'synthetic-gift-5');
+  assert.equal(library.storedKeepsakeReferences(storage, 'anonymous', now).length, 105);
+  assert.equal(library.storedKeepsakeReferences(storage, 'anonymous', now)[0].id, 'synthetic-gift-0');
+});
+
+test('large libraries preserve every unexpired reference beyond earlier count and serialized-size caps', () => {
+  const storage = memoryStorage();
+  const references = Array.from({ length: 650 }, (_, index) => ({ id: `synthetic-gift-${index}`, token: 'a'.repeat(43), expiresAt: now + 600 }));
+  const raw = JSON.stringify(references); assert.ok(raw.length > 64_000);
+  storage.setItem(library.keepsakeLibraryKey('anonymous'), raw);
+  assert.equal(library.storedKeepsakeReferences(storage, 'anonymous', now).length, 650);
+  library.rememberCreatedKeepsake(storage, 'anonymous', job('synthetic-gift-650'), now);
+  const saved = library.storedKeepsakeReferences(storage, 'anonymous', now);
+  assert.equal(saved.length, 651); assert.equal(saved[0].id, 'synthetic-gift-0'); assert.equal(saved.at(-1).id, 'synthetic-gift-650');
+  assert.deepEqual(library.storedKeepsakeReferences(storage, 'owner:other', now), [], 'Removing retention caps preserves actor scoping');
 });
 
 test('hydration authenticates with a header and makes one cloud GET even for an unfinished legacy job', async () => {

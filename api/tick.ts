@@ -29,10 +29,9 @@ export async function tick(){
   const provider=job.provider as Provider;
   if(job.state==='pending'){
    ensure(process.env.ENABLE_GENERATION==='true','GENERATION_PAUSED',403);ensure(!job.submitted_at,'SUBMISSION_AMBIGUOUS',409);
-   // The historical database recipe reserved only 500 World Labs credits.
-   // Require a matching reservation before this higher-quality paid recipe.
-   ensure(Number(job.reserved_credits)>=(provider==='tripo'?100:1580),'GENERATION_RECIPE_RESERVATION_REQUIRED',503);
-   await checkProviderCredit(provider,Number(job.reserved_credits));let request:Row;
+   // Historical reservation totals are audit entries, not spending allowances.
+   // Check the actual pinned recipe against the provider's current balance.
+   await checkProviderCredit(provider,provider==='tripo'?100:1580);let request:Row;
    if(provider==='tripo'){
     const photo=unwrap(await s.from('gp_media').select('path,bucket').eq('memory_id',m.id).eq('kind','gift-photo').eq('ready',true).order('created_at').limit(1)) as Row[];ensure(photo.length,'GIFT_PHOTO_REQUIRED');
     const signed=unwrap<{signedUrl:string}>(await s.storage.from(photo[0].bucket||BUCKET).createSignedUrl(photo[0].path,3600));

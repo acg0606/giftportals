@@ -120,7 +120,6 @@ async function run(req:Request,query:URLSearchParams){
  }
  if(action==='share'){
   ensure(b.allowLinkRead===true,'SHARING_CONSENT_REQUIRED');const m=await ownedMemory(s,b.memoryId,uid),token=newGiftToken();
-  const count=await s.from('gp_gifts').select('id',{count:'exact',head:true}).eq('sender_id',uid);ensure(!count.error&&(count.count||0)<40,'GIFT_LIMIT',429);
   ensure(b.allowClaim===undefined||typeof b.allowClaim==='boolean','CLAIM_CONSENT_REQUIRED');const claimToken=b.allowClaim===true?newGiftToken():undefined;
   const g=unwrap(await s.from('gp_gifts').insert({memory_id:m.id,sender_id:uid,link_hash:giftHash(token),claim_hash:claimToken?giftHash(claimToken):null,allow_claim:Boolean(claimToken),message:text(b.message??'',1200,0),recipient_name:b.recipientName?text(b.recipientName,80):null,allow_link_read:true}).select().single()) as Row;
   const dto=await giftDTO(g),url=process.env.PUBLIC_APP_URL?`${process.env.PUBLIC_APP_URL.replace(/\/$/,'')}/#gift=${token}`:undefined;return{...dto,token,url,claimToken,claimUrl:claimToken&&url?`${url}&claim=${claimToken}`:undefined};

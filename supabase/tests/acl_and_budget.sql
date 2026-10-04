@@ -1,5 +1,5 @@
 -- Meaningful database integration checks. Run as database owner on the dedicated
--- GiftPortals project after the migration. All synthetic rows roll back.
+-- GiftPortals project after migrations 001 and 005. All synthetic rows roll back.
 begin;
 insert into auth.users(id,email,raw_user_meta_data) values
  ('00000000-0000-4000-a000-000000000001','acl-owner@giftportals.invalid','{"display_name":"Fictional ACL owner"}'),
@@ -31,8 +31,8 @@ begin
  if (public.gp_enqueue_job(m.owner_id,m.id,'tripo','synthetic-dedupe-001')).id<>j.id then raise exception 'Dedupe created a second job';end if;
  if (select reserved_credits from public.gp_generation_budget where provider='tripo')<>j.reserved_credits then raise exception 'Dedupe spent a second reservation';end if;
  update public.gp_jobs set state='failed' where id=j.id;
- blocked:=false;begin perform public.gp_enqueue_job(m.owner_id,m.id,'tripo','synthetic-dedupe-002');exception when others then if sqlerrm<>'GENERATION_BUDGET' then raise;end if;blocked:=true;end;
- if not blocked then raise exception 'Exhausted budget did not reject before provider start';end if;
+ perform public.gp_enqueue_job(m.owner_id,m.id,'tripo','synthetic-dedupe-002');
+ if (select reserved_credits from public.gp_generation_budget where provider='tripo')<>2*j.reserved_credits then raise exception 'Retired lifetime budget blocked or lost the new reservation audit';end if;
  update public.gp_jobs set submitted_at=now(),provider_task_id=null where id=j.id;
  blocked:=false;begin perform public.gp_retry_job(m.owner_id,j.id);exception when others then if sqlerrm<>'SUBMISSION_AMBIGUOUS' then raise;end if;blocked:=true;end;
  if not blocked then raise exception 'Ambiguous submission incorrectly allowed a paid retry';end if;

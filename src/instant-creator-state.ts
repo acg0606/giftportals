@@ -115,6 +115,7 @@ export function instantJobFinished(job: InstantJob): boolean {
 export function instantProviderLabel(provider: 'tripo' | 'worldlabs', state: InstantProviderState, referenceState?: InstantProviderState, errorCode?: string): string {
   const object = provider === 'tripo';
   if (errorCode === 'SUBMISSION_AMBIGUOUS') return object ? 'We couldn’t confirm your souvenir.' : 'We couldn’t confirm the world creation.';
+  if (errorCode === 'PROVIDER_INSUFFICIENT_CREDITS' && (state === 'failed' || object && state !== 'completed' && referenceState === 'failed')) return object ? 'The souvenir service has insufficient credits for this creation.' : 'The world service has insufficient credits for this creation.';
   if (object && state !== 'completed' && referenceState === 'failed') return 'The souvenir reference could not be made.';
   if (object && state === 'pending' && (referenceState === 'pending' || referenceState === 'processing')) return 'Imagining your little souvenir…';
   if (state === 'completed') return object ? 'Your keepsake is sculpted.' : 'Your little world is ready.';

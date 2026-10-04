@@ -7,7 +7,6 @@ export interface KeepsakeStorage {
   removeItem(key: string): void;
 }
 
-const limit = 100;
 const sevenDays = 7 * 24 * 60 * 60;
 export const instantJobStorageKey = (scope = 'anonymous') => `giftportals.instant.job.v2:${encodeURIComponent(scope)}`;
 export const instantPendingStorageKey = (scope = 'anonymous') => `giftportals.instant.pending.v2:${encodeURIComponent(scope)}`;
@@ -16,10 +15,10 @@ export const keepsakeLibraryKey = (scope: string) => `giftportals.keepsakes.v1:$
 /** Only opaque references live on this device. Every display rereads the private job;
  * photos, stories, generated content and signed media URLs are never serialized. */
 export function readKeepsakeReferences(raw: string | null, now = Date.now() / 1000): KeepsakeReference[] {
-  if (!raw || raw.length > 64_000) return [];
+  if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length > limit) return [];
+    if (!Array.isArray(parsed)) return [];
     const unique = new Map<string, KeepsakeReference>();
     for (const value of parsed) {
       if (!value || typeof value !== 'object') continue;
@@ -60,7 +59,7 @@ export function rememberCreatedKeepsake(storage: KeepsakeStorage | undefined, sc
   if (expiresAt <= now) return undefined;
   const next = { ...reference, expiresAt };
   if (storage) {
-    try { write(storage, scope, [...previous.filter(value => value.id !== next.id), next].slice(-limit)); }
+    try { write(storage, scope, [...previous.filter(value => value.id !== next.id), next]); }
     catch { /* An open creator remains usable when storage is blocked or full. */ }
   }
   return next;
