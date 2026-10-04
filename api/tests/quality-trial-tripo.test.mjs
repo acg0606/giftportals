@@ -99,8 +99,8 @@ test('tampered generated image cannot satisfy the approved aggregate hash', asyn
  assert.equal(posts(f.calls).length, 1);
 });
 test('fresh-credit failure before any POST releases the held budget and records a terminal trial', async t => {
- const f = await fixture(t, { credit: async () => { throw new rules.AppError('PROVIDER_CREDIT_FLOOR', 403); } });
- await assert.rejects(() => f.service.create(f.input), error => error.code === 'PROVIDER_CREDIT_FLOOR');
+ const f = await fixture(t, { credit: async () => { throw new rules.AppError('PROVIDER_INSUFFICIENT_CREDITS', 403); } });
+ await assert.rejects(() => f.service.create(f.input), error => error.code === 'PROVIDER_INSUFFICIENT_CREDITS');
  assert.equal(posts(f.calls).length, 0); assert.deepEqual(f.calls.find(call => call[0] === 'release'), ['release', f.id]);
  await f.service.create(f.input); assert.equal(f.calls.filter(call => call[0] === 'reserve').length, 1);
 });

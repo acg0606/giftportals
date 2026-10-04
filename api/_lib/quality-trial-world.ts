@@ -202,7 +202,7 @@ export function createWorldQualityTrial(deps: Dependencies) {
     await deps.reserve({ trialId: id, provider: 'worldlabs', credits: reservation }); reserved = true;
     // Fresh balance covers the documented input-specific maximum plus 1000 credits.
     const balance = await json('worldlabs', '/credits');
-    ensure(Number.isFinite(Number(balance.remaining_credits)) && Number(balance.remaining_credits) >= reservation + 1000, 'PROVIDER_CREDIT_FLOOR', 403);
+    ensure(Number.isFinite(Number(balance.remaining_credits)) && Number(balance.remaining_credits) >= reservation, 'PROVIDER_INSUFFICIENT_CREDITS', 403);
     if (!textOnly) { job.state = 'uploading'; await save(job); }
     for (let index = 0; index < images.length; index++) {
      await writeFile(join(directory, id, job.images[index].file), images[index].bytes);

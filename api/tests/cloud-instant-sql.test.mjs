@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const sql = await readFile(resolve(root, 'supabase/migrations/002_cloud_instant.sql'), 'utf8');
 const qualifiedPrepareMigration = await readFile(resolve(root, 'supabase/migrations/003_instant_prepare_qualified_budget.sql'), 'utf8');
+const existingCreditMigration = await readFile(resolve(root, 'supabase/migrations/004_instant_existing_provider_credits.sql'), 'utf8');
 const functions = [...sql.matchAll(/create function public\.(gp_instant_\w+)\(([\s\S]*?)\) returns [\s\S]*?\bas \$\$([\s\S]*?)\$\$;/g)]
   .map(match => ({ name: match[1], args: match[2], body: match[3], source: match[0] }));
 const byName = Object.fromEntries(functions.map(fn => [fn.name, fn]));
@@ -29,6 +30,22 @@ test('incremental prepare repair qualifies only the two provider budgets and pre
   ));
   assert.doesNotMatch(qualifiedPrepareMigration, /(?:alter|grant|revoke|truncate|drop)\s+(?:role|table|policy)|safeupdate\.enabled|session_preload_libraries|\bset\s+credit_limit\s*=/i);
   assert.match(qualifiedPrepareMigration, /\bbegin;[\s\S]*notify pgrst,'reload schema';\s*commit;/);
+});
+test('latest prepare retires app caps while preserving exact ownership, idempotence and transactional reservation accounting',()=>{
+ const current=existingCreditMigration.match(/create or replace function public\.gp_instant_prepare\([\s\S]*?end \$\$;/)?.[0];assert.ok(current);
+ assert.doesNotMatch(current,/global_jobs_per_day|owner_jobs_per_day|credit_limit|storage_limit_bytes|GENERATION_QUOTA|GENERATION_BUDGET|STORAGE_LIMIT/);
+ const lock=current.indexOf('pg_advisory_xact_lock(1647392011)'),dedupe=current.indexOf('where request_key_hash=p_request_key_hash for update'),existing=current.indexOf("'deduplicated',true"),reserve=current.indexOf('insert into public.gp_instant_jobs');assert.ok(lock>=0&&dedupe>lock&&existing>dedupe&&reserve>existing);
+ assert.match(current,/j\.token_hash<>p_token_hash or j\.owner_hash<>p_owner_hash/);assert.match(current,/j\.input_hash<>p_input_hash or j\.input_document<>p_document/);assert.match(current,/security definer set search_path=pg_catalog,pg_temp/);
+ assert.match(current,/perform 1 from public\.gp_instant_budgets where provider in\('tripo','worldlabs'\) order by provider for update/);
+ assert.match(current,/insert into public\.gp_instant_reservations\(job_id,provider,credits\)/);assert.match(current,/reserved_credits=reserved_credits\+reservation_per_job where provider in\('tripo','worldlabs'\)/);assert.match(current,/storage_reserved_bytes=storage_reserved_bytes\+reserved_bytes where singleton/);
+ assert.match(current,/update public\.gp_instant_request_quotas set jobs=jobs\+1 where owner_hash=p_owner_hash and quota_day=today/);assert.match(current,/p_storage_bytes is distinct from bytes/);
+});
+test('cap retirement is atomic and idempotently changes only accounting ceilings without resetting data or relaxing security',()=>{
+ assert.match(existingCreditMigration,/\bbegin;[\s\S]*notify pgrst,'reload schema';\s*commit;/);assert.match(existingCreditMigration,/pg_catalog\.pg_get_constraintdef\(c\.oid\)/);
+ assert.match(existingCreditMigration,/gp_instant_budgets'::regclass[\s\S]*reserved_credits\[\[:space:\]\]\*<=\[\[:space:\]\]\*credit_limit/);assert.match(existingCreditMigration,/gp_instant_limits'::regclass[\s\S]*storage_reserved_bytes\[\[:space:\]\]\*<=\[\[:space:\]\]\*storage_limit_bytes/);
+ assert.match(existingCreditMigration,/if not exists[\s\S]*check\(reserved_credits>=0\)/);assert.match(existingCreditMigration,/if not exists[\s\S]*check\(storage_reserved_bytes>=0\)/);
+ assert.doesNotMatch(existingCreditMigration,/delete from|truncate|drop table|drop function|alter role|create policy|disable row level security|grant |revoke |set\s+(?:credit_limit|storage_limit_bytes|reserved_credits|storage_reserved_bytes)\s*=\s*0/i);
+ const replaced=[...existingCreditMigration.matchAll(/create or replace function public\.(\w+)/g)].map(m=>m[1]);assert.deepEqual(replaced,['gp_instant_prepare']);
 });
 
 test('migration isolates tables and mutations from the authenticated gift and demo schema', () => {

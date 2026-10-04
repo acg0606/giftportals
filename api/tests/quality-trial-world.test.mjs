@@ -71,11 +71,16 @@ test('all local safety checks happen before reservation, storage or uploads, and
  await assert.rejects(() => service.create(input, true), error => error.code === 'PHOTO_SAFETY_REVIEW_REQUIRED');
  assert.equal(calls.length, 0); await assert.rejects(() => stat(join(deps.directory, input.trialId)), error => error.code === 'ENOENT');
 });
-test('a fresh 4100 credit floor blocks Plus and releases only a reservation with no paid POST', async t => {
- const { input, service, calls } = await fixture(t, { json: async () => ({ remaining_credits: 4099 }) });
- const result = await service.create(input, true); assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'PROVIDER_CREDIT_FLOOR');
+test('fresh credits below the3100 task cost block Plus and release only a reservation with no paid POST', async t => {
+ const { input, service, calls } = await fixture(t, { json: async () => ({ remaining_credits: 3099 }) });
+ const result = await service.create(input, true); assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'PROVIDER_INSUFFICIENT_CREDITS');
  assert.deepEqual(calls.map(call => call[0]), ['safety', 'safety', 'safety', 'safety', 'reserve', 'release']);
  assert.deepEqual(calls[4][1], { trialId: input.trialId, provider: 'worldlabs', credits: 3100 });
+});
+test('Plus can use exactly its3100 task credits without an extra buffer and dedupe never submits twice',async t=>{
+ const requests=[],f=await fixture(t,{json:async(_provider,path,method='GET')=>{requests.push([path,method]);return path==='/credits'?{remaining_credits:3100}:{operation_id:'world-operation'};}});
+ assert.equal((await f.service.create(f.input,true)).state,'processing');assert.equal((await f.service.create(f.input,true)).state,'processing');
+ assert.deepEqual(requests,[['/credits','GET'],['/worlds:generate','POST']]);assert.equal(f.calls.some(call=>call[0]==='release'),false);
 });
 test('Plus request uses explicit coherent directions and never exposes upload IDs, paths, fingerprint or private prompt', async t => {
  const { input, service, calls } = await fixture(t); const result = await service.create(input, true);
@@ -185,9 +190,9 @@ test('text-only Plus uses the official text payload and3080 reservation without 
  assert.equal(result.promptSha256, digest(input.textPrompt)); assert.match(result.evidence, /not a metrically connected/);
  assert.ok(!JSON.stringify(result).includes(input.textPrompt)); assert.deepEqual(result.views, []);
 });
-test('text credit floor4080 releases only unsubmitted trials and text billing cannot exceed3080', async t => {
- const f = await fixture(t, { json: async () => ({ remaining_credits: 4079 }) });
- const result = await f.service.create(asText(f.input), true); assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'PROVIDER_CREDIT_FLOOR');
+test('text credits below the3080 task cost release only unsubmitted trials and billing cannot exceed3080', async t => {
+ const f = await fixture(t, { json: async () => ({ remaining_credits: 3079 }) });
+ const result = await f.service.create(asText(f.input), true); assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'PROVIDER_INSUFFICIENT_CREDITS');
  assert.deepEqual(f.calls.map(call => call[0]), ['reserve','release']);
  const g = await fixture(t, { complete: async () => ({ resultId: 'world-result', worldQuality: '500k', cost: 3081, assets: [] }) });
  await g.service.create(asText(g.input), true); await assert.rejects(() => g.service.poll(g.input.trialId), { code: 'WORLD_TRIAL_COST_INVALID' });
@@ -251,8 +256,8 @@ test('single-image moderation review, missing classifier and mismatched SHA fail
 });
 
 test('single-image admission and settlement use3080 while an unsubmitted failure releases its reservation', async t => {
- const f = await fixture(t, { json: async () => ({ remaining_credits: 4079 }) });
- const result = await f.service.create(asSingleImage(f.input), true); assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'PROVIDER_CREDIT_FLOOR');
+ const f = await fixture(t, { json: async () => ({ remaining_credits: 3079 }) });
+ const result = await f.service.create(asSingleImage(f.input), true); assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'PROVIDER_INSUFFICIENT_CREDITS');
  assert.deepEqual(f.calls.map(call => call[0]), ['safety', 'reserve', 'release']);
  const g = await fixture(t, { complete: async () => ({ resultId: 'world-result', worldQuality: '500k', cost: 3081, assets: [] }) });
  await g.service.create(asSingleImage(g.input), true); await assert.rejects(() => g.service.poll(g.input.trialId), { code: 'WORLD_TRIAL_COST_INVALID' });

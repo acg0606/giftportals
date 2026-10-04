@@ -55,7 +55,7 @@ const missing = () => Object.assign(new Error('No previous job'), { code: 'JOB_U
 async function fixture(action, settings = {}) {
   const names = ['window', 'document', 'HTMLInputElement', 'HTMLTextAreaElement', 'sessionStorage', 'URL', 'FileReader', 'fetch', 'createImageBitmap', 'matchMedia', 'navigator', '__instantWizard'];
   const previous = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const state = { current: true, creates: [], jobs: [], resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
+  const state = { current: true, creates: [], jobs: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
   class Element extends EventTarget {
     constructor(tag = 'div', attrs = {}) {
       super(); this.tagName = tag; this.attrs = attrs; this.children = []; this.dataset = {}; this.value = attrs.value || ''; this.name = attrs.name || ''; this.type = attrs.type || ''; this.hidden = 'hidden' in attrs; this.disabled = 'disabled' in attrs; this.checked = 'checked' in attrs; this.open = false; this.isConnected = true; this.scrollLeft = 0; this.scrollWidth = 720; this.clientWidth = 350; this.scrollTop = 0; this.validityMessage = ''; this.style = {};
@@ -129,7 +129,8 @@ async function fixture(action, settings = {}) {
     },
   } };
   for (const [name, value] of Object.entries(values)) Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
-  const service = { status: async () => ({ available: true, localOnly: true, generationEnabled: true, providers: { tripo: true, worldlabs: true }, maxImageBytes: 6291456, examples: [] }), create: async input => { state.creates.push(input); if (settings.createError) throw settings.createError; return state.job; }, job: async reference => { state.jobs.push(reference); if (settings.jobHandler) return settings.jobHandler(reference, state); throw missing(); } };
+  state.status = { available: true, localOnly: true, generationEnabled: true, providers: { tripo: true, worldlabs: true }, maxImageBytes: 6291456, examples: [], ...settings.status };
+  const service = { status: async () => { state.statusCalls++; return settings.statusHandler ? settings.statusHandler(state) : state.status; }, create: async input => { state.creates.push(input); if (settings.createError) throw settings.createError; return state.job; }, job: async reference => { state.jobs.push(reference); if (settings.jobHandler) return settings.jobHandler(reference, state); throw missing(); } };
   if (settings.resumeHandler) service.resumeUpload = async (reference, images, signal) => { state.resumes.push({ reference, images, signal }); return settings.resumeHandler(reference, images, signal, state); };
   state.job = { id: 'actual-job', token: 'capability', state: 'completed', assets: { photoUrl: '/photo', modelUrl: '/model', worldUrl: '/world' }, tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, title: 'Gift', story: '', worldPrompt: 'A quiet world', senderName: '', recipientName: '' };
   state.suggestion = { title: 'A suggested gift', story: 'A suggested memory.', worldPrompt: 'A suggested place in gentle light.', provider: 'template', photoAnalyzed: false, places: [], curiosities: [], warnings: [], locationStatus: 'not-requested', ...settings.suggestion };
@@ -174,6 +175,70 @@ test('actual wizard keeps one card active; selecting a photo stays put; Enter re
     assert.equal(state.completed[0].id, state.job.id); assert.equal(state.opened.length, 0);
     assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
   });
+});
+
+test('legacy daily counters and internal budgets do not gate an available creator or cap repeated explicit creations', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'], 'my-place.jpg', { type: 'image/jpeg' })); state.edit('story', 'A memory with my own words.');
+    for (let index = 0; index < 3; index++) {
+      state.next(); state.next(); state.next(); state.consent();
+      assert.equal(state.find('[data-instant-create]').disabled, false); assert.equal(state.find('[data-instant-unavailable]').hidden, true);
+      assert.doesNotMatch(state.find('[data-instant-availability]').textContent, /per day|today|daily|reset|2 of 2/i);
+      state.submit(); await flush(); assert.equal(state.creates.length, index + 1);
+      if (index < 2) state.find('[data-instant-edit]').click();
+    }
+    assert.equal(state.statusCalls, 1); assert.ok(state.creates.every(input => input.story === 'A memory with my own words.'));
+  }, { status: { limits: { owner: { used: 2, limit: 2, remaining: 0 }, global: { used: 20, limit: 20, remaining: 0 }, resetAt: '2030-01-02T00:00:00Z' }, budget: { canCreate: false, tripo: { remaining: 0 } } } });
+});
+
+test('a definitive capacity rejection preserves photo, sourced story and consent, skips job recovery, and only rechecks availability', async () => {
+  for (const code of ['GENERATION_QUOTA', 'GENERATION_BUDGET', 'STORAGE_LIMIT']) await fixture(async state => {
+    state.upload(new File(['pixels'], 'my-place.jpg', { type: 'image/jpeg' }));
+    const story = 'My reviewed memory.\nSource: https://pt.wikipedia.org/?curid=123'; state.edit('story', story);
+    state.next(); state.next(); state.next(); state.consent(); const photo = state.find('[data-instant-photo]').src;
+    state.submit(); await flush();
+    assert.equal(state.creates.length, 1); assert.equal(state.jobs.length, 0, 'Rejected prepare reserved no job to recover'); assert.equal(state.statusCalls, 2);
+    assert.equal(state.find('[data-instant-inputs]').disabled, false); assert.equal(state.find('[data-instant-create]').disabled, true);
+    assert.equal(state.field('consent').checked, true); assert.equal(state.field('story').value, story); assert.equal(state.find('[data-instant-photo]').src, photo);
+    assert.equal([...state.storage.keys()].some(key => key.includes('pending')), false);
+    const copy = state.find('[data-instant-error]').textContent;
+    assert.doesNotMatch(copy, /The request could not be completed|GENERATION_|STORAGE_LIMIT|Wikipedia|interpretation/);
+    assert.doesNotMatch(copy, /today|daily|reset/i, 'Infrastructure errors do not impose a daily limit or reset');
+    state.submit(); await flush(); assert.equal(state.creates.length, 1, 'Capacity remains gated before a new POST');
+    state.capacityReset = true; state.find('[data-instant-status-retry]').click(); await flush();
+    assert.equal(state.statusCalls, 3); assert.equal(state.creates.length, 1); assert.equal(state.jobs.length, 0);
+    assert.equal(state.find('[data-instant-create]').disabled, false); assert.equal(state.field('consent').checked, true); assert.equal(state.field('story').value, story);
+  }, {
+    createError: Object.assign(new Error('The creator is unavailable right now. Your photo and words remain here. Check availability again.'), { code, httpStatus: 429, creationRejected: true }),
+    statusHandler: state => ({ ...state.status, available: state.statusCalls === 1 || Boolean(state.capacityReset) }),
+  });
+});
+
+test('capacity errors without a definitive prepare marker still recover the existing gift', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'], 'draft.jpg', { type: 'image/jpeg' })); state.next(); state.next(); state.next(); state.consent(); state.submit(); await flush();
+    assert.equal(state.creates.length, 1); assert.equal(state.jobs.length, 1); assert.equal(state.completed.length, 1);
+    assert.equal(state.find('[data-instant-progress]').hidden, false); assert.equal(state.statusCalls, 1);
+  }, { createError: Object.assign(new Error('Creation is taking a pause.'), { code: 'GENERATION_QUOTA', httpStatus: 429, creationRejected: false }), jobHandler: (_reference, state) => state.job });
+});
+
+test('fresh infrastructure availability clears a rejected request, while a failed check preserves its pause and draft', async () => {
+  for (const failedCheck of [false, true]) await fixture(async state => {
+    state.upload(new File(['pixels'], 'draft.jpg', { type: 'image/jpeg' })); state.edit('story', 'Keep this memory.');
+    state.next(); state.next(); state.next(); state.consent(); state.submit(); await flush();
+    assert.equal(state.creates.length, 1); assert.equal(state.jobs.length, 0); assert.equal(state.field('consent').checked, true); assert.equal(state.field('story').value, 'Keep this memory.');
+    assert.equal(state.find('[data-instant-create]').disabled, failedCheck);
+    assert.equal(state.find('[data-instant-error]').hidden, !failedCheck);
+    if (failedCheck) {
+      assert.match(state.find('[data-instant-error]').textContent, /unavailable right now/);
+      state.checkRecovered = true; state.find('[data-instant-status-retry]').click(); await flush();
+      assert.equal(state.find('[data-instant-error]').hidden, true); assert.equal(state.find('[data-instant-create]').disabled, false);
+      assert.equal(state.creates.length, 1); assert.equal(state.field('consent').checked, true);
+    }
+  }, { createError: Object.assign(new Error('The creator is unavailable right now.'), { code: 'STORAGE_LIMIT', httpStatus: 429, creationRejected: true }), statusHandler: state => {
+    if (failedCheck && state.statusCalls > 1 && !state.checkRecovered) throw new TypeError('Status is temporarily unavailable');
+    return state.status;
+  } });
 });
 
 test('a completed polled gift registers once per id while repeated replies never navigate automatically', async () => {

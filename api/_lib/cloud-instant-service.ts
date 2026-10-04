@@ -87,7 +87,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       generation:{...document.generation,worldlabs:{...document.generation.worldlabs,worldSemantics:validSemantics,splatQuality:document.splatQuality,colliderStatus:document.colliderStatus}},curiosities:selectedCuriosities(document.curiosityIds),};
   }
   const status=async()=>{
-    const config=deps.settings();let budget:Record<string,unknown>={},canCreate=false;try{({budget,canCreate}=await repo.status());}catch{/* Unconfigured database is a closed create gate. */}
+    const config=deps.settings();let budget:Record<string,unknown>={},canCreate=false;try{({budget,canCreate}=await repo.status());}catch{/* Unconfigured database is a closed creation gate. */}
     return {storage:'cloud' as const,uploadMode:'signed-direct' as const,localOnly:false,available:config.enabled&&config.providers.tripo&&config.providers.worldlabs&&deps.moderator.configured&&canCreate,generationEnabled:config.enabled,providers:config.providers,maxImageBytes:CLOUD_MAX_IMAGE_BYTES,examples:INSTANT_EXAMPLES.map(value=>({...value})),budget:{...budget,canCreate},safety:{available:deps.moderator.configured,localOnly:false,protocol:'giftportals-cloud-vision-v1'}};
   };
   const prepare=async(input:CloudPrepareInput,ownerHash:string):Promise<CloudPreparedJob>=>{
@@ -113,9 +113,10 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     let job=await repo.claim(workerId,id);if(!job)return {processed:false};let selected:CloudStageName|undefined;
     try {
       if(!job.document.photoSafety){const images=await approvedInputs(job),report=await deps.moderator.screen(images);verifyCloudSafety(report,images);job.document={...job.document,photoSafety:report};await save(job);return {processed:true,state:'moderated'};}
-      if(job.document.needsReference&&job.stages['tripo-reference']?.state==='failed'){job.document={...job.document,stageFailures:{...job.document.stageFailures,tripo:job.stages['tripo-reference']!.errorCode||'PROVIDER_GENERATION_FAILED'}};}
+      const referenceFailure=job.stages['tripo-reference']?.state==='failed'?job.stages['tripo-reference']!.errorCode||'PROVIDER_GENERATION_FAILED':job.document.stageFailures?.['tripo-reference'];
+      if(job.document.needsReference&&referenceFailure){job.document={...job.document,stageFailures:{...job.document.stageFailures,tripo:referenceFailure}};}
       if(job.state==='submission_uncertain')selected=Object.entries(job.stages).find(([,stage])=>stage?.state==='processing')?.[0] as CloudStageName|undefined;
-      else if(job.document.needsReference&&!job.stages['tripo-reference'])selected='tripo-reference';
+      else if(job.document.needsReference&&!job.stages['tripo-reference']&&!job.document.stageFailures?.['tripo-reference'])selected='tripo-reference';
       else if(!job.stages.worldlabs&&!job.document.stageFailures?.worldlabs)selected='worldlabs';
       else if(job.stages['tripo-reference']?.state==='processing')selected='tripo-reference';
       else if(!job.stages.tripo&&!job.document.stageFailures?.tripo)selected='tripo';
@@ -150,8 +151,8 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     } catch(error) {
       const code=error instanceof AppError?error.code:'CLOUD_WORKER_FAILED';
       if(selected&&job.stages[selected]?.state==='submitting'&&!job.stages[selected]?.taskId){const allowed=['SUBMISSION_AMBIGUOUS','PROVIDER_REQUEST_REJECTED','PROVIDER_ID_INVALID','PROVIDER_RESPONSE_INVALID','PROVIDER_RESPONSE_LIMIT','CLOUD_TIME_SLICE_ENDED'];console.error(JSON.stringify({event:'cloud_submission_uncertain',stage:selected,errorCode:allowed.includes(code)?code:'CLOUD_WORKER_FAILED'}));job.stages[selected]={...job.stages[selected]!,state:'submission_uncertain',errorCode:'SUBMISSION_AMBIGUOUS'};await save(job,'submission_uncertain');return {processed:true,state:'submission_uncertain'};}
-      const terminal=['PHOTO_SAFETY_BLOCKED','PHOTO_SAFETY_REVIEW_REQUIRED','IMAGE_CONTENT_INVALID','PROVIDER_GENERATION_FAILED','PROVIDER_ASSET_INVALID','GENERATED_ASSET_SIZE_LIMIT','JOB_EXPIRED','SUBMISSION_AMBIGUOUS'].includes(code);
-      if(terminal){if(selected&&job.stages[selected])job.stages[selected]={...job.stages[selected]!,state:'failed',errorCode:code};else if(selected)job.document={...job.document,stageFailures:{...job.document.stageFailures,[selected]:code}};await save(job,selected?outcome(job):'failed');}
+      const terminal=['PHOTO_SAFETY_BLOCKED','PHOTO_SAFETY_REVIEW_REQUIRED','IMAGE_CONTENT_INVALID','PROVIDER_INSUFFICIENT_CREDITS','PROVIDER_GENERATION_FAILED','PROVIDER_ASSET_INVALID','GENERATED_ASSET_SIZE_LIMIT','JOB_EXPIRED','SUBMISSION_AMBIGUOUS'].includes(code);
+      if(terminal){if(selected&&job.stages[selected])job.stages[selected]={...job.stages[selected]!,state:'failed',errorCode:code};else if(selected)job.document={...job.document,stageFailures:{...job.document.stageFailures,[selected]:code}};if(selected==='tripo-reference'&&job.document.needsReference)job.document={...job.document,stageFailures:{...job.document.stageFailures,tripo:code}};await save(job,selected?outcome(job):'failed');}
       else await save(job); // GET/download/moderation retry retains existing tasks and reservations.
       return {processed:true,state:terminal?'failed':'processing',errorCode:code};
     }

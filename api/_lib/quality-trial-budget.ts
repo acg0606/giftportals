@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rmdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { AppError, ensure } from './rules.js';
@@ -12,7 +12,7 @@ export function createQualityTrialBudget(directory = resolve('.local-giftportals
  const folder = join(directory, 'quality-trials'), ledgerPath = join(folder, 'credit-reservations.json');
  const read = async (): Promise<Ledger> => {
   try {
-   const raw = await readFile(ledgerPath, 'utf8'); ensure(raw.length <= 1024 * 1024, 'TRIAL_BUDGET_INVALID', 503);
+   const raw = await readFile(ledgerPath, 'utf8');
    const value = JSON.parse(raw) as Ledger;
    ensure(value.version === 1 && Array.isArray(value.reservations) && value.reservations.every(row => validId(row.trialId) && ['tripo','worldlabs'].includes(row.provider) && Number.isFinite(row.credits) && row.credits >= 0 && ['held','settled','released'].includes(row.state) && (row.actualCredits === undefined || Number.isFinite(row.actualCredits) && row.actualCredits >= 0)), 'TRIAL_BUDGET_INVALID', 503);
    ensure(value.reservations.every(row=>row.state!=='settled'||row.actualCredits!==undefined)&&new Set(value.reservations.map(row=>row.trialId)).size === value.reservations.length,'TRIAL_BUDGET_INVALID',503); return value;
@@ -26,21 +26,11 @@ export function createQualityTrialBudget(directory = resolve('.local-giftportals
  };
  const totals = (ledger: Ledger): Record<Provider,number> => ledger.reservations.reduce((out,row)=>{ if(row.state!=='released')out[row.provider]+=row.state==='settled'?row.actualCredits!:row.credits; return out; },{tripo:0,worldlabs:0});
  const commitments = async () => totals(await read());
- const regularCommitment = async (provider: Provider) => {
-  const entries=await readdir(directory,{withFileTypes:true});let total=0;
-  for(const entry of entries) if(entry.isDirectory()&&/^[0-9a-f-]{36}$/.test(entry.name)) {
-   const job=JSON.parse(await readFile(join(directory,entry.name,'job.json'),'utf8')) as Record<Provider,{credits?:number}>;
-   const amount=job[provider]?.credits ?? (provider==='tripo'?100:1580); ensure(Number.isFinite(amount)&&amount>=0,'TRIAL_BUDGET_INVALID',503);total+=amount;
-  } return total;
- };
  const reserve = async (input:{trialId:string;provider:Provider;credits:number}) => locked(async()=>{
-  ensure(validId(input.trialId)&&['tripo','worldlabs'].includes(input.provider)&&Number.isInteger(input.credits)&&input.credits>0&&input.credits<=(input.provider==='tripo'?150:3100),'TRIAL_RESERVATION_INVALID',400);
+  ensure(validId(input.trialId)&&['tripo','worldlabs'].includes(input.provider)&&Number.isSafeInteger(input.credits)&&input.credits>0,'TRIAL_RESERVATION_INVALID',400);
   const ledger=await read(),prior=ledger.reservations.find(row=>row.trialId===input.trialId);
   if(prior) { ensure(prior.provider===input.provider&&prior.credits===input.credits&&prior.state!=='released','TRIAL_RESERVATION_MISMATCH',409);return {...prior}; }
-  const configured=process.env[input.provider==='tripo'?'LOCAL_TRIPO_CREDIT_CAP':'LOCAL_WORLDLABS_CREDIT_CAP'];
-  const env=configured===undefined?Number.MAX_SAFE_INTEGER:Number(configured);
-  ensure((configured===undefined||/^[1-9]\d{0,15}$/.test(configured))&&Number.isSafeInteger(env)&&env>0,'TRIAL_BUDGET_INVALID',503);
-  ensure(await regularCommitment(input.provider)+totals(ledger)[input.provider]+input.credits<=env,'LOCAL_GENERATION_BUDGET',429);
+  // Record reservations for replay/recovery; actual provider balances decide availability.
   const row:Reservation={...input,state:'held',updatedAt:new Date().toISOString()};ledger.reservations.push(row);await save(ledger);return {...row};
  });
  const settle = async (trialId:string,actualCredits:number) => locked(async()=>{
@@ -55,10 +45,6 @@ export function createQualityTrialBudget(directory = resolve('.local-giftportals
   const ledger=await read(),row=ledger.reservations.find(item=>item.trialId===trialId);
   ensure(row&&row.state!=='released'&&row.actualCredits===expectedActualCredits&&expectedActualCredits<=row.credits,'TRIAL_RESTORE_MISMATCH',409);
   if(row.state==='held')return {...row};
-  const configured=process.env[row.provider==='tripo'?'LOCAL_TRIPO_CREDIT_CAP':'LOCAL_WORLDLABS_CREDIT_CAP'];
-  const env=configured===undefined?Number.MAX_SAFE_INTEGER:Number(configured);
-  ensure((configured===undefined||/^[1-9]\d{0,15}$/.test(configured))&&Number.isSafeInteger(env)&&env>0,'TRIAL_BUDGET_INVALID',503);
-  ensure(await regularCommitment(row.provider)+totals(ledger)[row.provider]-expectedActualCredits+row.credits<=env,'LOCAL_GENERATION_BUDGET',429);
   row.state='held';row.updatedAt=new Date().toISOString();await save(ledger);return {...row};
  });
  // Call only when the service has proved that no paid POST was attempted.

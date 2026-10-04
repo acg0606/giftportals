@@ -6,6 +6,13 @@ export function cloudCreatorOrigin(hostname: string): boolean {
   return Boolean(hostname) && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname.toLowerCase());
 }
 
+const capacityErrors: Record<string, string> = {
+  GENERATION_QUOTA: 'The creator is unavailable right now. Your photo and words remain here. Check availability again.',
+  GENERATION_BUDGET: 'The creator is unavailable right now. Your photo and words remain here. Check availability again.',
+  STORAGE_LIMIT: 'The photo could not be stored right now. Your photo and words remain here. Check availability again.',
+  PROVIDER_INSUFFICIENT_CREDITS: 'The generation service does not have enough credits for this creation. Your photo and words remain here.',
+};
+
 /** Decode locally; JSON API requests contain declarations rather than photos. */
 export async function cloudImageBytes(dataUrl: string): Promise<{ declaration: CloudImageDeclaration; bytes: Uint8Array }> {
   const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
@@ -51,7 +58,15 @@ export function createCloudInstantService(fetcher: typeof fetch = fetch): Instan
       });
       const result = await response.json();
       checkOpen(signal); checkOpen(abort.signal);
-      if (!response.ok || !result.ok) throw Object.assign(new Error(result.error?.message || 'Your gift could not be reached. Please try again.'), { code: result.error?.code });
+      if (!response.ok || !result.ok) {
+        const code = typeof result.error?.code === 'string' && /^[A-Z][A-Z0-9_]{0,79}$/.test(result.error.code) ? result.error.code : undefined;
+        throw Object.assign(new Error(code && capacityErrors[code] || result.error?.message || 'Your gift could not be reached. Please try again.'), {
+          code, httpStatus: response.status,
+          // Only a rejected prepare proves that no gift was reserved. An upload,
+          // finalize, or lost response still needs its existing recovery path.
+          creationRejected: action === 'prepare' && response.status === 429 && Boolean(code && Object.hasOwn(capacityErrors, code)),
+        });
+      }
       return result.data as T;
     } finally { clearTimeout(timeout); signal.removeEventListener('abort', cancel); }
   }

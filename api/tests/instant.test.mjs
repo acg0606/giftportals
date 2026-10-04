@@ -45,26 +45,22 @@ async function fixture(t, overrides = {}) {
   ...overrides });
  return { service, calls, directory };
 }
-test('operator budgets have no default spend ceiling and accept only positive safe integers',()=>{
+test('local settings ignore legacy artificial credit caps, including stale invalid values',()=>{
  const keys=['LOCAL_WORLDLABS_CREDIT_CAP','LOCAL_TRIPO_CREDIT_CAP'],saved=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
  try{
-  for(const key of keys)delete process.env[key];let config=i.instantSettings();assert.equal(config.worldBudget,Number.MAX_SAFE_INTEGER);assert.equal(config.tripoBudget,Number.MAX_SAFE_INTEGER);
-  process.env.LOCAL_WORLDLABS_CREDIT_CAP='15000';process.env.LOCAL_TRIPO_CREDIT_CAP='3000';config=i.instantSettings();assert.equal(config.worldBudget,15000);assert.equal(config.tripoBudget,3000);
-  for(const [key,maximum]of [[keys[0],Number.MAX_SAFE_INTEGER],[keys[1],Number.MAX_SAFE_INTEGER]]){
-   process.env[key]=String(maximum);assert.doesNotThrow(()=>i.instantSettings());
-   for(const value of ['', '0','-1','1.5','1e4','NaN','Infinity',' 1500','001500',String(maximum+1),'99999999999999999']){process.env[key]=value;assert.throws(()=>i.instantSettings(),error=>error.code==='LOCAL_CREDIT_CAP_INVALID'&&error.status===503);}
-   process.env[key]='1000000';assert.doesNotThrow(()=>i.instantSettings());
-   process.env[key]='1';assert.doesNotThrow(()=>i.instantSettings());
+  for(const value of [undefined,'1','0','NaN','1000',String(Number.MAX_SAFE_INTEGER+1)]){
+   for(const key of keys)if(value===undefined)delete process.env[key];else process.env[key]=value;
+   const config=i.instantSettings();assert.equal(config.worldBudget,undefined);assert.equal(config.tripoBudget,undefined);
   }
  }finally{for(const key of keys)if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}
 });
-test('status accounts for pending reservations and settled costs and never signals readiness past the cap',async t=>{
- const {service,calls}=await fixture(t,{settings:()=>({...settings(),worldBudget:1580}),complete:async()=>null});
- let status=await service.status();assert.equal(status.available,true);assert.deepEqual(status.budget.worldlabs,{cap:1580,committed:0,remaining:1580,nextReservation:1580});assert.equal(calls.length,0);
- const first=await service.create(input());await service.get(first.id,first.token);status=await service.status();assert.equal(status.available,false);assert.equal(status.budget.canCreate,false);assert.equal(status.budget.worldlabs.committed,1580);assert.equal(status.budget.worldlabs.remaining,0);
- await assert.rejects(()=>service.create(input()),error=>error.code==='LOCAL_GENERATION_BUDGET');assert.equal(calls.filter(call=>call[2]==='POST').length,2);
- const completed=await fixture(t,{settings:()=>({...settings(),worldBudget:3160})}),started=await completed.service.create(input());await completed.service.get(started.id,started.token);
- status=await completed.service.status();assert.equal(status.budget.tripo.committed,30);assert.equal(status.budget.worldlabs.committed,1580);assert.equal(status.budget.worldlabs.remaining,1580);assert.equal(status.available,true);
+test('status accounts for pending reservations and settled costs without artificial availability ceilings',async t=>{
+ const {service,calls}=await fixture(t,{settings:()=>({...settings(),worldBudget:1,tripoBudget:1}),complete:async()=>null});
+ let status=await service.status();assert.equal(status.available,true);assert.deepEqual(status.budget.worldlabs,{committed:0,nextReservation:1580});assert.equal(calls.length,0);
+ const first=await service.create(input());await service.get(first.id,first.token);status=await service.status();assert.equal(status.available,true);assert.equal(status.budget.canCreate,true);assert.equal(status.budget.worldlabs.committed,1580);assert.equal(status.budget.worldlabs.remaining,undefined);
+ const second=await service.create(input());await service.get(second.id,second.token);assert.equal(calls.filter(call=>call[2]==='POST').length,4);
+ const completed=await fixture(t),started=await completed.service.create(input());await completed.service.get(started.id,started.token);
+ status=await completed.service.status();assert.equal(status.budget.tripo.committed,30);assert.equal(status.budget.worldlabs.committed,1580);assert.equal(status.available,true);
 });
 test('local route rejects external host, peer, mismatched origin and cross-site browser POST', () => {
  const check = extra => i.assertLocalInstantRequest({ method: 'POST', headers: { host: '127.0.0.1:4325', origin: 'http://127.0.0.1:4325', 'sec-fetch-site': 'same-origin', ...extra } });
@@ -191,10 +187,29 @@ test('ambiguous paid response stays failed after restart and polling never re-su
  const restarted = i.createInstantService({ directory, settings, json: async (provider, path, method = 'GET') => { assert.equal(method, 'GET'); return { done: false }; }, complete: async () => null });
  const recovered = await restarted.get(first.id, first.token); assert.equal(recovered.tripo.errorCode, 'SUBMISSION_AMBIGUOUS'); assert.equal(posts, 2);
 });
-test('per-build reservations enforce World Labs budget even before a task settles', async t => {
- const { service, calls } = await fixture(t, { settings: () => ({ ...settings(), worldBudget: 1580 }), complete: async () => null });
- const first = await service.create(input()); await service.get(first.id, first.token);
- await assert.rejects(() => service.create(input()), e => e.code === 'LOCAL_GENERATION_BUDGET'); assert.equal(calls.filter(call => call[2] === 'POST').length, 2);
+test('local creation accepts requests beyond active capacity and starts the persisted queue without exceeding concurrency',async t=>{
+ const {service,calls,directory}=await fixture(t,{settings:()=>({...settings(),worldBudget:1,tripoBudget:1}),complete:async()=>null});
+ const first=await service.create(input()),second=await service.create(input()),thirdInput=input(),third=await service.create(thirdInput);
+ await service.get(first.id,first.token);await service.get(second.id,second.token);await service.get(third.id,third.token);
+ assert.equal(calls.filter(call=>call[2]==='POST').length,4);assert.deepEqual((await service.status()).queue,{active:2,waiting:1,concurrency:2});
+ const replay=await service.create(thirdInput);assert.equal(replay.id,third.id);assert.equal(calls.filter(call=>call[2]==='POST').length,4);
+ await assert.rejects(()=>service.get(third.id,token()),error=>error.code==='JOB_UNAVAILABLE');
+ const path=join(directory,first.id,'job.json'),stored=JSON.parse(await readFile(path,'utf8'));stored.state='completed';stored.tripo.state='completed';stored.worldlabs.state='completed';await writeFile(path,JSON.stringify(stored));
+ const ready=await service.get(third.id,third.token);assert.equal(ready.tripo.state,'processing');assert.equal(ready.worldlabs.state,'processing');assert.equal(calls.filter(call=>call[2]==='POST').length,6);
+ assert.deepEqual((await service.status()).queue,{active:2,waiting:0,concurrency:2});
+});
+test('completed history beyond the former 24-job lifetime ceiling cannot block a new local gift',async t=>{
+ const {service,calls,directory}=await fixture(t),first=await service.create(input());await service.get(first.id,first.token);
+ const stored=JSON.parse(await readFile(join(directory,first.id,'job.json'),'utf8'));
+ for(let index=0;index<24;index++){const id=`00000000-0000-4000-8000-${String(index).padStart(12,'0')}`;await (await import('node:fs/promises')).mkdir(join(directory,id));await writeFile(join(directory,id,'job.json'),JSON.stringify({...stored,id,dedupeHash:`history-${index}`}));}
+ assert.equal((await service.status()).available,true);const next=await service.create(input());await service.get(next.id,next.token);assert.equal(calls.filter(call=>call[2]==='POST').length,4);
+});
+test('independent local services share two execution slots while every distinct creation remains accepted',async t=>{
+ const f=await fixture(t,{complete:async()=>null});
+ const peer=i.createInstantService({directory:f.directory,settings,safety:testSafety,credit:async()=>{},upload:async()=> 'peer-file',json:async(provider,path,method='GET')=>{f.calls.push([provider,path,method]);return method==='POST'?(provider==='tripo'?{task_id:'peer-model'}:{operation_id:'peer-world'}):{};},complete:async()=>null});
+ const [one,two,three,four]=await Promise.all([f.service.create(input()),peer.create(input()),f.service.create(input()),peer.create(input())]);
+ for(const [service,job]of [[f.service,one],[peer,two],[f.service,three],[peer,four]])await service.get(job.id,job.token);
+ assert.deepEqual((await f.service.status()).queue,{active:2,waiting:2,concurrency:2});assert.equal(f.calls.filter(call=>call[2]==='POST').length,4);
 });
 test('one provider failure leaves the completed gift available with honest partial status', async t => {
  const { service } = await fixture(t, { complete: async provider => {
@@ -339,12 +354,11 @@ test('decline cannot affect a reference already approved or a GLB already submit
  await assert.rejects(()=>f.service.rejectOwnedKeepsakeReference(created.jobId,checked.tripoReference.referenceSha256),e=>e.code==='REFERENCE_ALREADY_SUBMITTED');
  assert.equal(f.posts.filter(x=>x[1].endsWith('image-to-model')&&x[2]==='POST').length,2);
 });
-test('a resumed GLB cannot replace approved intermediate bytes or escape the remake credit cap',async t=>{
+test('a resumed GLB cannot replace approved intermediate bytes while remakes ignore artificial credit caps',async t=>{
  const f=await souvenirFixture(t),source=await f.service.create(input({photoIntent:'place',objectImageDataUrl:'data:image/png;base64,'+f.referenceImage.toString('base64'),objectImageRole:'miniature-reference'}));await f.service.get(source.id,source.token);
  const made=await f.service.remakeKeepsakeForOwnedJob(source.id,{consent:true,dedupeKey:'tamper-remake-reference',pauseAfterReference:true}),checked=await f.service.pollOwnedKeepsake(made.jobId);
  await writeFile(checked.referencePath,image);await assert.rejects(()=>f.service.approveOwnedKeepsakeReference(made.jobId,checked.tripoReference.referenceSha256,true),e=>e.code==='PHOTO_SAFETY_REQUIRED');
- const limited=i.createInstantService({directory:f.directory,settings:()=>({...settings(),tripoBudget:200}),safety:testSafety});
- await assert.rejects(()=>limited.remakeKeepsakeForOwnedJob(source.id,{consent:true,dedupeKey:'second-remake-beyond-cap'}),e=>e.code==='LOCAL_GENERATION_BUDGET');
+ const again=await f.service.remakeKeepsakeForOwnedJob(source.id,{consent:true,dedupeKey:'second-remake-beyond-former-cap',pauseAfterReference:true});assert.ok(again.jobId);assert.notEqual(again.jobId,made.jobId);
  assert.equal(f.posts.filter(x=>x[1].endsWith('image-to-model')&&x[2]==='POST').length,1);
 });
 test('two live services sharing one ledger never claim the same pending paid stage twice',async t=>{

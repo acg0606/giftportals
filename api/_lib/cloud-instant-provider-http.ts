@@ -31,7 +31,7 @@ export function createCloudProviderHTTP(deadline:number){
       throw error;
     }
   }
-  async function credit(provider:Provider,reservation:number){const value=await json(provider,provider==='tripo'?'/account/balance':'/credits'),available=provider==='tripo'?Number(value.balance)-Number(value.frozen||0):Number(value.remaining_credits);ensure(Number.isFinite(available)&&available>=reservation+(provider==='worldlabs'?1000:0),'PROVIDER_CREDIT_FLOOR',403);}
+  async function credit(provider:Provider,reservation:number){const value=await json(provider,provider==='tripo'?'/account/balance':'/credits'),available=provider==='tripo'?Number(value.balance)-Number(value.frozen||0):Number(value.remaining_credits);ensure(Number.isFinite(available)&&available>=reservation,'PROVIDER_INSUFFICIENT_CREDITS',403);}
   async function download(url:unknown,provider:Provider,suffix:string,mime:string,maxBytes=25*1024*1024,maxSplats=600000){
     const origin=providerAssetUrl(url,provider);let response:Response;try{response=await fetch(origin,{redirect:'error',signal:AbortSignal.timeout(cloudRemaining(deadline,20000,20000))});}catch(error){if(error instanceof AppError)throw error;throw new AppError('PROVIDER_DOWNLOAD_FAILED',502);}
     ensure(response.ok&&response.body,'PROVIDER_DOWNLOAD_FAILED',502);ensure(Number(response.headers.get('content-length')||0)<=maxBytes,'GENERATED_ASSET_SIZE_LIMIT',502);

@@ -1,10 +1,9 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
 import type {IncomingMessage,ServerResponse} from 'node:http';
-import {AppError,ensure,secretMatches} from './_lib/rules.js';
+import {AppError,ensure} from './_lib/rules.js';
 import {createPlaceAssistant,MAX_ASSISTANT_BODY_BYTES} from './_lib/place-assistant.js';
 export const config={maxDuration:60};
 type Request=IncomingMessage&{body?:unknown};
-const key=Symbol.for('giftportals.place-assistant.v10.2.runtime-oidc');
+const key=Symbol.for('giftportals.place-assistant.v10.2.unrestricted-suggestions');
 const shared=globalThis as typeof globalThis&{[key]?:ReturnType<typeof createPlaceAssistant>};
 const adapter=shared[key] ||= createPlaceAssistant();
 /** Vercel injects this header into function requests; callers outside that runtime cannot supply credentials. */
@@ -38,9 +37,8 @@ function parseBody(req:Request){
  ensure(body&&typeof body==='object'&&!Array.isArray(body),'INVALID_BODY');
  ensure(Buffer.byteLength(JSON.stringify(body))<=MAX_ASSISTANT_BODY_BYTES,'BODY_TOO_LARGE',413);return body;
 }
-/** Limits are ephemeral; provider/free-credit limits remain the final cross-instance cap. */
+/** Authorized suggestions use the provider's availability without an app usage allowance. */
 export function createPlaceAssistantHandler(service=adapter){
- const quotas=new Map<string,{at:number;count:number}>();
  return async(req:Request,res:ServerResponse)=>{
   res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
   const controller=new AbortController(),abort=()=>controller.abort(),closed=()=>{if(!res.writableEnded)abort();};req.on('aborted',abort);res.on('close',closed);
@@ -50,17 +48,6 @@ export function createPlaceAssistantHandler(service=adapter){
    if(action==='status'){ensure(req.method==='GET','METHOD_NOT_ALLOWED',405);data=service.status(runtimeAssistantToken(req));}
    else if(action==='suggest'){
     ensure(req.method==='POST','METHOD_NOT_ALLOWED',405);const body=parseBody(req);
-    const now=Date.now(),peer=String(req.headers['x-vercel-forwarded-for']||req.socket?.remoteAddress||'unknown');
-    const secret=process.env.CLOUD_DEDUPE_SECRET||'';
-    let cookie=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('__Host-gp_assistant='))?.split('=').slice(1).join('='),owner=cookie?.split('.')[0],signature=cookie?.split('.')[1];
-    const sign=(value:string)=>createHmac('sha256',secret).update(`assistant:${value}`).digest('base64url');
-    if(secret.length>=32&&(!owner||!/^[A-Za-z0-9_-]{32}$/.test(owner)||!secretMatches(signature,sign(owner)))){
-     owner=randomBytes(24).toString('base64url');res.setHeader('Set-Cookie',`__Host-gp_assistant=${owner}.${sign(owner)}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=1800`);
-    }
-    const ids=[createHash('sha256').update(peer).digest('hex'),...(secret.length>=32&&owner?[`owner:${createHash('sha256').update(owner).digest('hex')}`]:[])];
-    if(quotas.size>=512){for(const [id,v]of quotas){if(now-v.at>=10*60*1000)quotas.delete(id);}if(quotas.size>=512)throw new AppError('ASSISTANT_RATE_LIMIT',429);}
-    for(const id of ids){const v=quotas.get(id);ensure(!v||now-v.at>=10*60*1000||v.count<12,'ASSISTANT_RATE_LIMIT',429);}
-    for(const id of ids){const v=quotas.get(id);quotas.set(id,v&&now-v.at<10*60*1000?{at:v.at,count:v.count+1}:{at:now,count:1});}
     data=await service.suggest(body,controller.signal,runtimeAssistantToken(req));
    }else throw new AppError('ACTION_UNAVAILABLE',404);
    if(!controller.signal.aborted&&!res.destroyed){res.statusCode=200;res.end(JSON.stringify({ok:true,data}));}

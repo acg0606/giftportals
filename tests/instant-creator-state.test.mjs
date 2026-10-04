@@ -71,6 +71,16 @@ test('unknown provider acknowledgement is not presented as a definitive generati
   assert.equal(instantGiftReady({ ...complete, state: 'processing', tripo: { state: 'failed', errorCode: 'SUBMISSION_AMBIGUOUS' } }), false);
 });
 
+test('real provider credit failures explain the unavailable stage without imposing a daily limit or changing completed stages', () => {
+  assert.match(instantProviderLabel('tripo', 'pending', 'failed', 'PROVIDER_INSUFFICIENT_CREDITS'), /service has insufficient credits/, 'A failed miniature reference explains the interrupted souvenir before model submission');
+  for (const provider of ['tripo', 'worldlabs']) {
+    const label = instantProviderLabel(provider, 'failed', 'failed', 'PROVIDER_INSUFFICIENT_CREDITS');
+    assert.match(label, /service has insufficient credits for this creation/);
+    assert.doesNotMatch(label, /quota|per day|daily|reset|billing/i);
+    assert.match(instantProviderLabel(provider, 'completed', 'completed', 'PROVIDER_INSUFFICIENT_CREDITS'), /ready|sculpted/);
+  }
+});
+
 test('city and object examples keep distinct references and changing intent never mutates the catalog', () => {
   const before = JSON.stringify(INSTANT_EXAMPLES), places = instantIntentExamples(INSTANT_EXAMPLES, 'place');
   assert.equal(places.length, 5);
