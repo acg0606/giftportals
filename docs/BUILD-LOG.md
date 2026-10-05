@@ -6,13 +6,45 @@ browser, inspect the object, read the author's story and explore the surrounding
 scene.
 
 - [Live application](https://giftportals.vercel.app)
-- [English walkthrough](https://giftportals.vercel.app/media/giftportals-tripothon-english-walkthrough.mp4)
+- [Current narrated English walkthrough — version 11.1](https://giftportals.vercel.app/media/giftportals-v11.1-narrated-walkthrough.mp4)
 - [Source repository](https://github.com/acg0606/giftportals)
 - [Credits and prior-work disclosure](CREDITS.md)
 
 This log records completed development and its practical limits as reviewed on
-4 October 2026. The application release is **10.3.3**. Publication and a selected
-track do not establish a submitted entry or successful hardware integration.
+5 October 2026. The current application release is **11.1.0**. The submitted
+entry uses the public app and creator build-log page. A selected tool track does
+not establish successful hardware integration.
+
+## October 5 — public cloud memories and the current walkthrough
+
+Version 11 adds separately consented public gifts, stored as independent verified
+copies in the cloud. Visitors open the shared memory desk without login. Entering
+a delivered world starts a 30-second automatic arrival and opens a newspaper with
+the original photograph, words and dedication. Closing it enables exploration
+where the real collider supports movement; reduced motion or unsupported geometry
+uses a still arrival. Paris and Rio worlds use credited photographic references
+and infer unseen surroundings. Their earlier Tripo miniature assets are retained.
+
+The baseline release passed 1,106 tests, frontend/server TypeScript, the production
+build and real mobile creator/archive/viewer checks. [Version 11 evidence](VERSION-11-PREVIEW.md).
+
+Version 11.1 publishes two explicitly authorized Praça Américo Portugal Gouvêa
+memories by copying and verifying their already delivered media. No replacement
+model or world was generated for that import. Its 49 focused archive tests,
+type checks and build passed; anonymous checks verified ten original archived
+files and fresh media signatures. [Version 11.1 evidence](RELEASE-11.1-PUBLIC-EXAMPLES.md).
+
+The current submission materials describe that behavior and distinguish original
+photographs from inferred surroundings. The narrated walkthrough records real
+application footage and completed gifts, with English AI voice and captions.
+Generation is not presented as instantaneous. Full photo authors, source and
+license links, modified references, narration and prior-work details are in
+[Credits](CREDITS.md) and [photographic world receipts](V11-WORLD-GENERATION.md).
+
+The [creator build log](https://andre-giftportals.kalmon4ever.chatgpt.site) is public
+at the owner's request. It preserves the historical social posts alongside the
+current experience and video. Blueprint import, supports, slicing, printing and
+headset validation remain unverified.
 
 ## Starting point and prior work
 
@@ -34,8 +66,9 @@ from scratch. [Full prior-work and asset credits](CREDITS.md).
 Tripo supplies completed textured GLB souvenirs. World Labs supplies completed
 Marble environments, including SPZ splats, panoramas and colliders. Three.js and
 Spark render the assets; Rapier resolves supported walking against the provider's
-original collider. Public examples and stories are fictional, and generated
-places are artistic interpretations rather than surveyed reconstructions.
+original collider. The earlier built-in example names and stories were fictional.
+Generated places are artistic interpretations rather than surveyed reconstructions;
+the current owner-authorized public memories retain their approved originals.
 
 TapNow artwork informed the welcome and an earlier room reference. OpenAI
 ImageGen produced the selected daylight concept and a cleaned room reference.
@@ -116,7 +149,7 @@ All 1,014 application tests and four offline-worker tests passed, alongside
 frontend/server TypeScript and the production build.
 [English policy and validation](RELEASE-10.3.3-ENGLISH.md).
 
-## Walkthrough and public evidence
+## Historical October 4 walkthrough and public evidence
 
 The [80-second English walkthrough](https://giftportals.vercel.app/media/giftportals-tripothon-english-walkthrough.mp4)
 shows actual recorded public UI: the creator preview, completed Rio/Paris

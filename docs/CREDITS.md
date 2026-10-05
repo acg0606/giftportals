@@ -1,16 +1,32 @@
 # Credits and prior work
 
-GiftPortals is built for Tripothon S1 with AI-assisted implementation and original demo assets. All demo people, journeys and stories are fictional; generated media is explicitly labeled.
+GiftPortals is built for Tripothon S1 with AI-assisted implementation. Built-in Paris/Rio example names and stories are illustrative. Owner-authorized public gifts preserve their original photographs and approved words; they are not labeled fictional. Generated surroundings are spatial interpretations and infer unseen areas.
 
-## Release 10.0.0
+## Current release 11.1 — source photographs and public memories
+
+Version 11's Paris and Rio worlds use photographic references. Their Tripo keepsakes reuse the earlier approved miniature assets; the newly credited photographs generated their World Labs worlds, not replacement keepsakes.
+
+- Paris: **“Overview Seine River to Eiffel Tower”**, photograph by **Alex Liivet**, [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). [Original photograph](https://commons.wikimedia.org/wiki/File:Overview_Seine_River_to_Eiffel_Tower_(37578867564).jpg). The original source photograph is preserved; World Labs generated the spatial surroundings.
+- Rio: **“Botafogo Beach and the Sugarloaf Mountain”**, photograph by **Donatas Dabravolskas**, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). [Original photograph](https://commons.wikimedia.org/wiki/File:Botafogo_Beach_and_the_Sugarloaf_Mountain.jpg). A Wikimedia resized reference was used; World Labs inferred the three-dimensional surroundings, including foreground structures absent from the source. The source photo and attributed adaptations retain CC BY-SA 4.0; this is not a license assertion for the entire application. [Generation receipts, source files and changes](V11-WORLD-GENERATION.md).
+- Praça Américo Portugal Gouvêa: original owner-provided photographs and approved words, published with the owner's explicit permission. Version 11.1 copies and verifies already delivered models, worlds, panoramas and colliders without new provider generation. A named photographer or third-party license is not recorded in the public gifts and is not inferred. [Publication and asset preservation evidence](RELEASE-11.1-PUBLIC-EXAMPLES.md).
+
+The new [version 11.1 narrated walkthrough](https://giftportals.vercel.app/media/giftportals-v11.1-narrated-walkthrough.mp4) records the actual current application with completed gifts. Its English AI voice uses **Kokoro-82M `af_heart`** (Apache-2.0 model; `kokoro-onnx` MIT). Arial caption glyphs are rasterized from the installed system font; no font file is distributed, no voice is cloned, and no music is used. The previous 80-second walkthrough and social posts remain historical evidence.
+
+Public publication consent is separate from generation approval. Original photographs, names, words and delivered assets enter the anonymous gallery only after explicitly authorized archiving. Private gifts are not automatically published. [Version 11 archive and arrival evidence](VERSION-11-PREVIEW.md).
+
+## Historical increments and provider credits
+
+The following sections preserve the earlier releases' provenance and scope. References to the presentation or assets in those increments do not replace the current version 11.1 source-photo and public-memory credits above.
+
+### Release 10.0.0
 
 The 10.3.0 mobile desk follows the user's selected Daylight atelier concept, generated with the built-in OpenAI ImageGen tool. A cleaned, UI-free reference generated a new full World Labs Marble 1.0 environment; one paid generation consumed 1,580 credits. Existing Tripo keepsakes and travel props remain real imported meshes. Mobile keepsake variants change embedded texture resolution/encoding only, retaining byte-identical geometry, node transforms and material structure. A small receiver for contact shadows is an exact subset of the generated World Labs collider, with no authored tabletop plane or replacement room geometry. [Asset provenance](../public/assets/daylight-desk/provenance.json), [mobile texture audit](../public/assets/daylight-desk/keepsakes/mobile-keepsakes-audit.json), [shadow receiver provenance](../public/assets/daylight-desk/shadow-receiver-provenance.json).
 
 The 10.3 interaction changes reuse those assets: model-bound detail zoom and four-to-six-chapter guided walks derived through the existing Rapier capsule and original World Labs collider. They create no new provider job. [Release readiness and evidence](RELEASE-10.3-READINESS.md). Exact installed copyright and license texts for all six production dependencies are distributed in the [third-party notices](../public/licenses/third-party-notices.txt).
 
-The current welcome uses actual TapNow raster artwork. The collection renders a newly generated World Labs room with Three.js/Spark, replacing the earlier authored room props while preserving the completed Tripo keepsakes. No specific TapNow model name is asserted because the provider UI was inconsistent. Standard WebXR interaction and local print preparation reuse actual assets; physical PICO validation, HeyGears Blueprint/printing and Jupiter SR device use remain pending. [Current provenance and claim boundaries](V10-SPONSOR-AUDIT.md), [bundled release asset credits](../public/assets/v10/ASSET-CREDITS.md).
+The release 10 welcome uses actual TapNow raster artwork. Its collection renders a newly generated World Labs room with Three.js/Spark, replacing the earlier authored room props while preserving the completed Tripo keepsakes. No specific TapNow model name is asserted because the provider UI was inconsistent. Standard WebXR interaction and local print preparation reuse actual assets; physical PICO validation, HeyGears Blueprint/printing and Jupiter SR device use remain pending. [Release 10 provenance and claim boundaries](V10-SPONSOR-AUDIT.md), [bundled release asset credits](../public/assets/v10/ASSET-CREDITS.md).
 
-The increment descriptions below preserve earlier work and generation history. They do not replace the current release audit or imply that the earlier procedural/painted room is still active.
+The increment descriptions below preserve earlier work and generation history. They do not replace the release 10 audit or imply that the earlier procedural/painted room is still active.
 
 ## Prior-work declaration
 
@@ -33,7 +49,7 @@ The v6 Memory Portal increment adds an original continuous recipient encounter: 
 - Inter variable font, Rasmus Andersson: bundled from the [official distribution](https://rsms.me/inter/), SIL Open Font License, with the license in `public/assets/portal-dusk/Inter-LICENSE.txt`.
 - Phosphor regular icons: bundled individual assets from the [official core repository](https://github.com/phosphor-icons/core), MIT license, with the license in `public/assets/portal-dusk/Phosphor-LICENSE.txt`.
 - Tripo API: original fictional souvenir input image and its generated textured 3D interpretation. Provenance is recorded in the generation ledger.
-- World Labs API: original fictional artistic environment; it is not a factual street reconstruction.
+- Earlier World Labs demo: original fictional artistic environment; it is not a factual street reconstruction. Version 11's photographic worlds are credited separately above.
 - TapNow: actual Release 10.0.0 homepage raster output is bundled and recorded in the release asset credits; model-specific attribution is intentionally unclaimed.
 - Three.js: browser 3D rendering, MIT license.
 - Vite and TypeScript: build and type system.
@@ -41,6 +57,6 @@ The v6 Memory Portal increment adds an original continuous recipient encounter: 
 - God's Eye View, copyright 2026 Bilawal Sidhu (MIT): pinned decimal coordinate parser and adapted camera framing in v3. This is selected navigation source reuse; the upstream OSINT application and third-party datasets are excluded. [Integration and exact provenance](GODS_EYE_INTEGRATION.md).
 - CesiumJS 1.138.0 (Apache-2.0 and bundled third-party notices): the optional geographic globe. Natural Earth imagery is public domain; optional OpenStreetMap street tiles retain their visible contributor credit and independent service terms.
 
-Geographical names and sourced point positions are documented in MAP_RULES. No museum image, private photo, cloned voice, copied character or third-party composition is included without explicit provenance/permission. The earlier pastel presentation and the current Memory Studio presentation are original GiftPortals designs.
+Geographical names and sourced point positions are documented in MAP_RULES. No museum image, private photo, cloned voice, copied character or third-party composition is included without explicit provenance/permission. The earlier pastel presentation and the v5 Memory Studio presentation are original GiftPortals designs.
 
 Participation terms retain author IP and provide the event's stated non-exclusive promotional license. The final portal declarations must be reviewed with the actual submitted materials.
