@@ -21,6 +21,7 @@ const walkingViewpoints = dataUrl(compile(await readFile(new URL('../src/walking
 const walkingTour = dataUrl(compile(await readFile(new URL('../src/walking-tour.ts', import.meta.url), 'utf8')));
 const controller = dataUrl(compile(await readFile(new URL('../src/generated-world.ts', import.meta.url), 'utf8'))
   .replace(/import \* as THREE from 'three';/, 'const THREE = globalThis.__worldFixture.THREE;')
+  .replace(/from 'three-mesh-bvh'/, `from '${import.meta.resolve('three-mesh-bvh')}'`)
   .replace(/import \{ SparkRenderer, SplatMesh \} from '@sparkjsdev\/spark';/, 'const { SparkRenderer, SplatMesh } = globalThis.__worldFixture;')
   .replace(/import \{ GLTFLoader \} from 'three\/addons\/loaders\/GLTFLoader.js';/, 'const { GLTFLoader } = globalThis.__worldFixture;')
   .replace(/from '\.\/world-navigation'/, `from '${navigation}'`)
@@ -39,7 +40,7 @@ let sequence = 0;
 async function fixture(action, settings = {}) {
   const names = ['document', 'window', 'location', 'devicePixelRatio', 'innerWidth', 'innerHeight', 'ResizeObserver', 'IntersectionObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'fetch', 'matchMedia', 'createImageBitmap', '__worldFixture'];
   const saved = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const frames = new Map(), renderers = [], meshes = [], sparks = [], requests = [], projections = [], errors = [], walking = [], tours = [], viewpoints = [], cameraPoses = [], firstPersonStates = [], physicsInstances = [], bitmaps = [], gardens = [], gardenStates = [], walkingPointReports = [], lifecycle = [], walkingTours = [];
+  const frames = new Map(), renderers = [], meshes = [], sparks = [], requests = [], projections = [], errors = [], walking = [], tours = [], viewpoints = [], cameraPoses = [], firstPersonStates = [], physicsInstances = [], bitmaps = [], gardens = [], gardenStates = [], walkingPointReports = [], lifecycle = [], walkingTours = [], cinematicStates = [];
   let walkingTourCallback;
   const firstPerson = settings.firstPerson === true ? { spawn: [0, 1.55, .03], eyeHeight: 1.55, metricScale: 1, groundOffset: 0, walkSpeed: 1.15 } : settings.firstPerson;
   let intersection, visibilityDisconnected = 0;
@@ -49,6 +50,7 @@ async function fixture(action, settings = {}) {
   const groundGeometry = new Three.PlaneGeometry(8, 8), groundMaterial = new Three.MeshBasicMaterial({ side: Three.DoubleSide });
   groundGeometry.addEventListener('dispose', () => collisionGeometryDisposed++); groundMaterial.addEventListener('dispose', () => collisionMaterialDisposed++);
   const ground = new Three.Mesh(groundGeometry, groundMaterial); ground.rotation.x = Math.PI / 2; ground.position.y = .6; collider.add(ground);
+  if (settings.blockedRoof) { const roof = new Three.Mesh(new Three.PlaneGeometry(8,8),new Three.MeshBasicMaterial({side:Three.DoubleSide}));roof.rotation.x=Math.PI/2;roof.position.y=-2.1;collider.add(roof); }
   const collisionParsed = settings.deferCollision ? new Promise(resolve => { resolveCollision = resolve; }) : Promise.resolve({ scene: collider });
   class CollisionLoader { parseAsync() { collisionParses++; return settings.badCollision ? Promise.reject(new Error('Synthetic malformed collider')) : collisionParsed; } }
   class Motion extends EventTarget {
@@ -83,7 +85,7 @@ async function fixture(action, settings = {}) {
     forceContextLoss() { this.lost = true; }
   }
   class Spark extends Three.Object3D { constructor(options) { super(); this.options = options; sparks.push(this); } dispose() { this.disposed = true; } }
-  class Splats extends Three.Object3D { constructor(options) { super(); this.options = options; this.initialized = initialized; meshes.push(this); } dispose() { this.disposed = true; } }
+  class Splats extends Three.Object3D { constructor(options) { super(); this.options = options; this.initialized = initialized; meshes.push(this); } getBoundingBox() { return settings.invalidBounds ? new Three.Box3() : new Three.Box3(new Three.Vector3(-5,-6,-5), new Three.Vector3(5,2,5)); } dispose() { this.disposed = true; } }
   const doc = new EventTarget(); doc.visibilityState = 'visible'; doc.pointerLockElement = null;
   doc.exitPointerLock = () => { pointerLockExits++; doc.pointerLockElement = null; doc.dispatchEvent(new Event('pointerlockchange')); };
   const win = new EventTarget();
@@ -124,6 +126,7 @@ async function fixture(action, settings = {}) {
   try {
     const { mountGeneratedWorld } = await import(`${controller}#${++sequence}`);
     viewer = mountGeneratedWorld(host, settings.url ?? '/synthetic/world.spz', { points: settings.points || [{ id: 'front', position: [.3, .2, -3] }, { id: 'behind', position: [0, 0, 3] }],
+      cinematicArrival: settings.cinematicArrival, onCinematicState: state => cinematicStates.push(state),
       collisionUrl: settings.collisionUrl, onWalkingChange: state => { walking.push(state); lifecycle.push(['walking', state.available]); },
       initialYaw: settings.initialYaw, initialPitch: settings.initialPitch,
       flightProfile: settings.flightProfile, onViewpointChange: state => viewpoints.push(state),
@@ -137,7 +140,7 @@ async function fixture(action, settings = {}) {
       onCameraPose: settings.captureCamera ? pose => cameraPoses.push(pose) : undefined,
       onReady: () => ready++, onError: message => errors.push(message), onPoints: points => projections.push(points), onTourChange: state => tours.push(state) });
     await flush();
-    await action({ viewer, host, renderers, meshes, sparks, requests, projections, errors, frames, walking, motion, tours, viewpoints, cameraPoses, firstPersonStates, physicsInstances, bitmaps, gardens, gardenStates, walkingPointReports, lifecycle, walkingTours, onWalkingTour: callback => { walkingTourCallback = callback; },
+    await action({ viewer, host, renderers, meshes, sparks, requests, projections, errors, frames, walking, motion, tours, viewpoints, cameraPoses, firstPersonStates, physicsInstances, bitmaps, gardens, gardenStates, walkingPointReports, lifecycle, walkingTours, cinematicStates, onWalkingTour: callback => { walkingTourCallback = callback; },
       ready: () => ready, resizeDisconnected: () => resizeDisconnected, decode: async () => { resolveDecode(); await flush(); },
       collisionParses: () => collisionParses, collisionDisposals: () => ({ geometry: collisionGeometryDisposed, material: collisionMaterialDisposed }),
       completeCollision: async () => { resolveCollision?.({ scene: collider }); await flush(); },
@@ -160,6 +163,32 @@ const pointerEvent = (target, type, values = {}) => {
 };
 
 const gardenSettings = { firstPerson: { spawn: [0, 1.65, 0], eyeHeight: 1.65, metricScale: 1, groundOffset: 0, livingGarden: true }, collisionUrl: '/synthetic/collider.glb' };
+
+test('V11 automatic real-world arrival lasts thirty seconds and blocks manual input until the newspaper closes', async () => {
+  await fixture(async state => {
+    assert.equal(state.cinematicStates.length,0); await state.decode();state.draw();
+    assert.equal(state.cinematicStates.at(-1).phase,'flying');const first=state.renderers[0].frames.at(-1).clone();
+    state.draw(); const elevated=state.renderers[0].frames.at(-1).clone();assert.ok(elevated.y>first.y+1);
+    state.viewer.look(1,1);state.viewer.move(1,1);state.viewer.setMoveInput(1,1);assert.equal(state.viewer.setWalking(true),false);
+    for(let i=0;i<29;i++)state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'flying');state.draw(1000);
+    assert.equal(state.cinematicStates.at(-1).phase,'completed');assert.equal(state.cinematicStates.filter(s=>s.phase==='completed').length,1);
+    assert.ok(state.renderers[0].frames.at(-1).distanceTo(new Three.Vector3(...state.physicsInstances[0].spawn))<1e-6);
+    state.viewer.setInteractionEnabled(true);assert.equal(state.viewer.setWalking(true),true);state.viewer.setMoveInput(0,1);state.draw();state.draw(60);assert.ok(state.physicsInstances[0].advances.length>0);
+    state.viewer.destroy();state.draw(60000);assert.equal(state.frames.size,0);assert.equal(state.physicsInstances[0].destroys,1);
+  },{ firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[] });
+});
+
+test('hidden V11 flights pause and resume without background catch-up; unsafe bounds and reduced motion use a still arrival', async () => {
+  await fixture(async state => {
+    await state.decode();state.draw();state.draw();state.draw(1000);const prior=state.cinematicStates.at(-1).progress;
+    state.visible(false);assert.equal(state.cinematicStates.at(-1).phase,'paused');state.draw(60000);
+    state.visible(true);state.draw(60000);assert.equal(state.cinematicStates.at(-1).progress,prior);state.draw(1000);assert.ok(state.cinematicStates.at(-1).progress>prior);
+    state.viewer.skipCinematic();assert.equal(state.cinematicStates.at(-1).phase,'completed');assert.equal(state.cinematicStates.at(-1).reason,'skip');
+  },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',observeVisibility:true,points:[]});
+  for(const extra of [{reducedMotion:true},{invalidBounds:true},{badPhysics:true},{blockedRoof:true}])await fixture(async state=>{
+    await state.decode();state.draw();assert.equal(state.cinematicStates.at(-1).phase,'completed');assert.ok(['motion','unavailable'].includes(state.cinematicStates.at(-1).reason));state.draw();assert.equal(state.frames.size,0);
+  },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[],...extra});
+});
 
 test('guided walking waits for decode, pauses when hidden, resumes Next explicitly and releases navigation on destroy', async () => {
   await fixture(async state => {

@@ -1,0 +1,19 @@
+{
+  "version": 11,
+  "kind": "original-scene-photograph",
+  "scene": "rio",
+  "sourceAttribution": {
+    "author": "Donatas Dabravolskas",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Botafogo_Beach_and_the_Sugarloaf_Mountain.jpg",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "changes": "Wikimedia resized reference photograph; generated three-dimensional world and inferred unseen surroundings."
+  },
+  "reference": {
+    "path": "/assets/examples/v11/rio-scene.jpg",
+    "bytes": 2280730,
+    "sha256": "dd2c32844bd94878300221f271e91d264dd7f20b57f77a0b60e2e69a03767e03"
+  },
+  "isPano": false,
+  "generation": "Single ordinary photograph; unseen surfaces inferred by World Labs; original Tripo model remains unchanged."
+}

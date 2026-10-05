@@ -1,0 +1,68 @@
+{
+  "version": 11,
+  "scene": "paris",
+  "provider": "worldlabs",
+  "model": "marble-1.1",
+  "operationId": "c8484689-0817-4243-b72c-0eba363bfb35",
+  "worldId": "43974685-e7a3-4fa6-8c2b-1eda719039ef",
+  "createdAt": "2026-10-05T11:12:28.260Z",
+  "completedAt": "2026-10-05T11:18:09.687Z",
+  "maxReservedCredits": 1580,
+  "actualCredits": 1580,
+  "worldSemantics": {
+    "metricScaleFactor": 1.0070722,
+    "groundPlaneOffset": 0.8069917
+  },
+  "reference": "/assets/examples/v11/paris-scene.jpg",
+  "sourceAttribution": {
+    "author": "Alex Liivet",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Overview_Seine_River_to_Eiffel_Tower_(37578867564).jpg",
+    "license": "CC0 1.0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "changes": "Original reference photograph; generated three-dimensional world and inferred unseen surroundings."
+  },
+  "promptSha256": "dc209f9a9abef25b684d617f74726f081eea059d54e6d782f12d03811253c65c",
+  "safety": {
+    "checkedAt": "2026-10-05T11:12:28.254Z",
+    "modelVersion": "giftportals-local-vision-v1:clip-text-q8+clip-vision-fp32+vit-nsfw-q8:policy-3",
+    "checkedImages": 1
+  },
+  "assets": [
+    {
+      "suffix": "spz",
+      "path": "public/demo/v11/paris-world-500k.spz",
+      "bytes": 8143297,
+      "sha256": "1e039e4d286791925f9cc7a71441471784de19aeb33ba0625f5033d24576c96b",
+      "points": 500000
+    },
+    {
+      "suffix": "pano",
+      "path": "public/demo/v11/paris-panorama.png",
+      "bytes": 12649989,
+      "sha256": "ed629d6f8ff5ac1b536931473316864b03fd50750666c71b8b207d9ebcc10e29"
+    },
+    {
+      "suffix": "collider",
+      "path": "public/demo/v11/paris-collider.glb",
+      "bytes": 991028,
+      "sha256": "095b203a2288b8abfd0912a8d6107787d06225c28b4832fcea01232dbe3ff7f6"
+    },
+    {
+      "suffix": "spz100k",
+      "path": "public/demo/v11/paris-world-100k.spz",
+      "bytes": 1434204,
+      "sha256": "a0da649729c25023bb648af627943e2017d7db210d42efa3451367d8a5043803",
+      "points": 98304
+    },
+    {
+      "suffix": "spzfull",
+      "path": "outputs/v11/paris-world-full-res.spz",
+      "bytes": 31288033,
+      "sha256": "9d09a9e930090ef27d4ca43e1a808793d1462f56158cb4d1eb04697f4dc5a07a",
+      "points": 1920000
+    }
+  ],
+  "defaultQuality": "500k",
+  "fullResolution": "Retained as a bounded local operator artifact; not loaded by the default mobile view.",
+  "tripo": "Existing submitted miniature model and miniature reference are reused unchanged; no Tripo request was made by this export."
+}

@@ -116,9 +116,9 @@ test('real provider credit failures explain the unavailable stage without imposi
 test('city and object examples keep distinct references and changing intent never mutates the catalog', () => {
   const before = JSON.stringify(INSTANT_EXAMPLES), places = instantIntentExamples(INSTANT_EXAMPLES, 'place');
   assert.equal(places.length, 5);
-  assert.equal(places[0].imageUrl, '/assets/examples/v13/rio.jpg');
-  assert.equal(places[1].imageUrl, '/assets/examples/v13/paris.jpg');
-  assert.equal(places[0].worldImageUrl, undefined);
+  assert.equal(places[0].imageUrl, '/assets/examples/v11/rio-scene.jpg');
+  assert.equal(places[1].imageUrl, '/assets/examples/v11/paris-scene.jpg');
+  assert.equal(places[0].worldImageUrl, '/assets/examples/v11/rio-scene.jpg');
   assert.equal(instantIntentExamples(INSTANT_EXAMPLES, 'object').length, 5);
   assert.equal(instantIntentExamples(INSTANT_EXAMPLES, 'object')[0].imageUrl, '/assets/examples/v13/antikythera.jpg');
   assert.equal(JSON.stringify(INSTANT_EXAMPLES), before);

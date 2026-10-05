@@ -1,12 +1,14 @@
 import { createHmac,randomBytes } from 'node:crypto';
 import type { IncomingMessage,ServerResponse } from 'node:http';
 import { AppError,ensure,secretMatches } from './_lib/rules.js';
+import {tryPublicGalleryPreviewRelay} from './_lib/public-gallery-preview-relay.js';
+import {instantGalleryService} from './instant-gallery.js';
 import { createCloudInstantService,CLOUD_MAX_BODY_BYTES } from './_lib/cloud-instant-service.js';
 import { createCloudInstantRepository,createCloudProviderAdapter,createRemoteCloudModerator,cloudInstantConfigured } from './_lib/cloud-instant-adapters.js';
 export const config={maxDuration:180};
 type Request=IncomingMessage&{body?:unknown};
 export const cloudInstantSettings=()=>({enabled:cloudInstantConfigured()&&process.env.ENABLE_CLOUD_GENERATION==='true',providers:{tripo:Boolean(process.env.TRIPO_API_KEY),worldlabs:Boolean(process.env.WORLD_LABS_API_KEY)},dedupeSecret:process.env.CLOUD_DEDUPE_SECRET||''});
-export const cloudInstantService=(deadline=Date.now()+165000)=>{const repository=createCloudInstantRepository(deadline);return createCloudInstantService({repository,providers:createCloudProviderAdapter(deadline),moderator:createRemoteCloudModerator(deadline,repository),settings:cloudInstantSettings});};
+export const cloudInstantService=(deadline=Date.now()+165000)=>{const repository=createCloudInstantRepository(deadline);return createCloudInstantService({repository,providers:createCloudProviderAdapter(deadline),moderator:createRemoteCloudModerator(deadline,repository),gallery:instantGalleryService(deadline),settings:cloudInstantSettings});};
 export function assertCloudOrigin(req:Request){
   const origin=process.env.GIFTPORTALS_CLOUD_ORIGIN;let url:URL|undefined;try{url=origin?new URL(origin):undefined;}catch{/* Closed. */}
   ensure(url?.protocol==='https:'&&!url.username&&!url.password&&url.pathname==='/'&&!url.search&&!url.hash,'CLOUD_NOT_CONFIGURED',503);
@@ -37,6 +39,7 @@ export function createCloudInstantHandler(service?:ReturnType<typeof cloudInstan
   res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
   let action='unknown';
   try{
+    if (!service && await tryPublicGalleryPreviewRelay(req,res,'instant-cloud')) return;
     const active=service||cloudInstantService(now()+165000),query=new URL(req.url||'/api/instant-cloud','https://localhost').searchParams;action=query.get('action')||'status';let data;
     if(action==='status'){ensure(req.method==='GET','METHOD_NOT_ALLOWED',405);data=await active.status();}
     else{assertCloudOrigin(req);if(action==='prepare'){ensure(req.method==='POST','METHOD_NOT_ALLOWED',405);data=await active.prepare(requestBody(req),anonymousOwner(req,res));}

@@ -143,7 +143,7 @@ test('V13 status exposes the same ten examples as the UI and returns independent
  const {service}=await fixture(t),status=await service.status();
  assert.deepEqual(status.examples.map(example=>example.id),examples.INSTANT_EXAMPLES.map(example=>example.id));
  assert.equal(status.examples.length,10);assert.equal(status.examples.filter(example=>example.photoIntent==='place').length,5);
- for(const example of status.examples)assert.match(example.imageUrl,/^\/assets\/examples\/v13\/[a-z-]+\.jpg$/);
+ for(const example of status.examples)assert.match(example.imageUrl,/^\/assets\/examples\/(?:v13\/[a-z-]+|v11\/(?:rio|paris)-scene)\.jpg$/);
  status.examples[0].title='tampered';status.examples[0].curiosityIds.push('tampered');
  const again=await service.status();assert.notEqual(again.examples[0].title,'tampered');assert.ok(!again.examples[0].curiosityIds.includes('tampered'));
 });
@@ -157,7 +157,7 @@ test('V13 Paris preserves original scene and derivative routing with exact compo
  assert.deepEqual((await service.asset(job.id,job.token,'photo')).bytes,original);
  assert.equal(world.type,'image');assert.equal(world.is_pano,false);assert.equal(world.disable_recaption,true);assert.equal(world.image_prompt.source,'media_asset');
  assert.equal(job.generation.worldlabs.promptVersion,i.WORLD_COMPOSITION_VERSION);assert.equal(job.generation.worldlabs.textPrompt,world.text_prompt);assert.equal(job.generation.worldlabs.contextSource,'catalog-selection');
- for(const text of [example.title,'Foreground:','Middle distance:','Background:','continuous, level floor','illustrative artistic interpretation','does not authenticate'])assert.ok(world.text_prompt.includes(text),text);
+ for(const text of [example.title,'Foreground:','Middle distance:','Background:','actual visible ground','photographic reconstruction','does not authenticate'])assert.ok(world.text_prompt.includes(text),text);
  assert.ok(world.text_prompt.includes(example.worldPrompt));assert.equal(job.generation.worldlabs.isPano,false);assert.equal(job.generation.worldlabs.disableRecaption,true);
 });
 test('V13 historical object uses Tripo photo and a rich imagined text environment without fake image-to-model fields',async t=>{
@@ -174,7 +174,7 @@ test('V13 example metadata cannot bypass safety and changing selected context ca
  await assert.rejects(()=>service.create(input({exampleId:'unlisted'})),error=>error.code==='EXAMPLE_ID_INVALID');assert.equal(screens,0);assert.equal(calls.length,0);assert.deepEqual(await readdir(directory),[]);
  const source=input({exampleId:'antikythera'}),started=await service.create(source);await service.get(started.id,started.token);assert.equal(screens,1);
  await assert.rejects(()=>service.create({...source,exampleId:'astrolabe'}),error=>error.code==='DEDUPE_MISMATCH');assert.equal(calls.filter(call=>call[2]==='POST').length,2);
- const personal=i.composeInstantWorldPrompt({worldPrompt:'A workshop filled with brass and warm afternoon light.',photoIntent:'object',hasPlaceReference:false});assert.match(personal,/user-provided creative direction/);assert.match(personal,/no claim of precise geographic reconstruction/);
+ const personal=i.composeInstantWorldPrompt({worldPrompt:'A workshop filled with brass and warm afternoon light.',photoIntent:'object',hasPlaceReference:false});assert.match(personal,/Preserve the meaning of personal setting details/);assert.match(personal,/without claiming a measured geographic scan/);
 });
 test('ambiguous paid response stays failed after restart and polling never re-submits', async t => {
  let posts = 0;
@@ -301,7 +301,7 @@ test('automatic place creates a sculpted image reference, screens actual bytes, 
  assert.equal(model.input,'reference_task');assert.equal(model.prompt,undefined);assert.equal(job.generation.tripoReference.promptVersion,i.SOUVENIR_COMPOSITION_VERSION);
  assert.equal(seen.length,2);assert.equal(seen[1][0][0],'object');assert.equal(seen[1][0][1],job.tripoReference.referenceSha256);
  assert.deepEqual((await f.service.asset(job.id,job.token,'photo')).bytes,image);assert.deepEqual((await f.service.asset(job.id,job.token,'tripo-input')).bytes,f.referenceImage);
- assert.equal(posts.filter(x=>x[0]==='worldlabs').length,1);assert.match(posts.find(x=>x[0]==='worldlabs')[3].world_prompt.text_prompt,/human-scale surrounding place/);
+ assert.equal(posts.filter(x=>x[0]==='worldlabs').length,1);assert.match(posts.find(x=>x[0]==='worldlabs')[3].world_prompt.text_prompt,/original place at full human scale/);
  assert.equal((await f.service.status()).budget.tripo.committed,70);
 });
 test('blocked generated intermediate is neither persisted nor forwarded to the model; actual image cost is retained',async t=>{

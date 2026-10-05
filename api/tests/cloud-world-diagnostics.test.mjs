@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { createTSLoader,here } from './cloud-instant-test-loader.mjs';
 
 const adapterStub=`export const cloudInstantConfigured=()=>false;export const createCloudInstantRepository=()=>({});export const createCloudProviderAdapter=()=>({});export const createRemoteCloudModerator=()=>({configured:false});`;
-const load=createTSLoader(new Map([[resolve(here,'_lib/cloud-instant-adapters.ts'),adapterStub]]));
+const load=createTSLoader(new Map([[resolve(here,'_lib/cloud-instant-adapters.ts'),adapterStub],[resolve(here,'_lib/instant-gallery-adapters.ts'),'export const createInstantGalleryRepository=()=>({});']]));
 const {createCloudInstantService,cloudWorldDiagnostics}=await load(resolve(here,'_lib/cloud-instant-service.ts'));
 const {createCloudInstantHandler}=await load(resolve(here,'instant-cloud.ts'));
 const {AppError,giftHash}=await load(resolve(here,'_lib/rules.ts'));

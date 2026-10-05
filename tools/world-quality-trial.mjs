@@ -37,7 +37,7 @@ if (!['create', 'poll'].includes(action)) throw Error('INVALID_ACTION');
 if (action === 'create' && (!flags.has('--confirm-provider-spend') || !values['--manifest'] || values['--trial'])) throw Error('EXPLICIT_SPEND_CONFIRMATION_REQUIRED');
 if (action === 'create' && flags.has('--inspect-operation')) throw Error('INVALID_INSPECT_ARGUMENT');
 if ((flags.has('--include-100k') || flags.has('--include-full-res')) && (action !== 'poll' || flags.has('--inspect-operation'))) throw Error('INVALID_RESOLUTION_ARGUMENT');
-if (values['--output-version'] !== undefined && !['v10','v22','v23'].includes(values['--output-version'])) throw Error('INVALID_OUTPUT_VERSION');
+if (values['--output-version'] !== undefined && !['v10','v11','v22','v23'].includes(values['--output-version'])) throw Error('INVALID_OUTPUT_VERSION');
 if (action === 'poll' && (!values['--trial'] || values['--manifest'] || flags.has('--confirm-provider-spend'))) throw Error('INVALID_POLL_ARGUMENT');
 let server, code = 0;
 try {

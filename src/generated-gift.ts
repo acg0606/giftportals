@@ -11,7 +11,8 @@ import type { InstantObjectRepresentation } from '../shared/instant-examples';
 export interface GeneratedGiftTouchpoint extends GeneratedWorldPoint { title: string; text: string; sourceTitle?: string; sourceUrl?: string }
 export interface GeneratedGiftData {
   title: string; senderName: string; recipientName?: string; dedication?: string; story: string;
-  originalUrl?: string; keepsakeImageUrl?: string; modelUrl?: string; panoramaUrl?: string; worldUrl?: string;
+  originalUrl?: string; sourcePhotoUrl?: string; keepsakeImageUrl?: string; modelUrl?: string; panoramaUrl?: string; worldUrl?: string;
+  sourceAttribution?: { author: string; sourceUrl: string; license: string; licenseUrl: string };
   mediaExpiresAt?: number; touchpoints?: readonly GeneratedGiftTouchpoint[];
   initialYaw?: number; initialPitch?: number;
   photoIntent?: 'object' | 'place'; collisionUrl?: string; colliderUrl?: string;
@@ -20,7 +21,7 @@ export interface GeneratedGiftData {
   worldSemantics?: { metricScaleFactor: number; groundPlaneOffset: number };
   worldRetry?: { available: boolean; attempts: number };
 }
-export interface GeneratedGiftOptions { gift: GeneratedGiftData; initialView?: 'object' | 'world'; isCurrent(): boolean; onExit(): void; onShare?(): void; onCollection?(): void; onJourney?(): void; onRetryWorld?(signal: AbortSignal): Promise<void>; worldRetryPending?: boolean; journeyLabel?: string; shareScope?: 'local' | 'cloud' }
+export interface GeneratedGiftOptions { gift: GeneratedGiftData; initialView?: 'object' | 'world'; cinematicWorld?: boolean; isCurrent(): boolean; onExit(): void; onShare?(): void; onCollection?(): void; onJourney?(): void; onRetryWorld?(signal: AbortSignal): Promise<void>; worldRetryPending?: boolean; journeyLabel?: string; shareScope?: 'local' | 'cloud' }
 export interface GeneratedGiftHandle { destroy(): void }
 interface ObjectHandle { destroy(): void; reset(): void; rotate(delta: number): void; zoom(delta: number): void }
 type Phase = 'object' | 'world';
@@ -99,6 +100,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   let pendingFocus: string | undefined;
   let tour: GeneratedWorldTourState | undefined;
   let pointReader: StoryReaderHandle | undefined, tourReader: StoryReaderHandle | undefined;
+  let cinematicViewer: { destroy(): void } | undefined;
   let printPanel: { destroy(): void } | undefined, printPending = false, printEpoch = 0;
   let xrPanel: { destroy(): void } | undefined, xrPending = false, xrEpoch = 0, xrOwnsViewer = false;
   let worldRetryAbort: AbortController | undefined;
@@ -126,7 +128,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
     if (status) { status.hidden = false; status.classList.remove('is-fallback'); status.textContent = 'Returning to your keepsake…'; }
     void loadViewer();
   }
-  function destroyViewer() { version++; destroyXR(); printEpoch++; printPending = false; printPanel?.destroy(); printPanel = undefined; pendingFocus = undefined; viewer?.destroy(); viewer = undefined; pointReader?.destroy(); tourReader?.destroy(); pointReader = undefined; tourReader = undefined; }
+  function destroyViewer() { version++; cinematicViewer?.destroy(); cinematicViewer = undefined; destroyXR(); printEpoch++; printPending = false; printPanel?.destroy(); printPanel = undefined; pendingFocus = undefined; viewer?.destroy(); viewer = undefined; pointReader?.destroy(); tourReader?.destroy(); pointReader = undefined; tourReader = undefined; }
   function destroy() {
     if (dead) return; dead = true; worldRetryAbort?.abort(); worldRetryAbort = undefined; destroyViewer(); events.abort(); viewEvents.abort();
     if (dialog.open) dialog.close(); dialog.remove();
@@ -195,6 +197,17 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   function render() {
     destroyViewer(); viewEvents.abort(); viewEvents = new AbortController(); hovered = undefined; projectedPoints = []; tour = undefined;
     if (!active()) return;
+    if (phase === 'world' && options.cinematicWorld) {
+      const epoch = version;
+      dialog.classList.add('is-world'); dialog.innerHTML = '<p class="gg-loading" role="status">Opening the world inside…</p>';
+      void import('./gift-world-experience').then(module => {
+        if (!active() || version !== epoch || phase !== 'world') return;
+        cinematicViewer = module.mountGiftWorldExperience(dialog, { gift, isCurrent: () => active() && version === epoch && phase === 'world',
+          onExit: () => { if (active() && version === epoch) { phase = 'object'; render(); } },
+          onCollection: options.onCollection ? () => { if (active()) { destroy(); options.onCollection?.(); } } : undefined });
+      }).catch(() => { if (active() && version === epoch) { phase = 'object'; render(); text('[data-gg-caption]', 'The world experience could not open. Your keepsake and story remain here.'); } });
+      return;
+    }
     const world = phase === 'world', poster = mediaUrl(world ? gift.panoramaUrl || gift.originalUrl : gift.keepsakeImageUrl || gift.originalUrl), original = mediaUrl(gift.originalUrl), keepsake = mediaUrl(gift.keepsakeImageUrl || gift.originalUrl);
     dialog.classList.toggle('is-world', world);
     const modebar = `<nav class="gg-modebar" aria-label="Gift views"><button type="button" data-gg-mode="object" aria-pressed="${!world}">${icon('gift')}<span>Keepsake</span></button><button type="button" data-gg-mode="world" aria-pressed="${world}" ${canEnterWorld() ? '' : 'disabled aria-disabled="true"'}>${icon('globe')}<span>${canEnterWorld() ? 'World' : 'World unavailable'}</span></button>${world ? `<button type="button" data-gg-show-story aria-expanded="false">${icon('book')}<span>Stories</span></button><button type="button" data-gg-tour-start aria-pressed="false" disabled>${icon('tour')}<span data-gg-tour-start-label>Guided tour</span></button>` : ''}</nav>`;

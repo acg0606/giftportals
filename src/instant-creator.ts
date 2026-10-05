@@ -15,6 +15,7 @@ import { worldDiagnosticsMessage } from './cloud-instant-service';
 import { instantJobStorageKey, instantPendingStorageKey } from './local-keepsakes';
 import { assistantSourceUrl, assistantWarningCopy, placeAssistantService, type PlaceAssistantService } from './place-assistant-client';
 import type { PlaceAssistantInput, PlaceAssistantStatus, PlaceAssistantSuggestion } from '../shared/place-assistant';
+import { PUBLIC_GALLERY_CONSENT_VERSION } from '../shared/instant-gallery';
 
 export type { InstantCreateInput, InstantJob, InstantStatus } from './instant-creator-state';
 export type InstantJobReference = { id: string; token: string } | { dedupeKey: string; token: string };
@@ -219,7 +220,9 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
               <article class="instant-review-photo"><img data-instant-review-photo alt="The original photo for this gift"/><img data-instant-review-miniature alt="Approved miniature reference for the 3D souvenir" hidden/><div><span data-instant-review-intent></span><strong data-instant-review-source></strong><small data-instant-review-representation></small></div><button type="button" data-instant-edit-step="photo">Edit photo</button></article>
               <article class="instant-review-block"><div><h3>The place inside</h3><button type="button" data-instant-edit-step="place">Edit place</button></div><p data-instant-review-world></p><div class="instant-review-reference" data-instant-review-reference hidden><img data-instant-review-place-photo alt="The image guiding the world"/><span data-instant-review-place-name></span><button type="button" data-instant-review-place-remove hidden>Remove</button></div><small data-instant-review-location></small></article>
               <article class="instant-review-block"><div><h3>Your words</h3><button type="button" data-instant-edit-step="story">Edit story</button></div><dl><dt>Gift name</dt><dd data-instant-review-title></dd><dt>From / To</dt><dd data-instant-review-names></dd><dt>Note on the gift</dt><dd data-instant-review-dedication></dd><dt>Story</dt><dd data-instant-review-story></dd></dl><div data-instant-review-curiosities hidden></div></article>
-              <label class="instant-consent"><input type="checkbox" name="consent" required/><span>I can use these photos and send the approved photos and my place description to Tripo and World Labs to create this gift.</span></label><small class="instant-hint">Intimate images and adult products cannot be used. Every photo is screened before 3D generation.${cloudCreator() ? ' Private photos and generated gifts expire after 7 days. Anyone with the gift link can open it during that time.' : ''}</small>
+              <label class="instant-consent"><input type="checkbox" name="consent" required/><span>I can use these photos and send the approved photos and my place description to Tripo and World Labs to create this gift.</span></label>
+              <label class="instant-consent" data-public-consent hidden><input type="checkbox" name="publicGalleryConsent"/><span>I have permission to publish these photos and words. Save my original photo, souvenir, world, story, names and dedication in the public collection for anyone to revisit.</span></label>
+              <small class="instant-hint" data-public-storage-note>Every photo is screened before generation. Intimate images and adult products cannot be used.</small>
             </section>
           </fieldset>
           <p class="instant-error" data-instant-error role="alert" hidden></p>
@@ -287,6 +290,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   function changeKey() {
     if (pendingReference) return;
     dedupeKey = ''; requestToken = ''; (field('consent') as HTMLInputElement).checked = false;
+    (field('publicGalleryConsent') as HTMLInputElement).checked = false;
     try { sessionStorage.removeItem(pendingStorageKey); } catch { /* Open editing remains available. */ }
     // Optional controllers finish their own selection/context mutation after
     // invoking callbacks. Review reads the final values at the next microtask.
@@ -422,9 +426,18 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
       if (request === assistantEpoch && active()) { assistantBusy = false; assistantAbort = undefined; assistantAvailability(); }
     }
   }
+  function publicationConsent() {
+    const enabled = status?.publicGalleryEnabled === true;
+    (field('publicGalleryConsent') as HTMLInputElement).required = enabled;
+    host.querySelector<HTMLElement>('[data-public-consent]')!.hidden = !enabled || !source;
+    text('[data-public-storage-note]', enabled
+      ? 'Completed souvenirs are saved in the cloud and shared in the collection. Anyone can open their photos, words and generated results without an account.'
+      : 'Every photo is screened before generation. Intimate images and adult products cannot be used.');
+  }
   function reviewGift() {
     const canReview = Boolean(source);
     host.querySelectorAll<HTMLElement>('.instant-review-photo,.instant-review-block,.instant-review .instant-consent,.instant-review > .instant-hint').forEach(element => element.hidden = !canReview);
+    publicationConsent();
     text('#instant-review-heading', pendingReference && !source ? 'Checking your last gift.' : 'Ready to make it real?');
     text('.instant-review > .instant-card-copy', pendingReference && !source ? 'Your previous creation may still be running. Check it before starting another gift.' : 'Check what will go into your gift. Nothing is created until you choose below.');
     const chosenPhoto = host.querySelector<HTMLImageElement>('[data-instant-photo]')!;
@@ -502,6 +515,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     goToStep(instantWizardDestination(step, 1, Boolean(source)));
   }
   function availability() {
+    publicationConsent();
     const pause = creationPause;
     create.disabled = wizardBusy() || readingSource || statusChecking || step !== 'review' || !source || !status?.available || Boolean(pause) || photoDecision==='block' || photoDecision==='review';
     text('[data-instant-availability]', pendingReference ? 'Confirming the last creation before starting another gift.' : pause || (statusChecking ? 'Checking availability…' : photoDecision==='block'||photoDecision==='review' ? 'Choose another photo before creating your gift.' : status?.safety && !status.safety.available ? 'Photo checking is unavailable. Creation will wait until it is ready.' : status?.available ? 'Photos are screened before Tripo + World Labs. No account needed.' : 'Live creation is currently unavailable.'));
@@ -907,7 +921,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   form.addEventListener('input', event => {
     if (wizardBusy()) return;
     const input = event.target;
-    if (input instanceof HTMLInputElement && input.name === 'consent') { input.setCustomValidity(''); showError(); return; }
+    if (input instanceof HTMLInputElement && ['consent','publicGalleryConsent'].includes(input.name)) { input.setCustomValidity(''); showError(); return; }
     if (input instanceof HTMLInputElement && input.name === 'photoAnalysisConsent') { if (!input.checked) cancelAssistant(); assistantAvailability(); return; }
     if (input instanceof HTMLInputElement && input.name === 'assistantPlace') { confirmedPlaceLabel = ''; cancelAssistant(); return; }
     if (input instanceof HTMLTextAreaElement && input.getAttribute('data-assistant-fact-text') !== null) { curiosityEdits.set(input.getAttribute('data-assistant-fact-text')!, input.value); return; }
@@ -927,6 +941,10 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     if (textIssues.title) { goToStep('story'); host.querySelector<HTMLDetailsElement>('.instant-personal')!.open = true; field('title').reportValidity(); return; }
     for (const name of ['senderName', 'recipientName', 'dedication', 'story']) if (!field(name).checkValidity()) { goToStep('story'); host.querySelector<HTMLDetailsElement>('.instant-personal')!.open = true; field(name).reportValidity(); return; }
     if (!instantWizardCanCreate(step, Boolean(source), (field('consent') as HTMLInputElement).checked)) { showError('Confirm you can use these photos before creating your gift.'); field('consent').reportValidity(); return; }
+    if (status?.publicGalleryEnabled && !(field('publicGalleryConsent') as HTMLInputElement).checked) {
+      showError('Confirm that this souvenir and its photos and words can be shared publicly.');
+      field('publicGalleryConsent').reportValidity(); return;
+    }
     if (!form.reportValidity()) return;
     const chosen = source, epoch = sourceEpoch, photoIntent = intent;
     const snapshot = { title: field('title').value.trim(), worldPrompt: field('worldPrompt').value.trim(), senderName: field('senderName').value.trim(), recipientName: field('recipientName').value.trim(), story: field('story').value.trim(), dedication: field('dedication').value.trim(),curiosityIds:giftCuriosities?.selectedIds()||[] };
@@ -944,7 +962,9 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
         if (!active() || epoch !== sourceEpoch) return;
         readingSource = false; create.innerHTML = `${giftIcon}Checking your photos before creating…`;
         sent = true; pendingReference = { dedupeKey, token: requestToken };
-        const job = await service.create({ ...snapshot, ...imagePlan, ...(!(chosen instanceof File) ? { exampleId: chosen.id } : {}), dedupeKey, requestToken, consent: true }, events.signal);
+        const job = await service.create({ ...snapshot, ...imagePlan, ...(!(chosen instanceof File) ? { exampleId: chosen.id } : {}), dedupeKey, requestToken, consent: true,
+          ...(status?.publicGalleryEnabled ? { publicGalleryConsent: true as const, publicGalleryConsentVersion: PUBLIC_GALLERY_CONSENT_VERSION } : {}),
+        }, events.signal);
         if (!active()) return; showJob(job); host.querySelector<HTMLElement>('[data-instant-progress] h2')!.focus({ preventScroll: true }); progress.scrollIntoView({ block: 'start', behavior: 'instant' }); schedulePoll();
       } catch (cause) {
         if (!active()) return;

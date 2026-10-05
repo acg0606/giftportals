@@ -44,12 +44,14 @@ async function moduleUrl(path) {
   let source = compile(await readFile(path, 'utf8'));
   for (const match of [...source.matchAll(/from\s*(['"])(\.{1,2}\/[^'"]+)\1/g)]) {
     const name = match[2];
-    const url = stubs[name] ? urlOf(stubs[name]) : await moduleUrl(new URL(name.endsWith('.ts') ? name : `${name}.ts`, path));
+    const url = stubs[name] ? urlOf(stubs[name]) : await moduleUrl(new URL(name.endsWith('.ts') ? name : `${name.replace(/\.js$/, '')}.ts`, path));
     source = source.replaceAll(`${match[1]}${name}${match[1]}`, JSON.stringify(url));
   }
   const url = urlOf(source); modules.set(path.href, url); return url;
 }
 const { mountInstantCreator, instantCreatorService } = await import(await moduleUrl(new URL('../src/instant-creator.ts', import.meta.url)));
+const { PUBLIC_GALLERY_CONSENT_VERSION } = await import(await moduleUrl(new URL('../shared/instant-gallery.ts', import.meta.url)));
+const { createCloudInstantService } = await import(await moduleUrl(new URL('../src/cloud-instant-service.ts', import.meta.url)));
 const keepsakeLibrary = await import(await moduleUrl(new URL('../src/keepsake-library.ts', import.meta.url)));
 const flush = async () => { for (let i = 0; i < 5; i++) await setImmediate(); };
 const missing = () => Object.assign(new Error('No previous job'), { code: 'JOB_UNAVAILABLE' });
@@ -149,6 +151,7 @@ async function fixture(action, settings = {}) {
   state.submit = () => state.find('[data-instant-form]').dispatchEvent(new Event('submit', { cancelable: true }));
   state.upload = (file, place = false) => { const input = state.find(place ? '[data-instant-place-file]' : '[data-instant-upload-file]'); input.files = [file]; input.dispatchEvent(new Event('change')); };
   state.consent = () => { const input = state.field('consent'); input.checked = true; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
+  state.publicConsent = (checked = true) => { const input = state.field('publicGalleryConsent'); input.checked = checked; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
   state.photoConsent = (checked = true) => { const input = state.field('photoAnalysisConsent'); input.checked = checked; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
   state.next = () => state.find('[data-instant-continue]').click();
   state.stage = () => state.host.dataset.instantStep;
@@ -179,6 +182,77 @@ test('actual wizard keeps one card active; selecting a photo stays put; Enter re
     assert.equal(state.completed[0].id, state.job.id); assert.equal(state.opened.length, 0);
     assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
   });
+});
+
+test('v11 public creator starts unchecked and requires separate publication permission before any prepare, preserving reviewed words', async () => {
+  assert.equal(PUBLIC_GALLERY_CONSENT_VERSION, 'giftportals-public-souvenir-v11');
+  await fixture(async state => {
+    const publication = state.field('publicGalleryConsent');
+    assert.equal(publication.checked, false); assert.equal(state.creates.length, 0);
+    state.upload(new File(['pixels'], 'my photo.jpg', { type: 'image/jpeg' }));
+    state.edit('title', 'Our little souvenir'); state.edit('story', 'Nossa memória escrita por nós.');
+    state.edit('senderName', 'André'); state.edit('recipientName', 'Maria'); state.edit('dedication', 'Para você.');
+    state.next(); state.next(); state.next();
+    assert.equal(state.stage(), 'review'); assert.equal(state.find('[data-public-consent]').hidden, false);
+    assert.equal(publication.required, true); assert.equal(publication.checked, false);
+    assert.match(state.host.html, /permission to publish these photos and words/);
+    assert.match(state.find('[data-public-storage-note]').textContent, /Anyone can open their photos, words and generated results without an account/);
+    state.consent(); state.submit(); await flush();
+    assert.equal(state.creates.length, 0); assert.equal(publication.reported, true);
+    assert.match(state.find('[data-instant-error]').textContent, /photos and words.*shared publicly/i);
+    state.publicConsent(); state.submit(); state.submit(); await flush();
+    assert.equal(state.creates.length, 1);
+    const sent = state.creates[0]; assert.equal(sent.consent, true); assert.equal(sent.publicGalleryConsent, true);
+    assert.equal(sent.publicGalleryConsentVersion, PUBLIC_GALLERY_CONSENT_VERSION);
+    assert.equal(sent.title, 'Our little souvenir'); assert.equal(sent.story, 'Nossa memória escrita por nós.');
+    assert.equal(sent.senderName, 'André'); assert.equal(sent.recipientName, 'Maria'); assert.equal(sent.dedication, 'Para você.');
+    assert.equal(state.completed.length, 1);
+  }, { status: { publicGalleryEnabled:true, publicGalleryRequired:true }, language:'pt-BR' });
+});
+
+test('editing reviewed words or replacing the photo revokes v11 publication permission until explicitly checked again', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'], 'first.jpg', { type:'image/jpeg' })); state.next(); state.next(); state.next();
+    state.consent(); state.publicConsent(); assert.equal(state.field('publicGalleryConsent').checked,true);
+    state.edit('dedication','A different public dedication');
+    assert.equal(state.field('publicGalleryConsent').checked,false); assert.equal(state.field('consent').checked,false);
+    state.consent(); state.submit(); await flush(); assert.equal(state.creates.length,0);
+    state.publicConsent(); state.find('[data-instant-edit-step="photo"]').click();
+    state.upload(new File(['new pixels'],'second.jpg',{type:'image/jpeg'}));
+    assert.equal(state.field('publicGalleryConsent').checked,false); assert.equal(state.field('consent').checked,false);
+    state.next(); state.next(); state.next(); state.consent(); state.publicConsent(); state.submit(); await flush();
+    assert.equal(state.creates.length,1); assert.equal(state.creates[0].publicGalleryConsentVersion,PUBLIC_GALLERY_CONSENT_VERSION);
+    assert.equal(state.creates[0].dedication,'A different public dedication');
+  }, { status:{publicGalleryEnabled:true,publicGalleryRequired:true} });
+});
+
+test('disabled public gallery preserves the private creator and omits all publication metadata from the payload', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'],'private.jpg',{type:'image/jpeg'})); state.next(); state.next(); state.next();
+    assert.equal(state.find('[data-public-consent]').hidden,true); assert.equal(state.field('publicGalleryConsent').required,false);
+    assert.equal(state.field('publicGalleryConsent').checked,false); state.consent(); state.submit(); await flush();
+    assert.equal(state.creates.length,1); assert.equal('publicGalleryConsent' in state.creates[0],false);
+    assert.equal('publicGalleryConsentVersion' in state.creates[0],false);
+  }, { status:{publicGalleryEnabled:false,publicGalleryRequired:false} });
+});
+
+test('actual cloud client sends the reviewed v11 permission and words with image declarations, preserving creator capabilities only on private requests', async () => {
+  const id='00000000-0000-4000-8000-000000000010',token='A'.repeat(43),calls=[];
+  const service=createCloudInstantService(async(url,init)=>{
+    const action=new URL(url,'https://gift.example').searchParams.get('action');calls.push({action,url,init});
+    const data=action==='status'?{storage:'cloud',localOnly:false,available:true,publicGalleryEnabled:true,publicGalleryRequired:true}
+      :action==='prepare'?{id,token,deduplicated:true,uploads:[]}
+        :{id,token,storage:'cloud',uploadState:'finalized',state:'completed',publicGalleryConsent:true,publicGalleryConsentVersion:PUBLIC_GALLERY_CONSENT_VERSION,publicGalleryPublished:true,publicGalleryId:id};
+    return new Response(JSON.stringify({ok:true,data}),{headers:{'Content-Type':'application/json'}});
+  });
+  const result=await service.create({title:'Reviewed gift',worldPrompt:'A real place described by me.',story:'My reviewed story.',dedication:'Our dedication.',senderName:'André',recipientName:'Maria',photoIntent:'place',imageDataUrl:'data:image/png;base64,cGl4ZWxz',dedupeKey:'reviewed-v11-01',requestToken:token,consent:true,publicGalleryConsent:true,publicGalleryConsentVersion:PUBLIC_GALLERY_CONSENT_VERSION},new AbortController().signal);
+  assert.deepEqual(calls.map(call=>call.action),['status','prepare','finalize']);
+  const prepare=calls.find(call=>call.action==='prepare'),body=JSON.parse(prepare.init.body);
+  assert.equal(body.publicGalleryConsent,true);assert.equal(body.publicGalleryConsentVersion,PUBLIC_GALLERY_CONSENT_VERSION);
+  assert.equal(body.story,'My reviewed story.');assert.equal(body.senderName,'André');assert.equal(body.dedication,'Our dedication.');
+  assert.equal(body.requestToken,token);assert.equal('imageDataUrl' in body,false);assert.equal(body.images.original.mime,'image/png');assert.equal(body.images.original.bytes,6);assert.match(body.images.original.sha256,/^[a-f0-9]{64}$/);
+  assert.equal(calls[0].init.method,'GET');assert.equal(calls[0].init.headers['X-Instant-Token'],undefined);
+  assert.equal(calls[2].init.headers['X-Instant-Token'],token);assert.equal(result.publicGalleryPublished,true);assert.equal(result.publicGalleryId,id);
 });
 
 test('a fresh Make entry retires only delivered creator recovery and keeps old and new gifts in the library', async () => {
@@ -684,14 +758,14 @@ test('a fresh place WebP becomes a metadata-free JPEG original without a fabrica
 test('Paris Review retains its distinct curated miniature reference and submits its PNG bytes without reframing the original', async () => {
   await fixture(async state => {
     state.find('[data-instant-example="paris"]').click(); state.next(); state.next(); state.next();
-    assert.equal(state.find('[data-instant-review-photo]').src, '/assets/examples/v13/paris.jpg');
+    assert.equal(state.find('[data-instant-review-photo]').src, '/assets/examples/v11/paris-scene.jpg');
     assert.equal(state.find('[data-instant-review-miniature]').src, '/assets/examples/v17/paris-souvenir-reference.png'); assert.equal(state.find('[data-instant-review-miniature]').hidden, false);
     assert.match(state.find('[data-instant-review-representation]').textContent, /reference guides/); state.consent(); state.submit(); await flush();
     assert.equal(state.creates.length, 1); const submitted = state.creates[0];
     assert.equal(submitted.objectImageRole, 'miniature-reference'); assert.notEqual(submitted.imageDataUrl, submitted.objectImageDataUrl);
-    assert.equal(Buffer.from(submitted.imageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v13/paris.jpg');
+    assert.equal(Buffer.from(submitted.imageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v11/paris-scene.jpg');
     assert.equal(Buffer.from(submitted.objectImageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v17/paris-souvenir-reference.png');
-    assert.equal(submitted.worldImageDataUrl, undefined); assert.deepEqual(state.fetchUrls, ['/assets/examples/v13/paris.jpg', '/assets/examples/v17/paris-souvenir-reference.png']);
+    assert.equal(submitted.worldImageDataUrl, undefined); assert.deepEqual(state.fetchUrls, ['/assets/examples/v11/paris-scene.jpg', '/assets/examples/v17/paris-souvenir-reference.png']);
   });
 });
 
@@ -704,7 +778,7 @@ test('Kyoto stays selectable and submits only its unchanged original through nor
     state.consent();state.submit();await flush();
     assert.equal(state.creates.length, 1);const submitted = state.creates[0];
     assert.equal(submitted.exampleId, 'kyoto');assert.equal(submitted.photoIntent, 'place');assert.equal(submitted.story, 'My own Kyoto memory.');
-    assert.match(submitted.worldPrompt, /artistic Kyoto garden/);
+    assert.match(submitted.worldPrompt, /photographic Kyoto garden/);
     assert.equal(Buffer.from(submitted.imageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v13/kyoto.jpg');
     assert.equal(submitted.objectImageDataUrl, undefined);assert.equal(submitted.objectImageRole, undefined);assert.equal(submitted.worldImageDataUrl, undefined);
     assert.deepEqual(state.fetchUrls, ['/assets/examples/v13/kyoto.jpg']);

@@ -36,6 +36,7 @@ import { collectionIcon } from './collection-icon';
 import { createdSessionKeepsake } from './local-keepsakes';
 import { clearKeepsakeScope, forgetKeepsakeReference, instantJobStorageKey, readKeepsakeJob, rememberCreatedKeepsake, storedKeepsakeReferences, type KeepsakeStorage } from './keepsake-library';
 import type { CollectionRoomItem } from './collection-types';
+import { readPublicGallery, readPublicGift, mergeGalleryItems, publicGiftPath } from './public-gallery';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let world: WorldDTO | null = null;
@@ -212,7 +213,8 @@ function instantCreatorPage(epoch: number) {
     onGiftReady: (job: InstantJob) => {
       if (epoch !== renderId || generation !== sessionGeneration() || !instantGiftReady(job)) return;
       rememberKeepsake(job);
-      navigate(`generated/${encodeURIComponent(job.id)}?key=${encodeURIComponent(job.token)}`);
+      navigate(job.publicGalleryPublished && job.publicGalleryId === job.id
+        ? publicGiftPath(job.id) : `generated/${encodeURIComponent(job.id)}?key=${encodeURIComponent(job.token)}`);
     },
     onExploreExample: () => navigate('generated/rio-example'),
   });
@@ -268,7 +270,8 @@ async function qualityReferenceCapturePage(epoch: number) {
   cleanup = () => capture.destroy();
 }
 async function readGeneratedGift(id: string, signal: AbortSignal): Promise<GeneratedGiftData> {
-  const examples: Record<string, string> = { 'rio-example': '/demo/rio-generated-gift.json', 'paris-example': '/demo/v17/paris-generated-gift.json', 'antikythera-example': '/demo/v13/antikythera-generated-gift.json' };
+  if (routeParams().get('public') === '1') return readPublicGift(id, signal);
+  const examples: Record<string, string> = { 'rio-example': '/demo/rio-generated-gift.json', 'paris-example': '/demo/v11/paris-generated-gift.json', 'antikythera-example': '/demo/v13/antikythera-generated-gift.json' };
   if (Object.hasOwn(examples, id)) {
     const response = await fetch(examples[id], { signal });
     if (!response.ok) throw new Error('This example could not open. Return to your collection and try again.');
@@ -289,17 +292,18 @@ async function readGeneratedGift(id: string, signal: AbortSignal): Promise<Gener
   };
 }
 function generatedGiftPath(id: string) {
+  if (routeParams().get('public') === '1') return publicGiftPath(id);
   const params = new URLSearchParams(); const key = routeParams().get('key'); if (key) params.set('key', key);
   params.set('from', 'room'); return 'generated/' + encodeURIComponent(id) + '?' + params.toString();
 }
 async function mountGiftWalk(id: string, gift: GeneratedGiftData, epoch: number, abort: AbortController) {
-  const scenes = createGiftWalkScenes(id, gift);
-  if (!scenes.length) throw new Error('This world does not have a walking path yet. Its keepsake and story remain available.');
-  const { mountFirstPersonPlace } = await import('./first-person-place');
+  if (!gift.worldUrl) throw new Error('This souvenir does not have a generated world yet. Its keepsake and story remain available.');
+  const { mountGiftWorldExperience } = await import('./gift-world-experience');
   if (epoch !== renderId || abort.signal.aborted) return;
   const returnPath = generatedGiftPath(id);
-  const walk = mountFirstPersonPlace(app, { scenes, giftTitle: gift.title, giftHref: '#/' + returnPath,
-    isCurrent: () => epoch === renderId, onExit: () => navigate(returnPath) });
+  const walk = mountGiftWorldExperience(app, { gift,
+    isCurrent: () => epoch === renderId && !abort.signal.aborted, onExit: () => navigate(returnPath),
+    onCollection: () => navigate('collection') });
   cleanup = () => { abort.abort(); walk.destroy(); };
 }
 async function generatedWalkPage(id: string, epoch: number) {
@@ -320,14 +324,15 @@ async function generatedGiftPage(id: string, epoch: number) {
   try {
     const gift = await readGeneratedGift(id, abort.signal);
     if (epoch !== renderId || generation !== sessionGeneration() || abort.signal.aborted) return;
-    const walking = createGiftWalkScenes(id, gift).length > 0;
+    const walking = Boolean(gift.worldUrl);
     if (walking && routeParams().get('view') === 'world') { await mountGiftWalk(id, gift, epoch, abort); return; }
     app.innerHTML = '<main id="generated-gift-root"></main>';
-    const journeyPath = generatedGiftPath(id).replace(/^generated\//, 'walk/');
+    const journeyPath = generatedGiftPath(id) + '&view=world';
     const viewer = mountGeneratedGift(app.querySelector<HTMLElement>('#generated-gift-root')!, {
       gift, shareScope: ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'local' : 'cloud', initialView: routeParams().get('view') === 'world' && gift.worldUrl ? 'world' : 'object',
       isCurrent: () => epoch === renderId && generation === sessionGeneration(), onExit: () => navigate('collection'),
       onCollection: () => navigate('collection'),
+      cinematicWorld: true,
       ...(instantCreatorService.retryWorld && (gift.worldRetry?.available || retryReference) ? {
         worldRetryPending: Boolean(retryReference),
         onRetryWorld: async (signal: AbortSignal) => {
@@ -352,7 +357,7 @@ async function generatedGiftPage(id: string, epoch: number) {
           rememberKeepsake(job); navigate('make?resume=world-retry');
         },
       } : {}),
-      ...(walking ? { onJourney: () => navigate(journeyPath), journeyLabel: 'Walk inside' } : {}),
+      ...(walking ? { onJourney: () => navigate(journeyPath), journeyLabel: 'Step inside' } : {}),
       onShare: async () => {
         try { await navigator.clipboard.writeText(location.href); toast(['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'Local gift link copied. Opens on this device while the preview is running.' : 'Gift link copied. Anyone with this link can open the gift until it expires.'); }
         catch { toast('Copy this page address to reopen the gift.'); }
@@ -482,18 +487,37 @@ async function collectionPage(epoch: number) {
   try {
     const [{ mountCollectionRoom }, { publicCollectionItems, collectionItemsFromWorld }] = await Promise.all([import('./collection-room'), import('./collection-state')]);
     if (epoch !== renderId) return;
-    const [current] = await Promise.all([
+    const [current, , shared] = await Promise.all([
       session() && !session()!.user.demo && !demoScope() ? ensureWorld() : Promise.resolve(null),
       hydrateKeepsakes(epoch, abort.signal),
+      (async () => {
+        const items: CollectionRoomItem[] = [], cursors = new Set<string>();
+        try {
+          let page = await readPublicGallery(abort.signal);
+          if (!page.enabled) return { enabled: false, items };
+          items.push(...page.items);
+          while (page.nextCursor && epoch === renderId && !abort.signal.aborted) {
+            if (cursors.has(page.nextCursor)) throw new Error('The shared collection could not be verified.');
+            cursors.add(page.nextCursor);
+            page = await readPublicGallery(abort.signal, fetch, page.nextCursor); items.push(...page.items);
+          }
+          return { enabled: true, items };
+        } catch (cause) {
+          if (!abort.signal.aborted && epoch === renderId) toast(errorMessage(cause));
+          return { enabled: false, items };
+        }
+      })(),
     ]);
     if (epoch !== renderId) return;
     const localItems = currentKeepsakes();
-    const personal = Boolean(current) || localItems.length > 0;
-    const items = current ? [...localItems, ...collectionItemsFromWorld(current)] : localItems.length ? localItems : publicCollectionItems();
+    const personal = !shared.enabled && (Boolean(current) || localItems.length > 0);
+    const items = shared.enabled
+      ? mergeGalleryItems(shared.items, localItems, current ? collectionItemsFromWorld(current) : [], publicCollectionItems())
+      : current ? [...localItems, ...collectionItemsFromWorld(current)] : localItems.length ? localItems : publicCollectionItems();
     app.innerHTML = '<main id="collection-room-root"></main>';
     const room = mountCollectionRoom(app.querySelector<HTMLElement>('#collection-room-root')!, {
       items, title: personal ? 'Your memory desk.' : 'The memory desk.',
-      subtitle: current ? 'Your stories and gifts shared with you.' : localItems.length ? 'Your creations · saved on this device while their links are available.' : 'Three real keepsakes. Let a little world come to you.',
+      subtitle: shared.enabled ? 'Souvenirs shared by their creators · saved in the cloud for everyone to revisit.' : current ? 'Your stories and gifts shared with you.' : localItems.length ? 'Your creations · saved on this device while their links are available.' : 'Three real keepsakes. Let a little world come to you.',
       isCurrent: () => epoch === renderId,
       onHome: () => navigate('home'), onCreate: () => navigate('make'),
       onOpen: (item, inside) => {
@@ -988,7 +1012,7 @@ function createPage() {
   review();
 }
 function about() {
-  app.innerHTML = `${header()}<main class="narrow about-page"><span class="eyebrow">GIFTPORTALS · VERSION 10.3.3</span><h1>GiftPortals</h1><p class="large-copy">Some gifts fit in your hand. Others take you to an entire world.</p><p>Start with a photo of a place you love. Tripo turns it into a 3D keepsake; World Labs creates the place its story carries. Open the gift, turn it in your hands, then step inside its little world.</p><h2>Make a gift before creating an account.</h2><p>Start with a camera photo, a selected file or an original example. Add an optional place reference and your words. Live availability is shown before creation. Local previews keep jobs on this device; the cloud creator uses private storage and gift links that expire after seven days.</p><h2>What is real, and what is artistic?</h2><p>The generated gift viewer loads actual completed Tripo GLB and World Labs SPZ assets. The Rio example uses fictional people and an artistic interpretation of the bay. Completed gifts with a compatible collision mesh let you walk inside and choose physically supported viewpoints. These worlds are artistic interpretations rather than exact geographic reconstructions. Narrative points contain the sender's words; they are not detected landmarks. The original photo and story remain accessible if 3D cannot load.</p><h2>Private cloud gifting.</h2><p>A cloud gift link acts as a private access key. Anyone holding it can open the gift during its seven-day lifetime. Permanent cross-device collections, authenticated cloud accounts and revocable invitations require separate deployment verification. Opening a gift never records a physical visit. Existing Studio, atlas and earlier illustrated Rio routes remain available.</p><h2>Built with</h2><p>Tripo, World Labs, Three.js, Spark, TypeScript and Vite. The local provider keys stay on the server. Credits, original artwork, earlier work and map sources are documented in the project.</p><button class="button" data-create>Make your little world ↗</button><a class="text-link" href="#/generated/rio-example">Open the Rio example ↗</a></main>${footer()}`; bindCommon();
+  app.innerHTML = `${header()}<main class="narrow about-page"><span class="eyebrow">GIFTPORTALS · VERSION 11</span><h1>GiftPortals</h1><p class="large-copy">Some gifts fit in your hand. Others take you to an entire world.</p><p>Start with a photo of a place you love. Tripo turns it into a 3D keepsake; World Labs creates the place its story carries. Open the gift, turn it in your hands, then step inside its little world.</p><h2>Make a gift. Share a place.</h2><p>Start with a camera photo, a selected file or a real place photograph from our examples. Add your words, then approve sharing your original photo, story and completed gift in the public collection. No account is required. Newly completed souvenirs and worlds are saved in the cloud for everyone to revisit.</p><h2>Step inside your souvenir.</h2><p>The viewer loads real Tripo models and World Labs worlds. A smooth 30-second arrival introduces the place, then opens a newspaper with the original photo, your memory and the souvenir. Close it to explore on your own or open another gift. World generation preserves the visible photograph with realistic depth, materials and light; unseen areas are inferred rather than surveyed. Movement depends on the actual generated collision mesh. Reduced motion and scenes without a safe flight path open the newspaper directly.</p><h2>A public collection without accounts.</h2><p>New gifts appear on the shared memory desk only after their real outputs are archived successfully. Their public links refresh access to the saved media whenever you reopen them. Older private gifts remain separate. Names and words in the Paris and Rio example stories are illustrative; their photographs, 3D models and worlds are real, with source credits in the newspaper.</p><h2>Built with</h2><p>Tripo, World Labs, Three.js, Spark, TypeScript and Vite. The local provider keys stay on the server. Credits, original artwork, earlier work and map sources are documented in the project.</p><button class="button" data-create>Make your little world ↗</button><a class="text-link" href="#/generated/rio-example">Open the Rio example ↗</a></main>${footer()}`; bindCommon();
 }
 
 function missing(message: string) { app.innerHTML = `${header()}<main class="narrow"><span class="eyebrow">A CLOSED DOOR</span><h1>This little world is unavailable.</h1><p>${esc(message)}</p><a class="button" href="#/world">Explore the public demonstration ↗</a></main>${footer()}`; bindCommon(); }

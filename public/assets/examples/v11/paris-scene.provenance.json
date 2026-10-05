@@ -1,0 +1,19 @@
+{
+  "version": 11,
+  "kind": "original-scene-photograph",
+  "scene": "paris",
+  "sourceAttribution": {
+    "author": "Alex Liivet",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Overview_Seine_River_to_Eiffel_Tower_(37578867564).jpg",
+    "license": "CC0 1.0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "changes": "Original reference photograph; generated three-dimensional world and inferred unseen surroundings."
+  },
+  "reference": {
+    "path": "/assets/examples/v11/paris-scene.jpg",
+    "bytes": 2469147,
+    "sha256": "d7f47439b6e8c8914354f5f5dea5d5553faae31d3c06dcc7436ba0d26a8fd987"
+  },
+  "isPano": false,
+  "generation": "Single ordinary photograph; unseen surfaces inferred by World Labs; original Tripo model remains unchanged."
+}
