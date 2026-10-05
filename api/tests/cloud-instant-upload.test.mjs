@@ -71,9 +71,11 @@ test('World Labs submit respects its persisted recipe and explicit world retry o
   await adapter.submit('worldlabs',stored,'');assert.deepEqual(calls.at(-1).body.world_prompt,{type:'text',text_prompt:'A clear test courtyard.'});
   const original=job({model:'marble-1.1',textPrompt:'A clear test courtyard.',isPano:false,disableRecaption:true});original.document.worldRetry={recipeOverride:{model:'marble-1.0'}};
   await adapter.submit('worldlabs',original,'synthetic-media');assert.equal(calls.at(-1).body.model,'marble-1.0');assert.equal(original.document.generation.worldlabs.model,'marble-1.1');assert.equal(calls.at(-1).body.world_prompt.disable_recaption,true);
-  assert.equal(calls.length,5);assert.ok(calls.every(({url})=>url==='https://api.worldlabs.ai/marble/v1/worlds:generate'));
+  const plus=job({model:'marble-1.1-plus',textPrompt:'A clear test courtyard.',isPano:false,disableRecaption:true});
+  await adapter.submit('worldlabs',plus,'synthetic-media');assert.equal(calls.at(-1).body.model,'marble-1.1-plus');assert.equal(calls.at(-1).body.permission.public,false);
+  assert.equal(calls.length,6);assert.ok(calls.every(({url})=>url==='https://api.worldlabs.ai/marble/v1/worlds:generate'));
   for(const recipe of [{model:'untrusted-model',textPrompt:'Test scene'},{textPrompt:'Test scene',disableRecaption:'false'},{textPrompt:'Test scene',isPano:1},{textPrompt:''},{textPrompt:'x'.repeat(16001)}])await assert.rejects(adapter.submit('worldlabs',job(recipe),'synthetic-media'),{code:'INSTANT_INPUT_INVALID'});
-  assert.equal(calls.length,5,'Invalid persisted recipes cannot issue paid requests');
+  assert.equal(calls.length,6,'Invalid persisted recipes cannot issue paid requests');
 });
 
 test('world retry repository forwards both owner and gift capabilities to the dedicated RPCs',async t=>{

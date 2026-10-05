@@ -6,13 +6,18 @@ Release 11.2 of the memory gift app for Tripothon S1. Start with a photo, place 
 
 ## Build status
 
-Release **11.2.0** restores the original Rio sailboats composition through a
+Release **11.2.1** uses **Marble 1.1 Plus for new cloud creations**, with a
+maximum reservation of 3,080 World Labs credits per world. Previously accepted
+jobs preserve their recipes and accounting; publishing this change creates no
+new world. See the [Plus default and rollout evidence](docs/RELEASE-11.2.1-MARBLE-PLUS.md).
+
+Release **11.2.0** restored the original Rio sailboats composition through a
 photographic AI reference and a new Marble 1.1 Plus world. Two public square
 examples receive Plus world overlays while retaining their original archived
 photos, Tripo models and memories. The duplicate old Rio card is hidden when
 the updated showroom example is present; its direct public link remains valid.
-Paris and the observatory remain unchanged. New live creations retain Marble
-1.1 with an improved outdoor prompt. The arrival now runs at 1.5× speed, taking
+Paris and the observatory remain unchanged. The improved outdoor prompt is
+retained for new worlds. The arrival now runs at 1.5× speed, taking
 20 seconds along the same route. The newspaper displays the actual 3D keepsake,
 and all reviewed public examples are presented in English. See the [11.2 world refresh evidence](docs/RELEASE-11.2-EXAMPLE-WORLDS.md).
 

@@ -60,7 +60,7 @@ export function createCloudInstantRepository(deadline=Date.now()+165000):CloudIn
       // These totals are accounting, not balances or spending caps. Fresh provider
       // affordability remains checked immediately before each paid stage.
       const budget=Object.fromEntries(rows.map(row=>[row.provider,{committed:row.reserved_credits,nextReservation:row.reservation_per_job}]));
-      return {budget,canCreate:rows.length===2&&rows.some(row=>row.provider==='tripo'&&row.reservation_per_job===100)&&rows.some(row=>row.provider==='worldlabs'&&row.reservation_per_job===1580)};
+      return {budget,canCreate:rows.length===2&&rows.some(row=>row.provider==='tripo'&&row.reservation_per_job===100)&&rows.some(row=>row.provider==='worldlabs'&&[1580,3080].includes(row.reservation_per_job))};
     },
   };
 }

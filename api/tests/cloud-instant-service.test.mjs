@@ -24,7 +24,7 @@ function fixture(options={}){
     async lookup(key,cap){return publicJob(checked(requests.get(key),cap));},
     async finalize(id,cap,assets){const job=checked(id,cap);if(job.state==='awaiting_upload'){job.assets=copy(assets);job.state='queued';job.revision++;}return publicJob(job);},
     async worldRetryOwner(id,cap,owner){return checked(id,cap).ownerHash===owner;},
-    async retryWorld(id,cap,owner,key,recipeOverride){const job=checked(id,cap);if(job.ownerHash!==owner)throw new AppError('JOB_UNAVAILABLE',404);if(retries.has(key))return publicJob(job);if(!cloudWorldRetryEligible(job))throw new AppError('WORLD_RETRY_UNAVAILABLE',409);const attempt=(job.document.worldRetry?.attempt||0)+1;retries.set(key,{stage:copy(job.stages.worldlabs),credits:1580,attempt});journal.push(['reserve-world-retry',1580]);delete job.stages.worldlabs;if(job.document.stageFailures)delete job.document.stageFailures.worldlabs;job.document.worldRetry={attempt,recipeOverride:copy(recipeOverride)};job.state='processing';job.revision++;return publicJob(job);},
+    async retryWorld(id,cap,owner,key,recipeOverride){const job=checked(id,cap);if(job.ownerHash!==owner)throw new AppError('JOB_UNAVAILABLE',404);if(retries.has(key))return publicJob(job);if(!cloudWorldRetryEligible(job))throw new AppError('WORLD_RETRY_UNAVAILABLE',409);const attempt=(job.document.worldRetry?.attempt||0)+1;const credits=(recipeOverride.model??job.document.generation.worldlabs.model)==='marble-1.1-plus'?3080:1580;retries.set(key,{stage:copy(job.stages.worldlabs),credits,attempt});journal.push(['reserve-world-retry',credits]);delete job.stages.worldlabs;if(job.document.stageFailures)delete job.document.stageFailures.worldlabs;job.document.worldRetry={attempt,recipeOverride:copy(recipeOverride)};job.state='processing';job.revision++;return publicJob(job);},
     async claim(worker,id){journal.push(['claim',id]);const job=[...jobs.values()].find(job=>(!id||job.id===id)&&!job.lease_id&&(['queued','processing'].includes(job.state)||(job.state==='submission_uncertain'&&Object.values(job.stages).some(stage=>stage.state==='processing'&&stage.taskId))));if(!job)return null;job.state=job.state==='submission_uncertain'?job.state:'processing';job.lease_id=`lease-${++leases}`;job.revision++;return publicJob(job);},
     async begin(value,stage){const job=cas(value);assert.equal(job.state,'processing');assert.equal(job.stages[stage],undefined);assert.equal(job.document.stageFailures?.[stage],undefined);assert.equal(job.document.photoSafety?.decision,'allow');job.stages[stage]={state:'submitting',progress:0,submittedAt:'2026-10-04T00:00:01Z'};job.revision++;journal.push(['begin',stage]);return publicJob(job);},
     async update(value,changes){const job=cas(value);job.state=changes.state;job.document=copy(changes.document);job.stages=copy(changes.stages);job.assets=copy(changes.assets);job.revision++;if(changes.releaseLease!==false)job.lease_id=null;journal.push(['update',job.state]);return publicJob(job);},
@@ -147,14 +147,40 @@ test('legacy failed state requires a fresh terminal nonempty provider error and 
 
 test('prepare deduplicates the exact immutable recipe without provider calls and rejects changed input',async()=>{const f=fixture(),source=input(),snapshot=copy(source),first=await f.prepared(source),second=await f.service().prepare(source,'c'.repeat(64));assert.equal(first.id,second.id);assert.equal(second.deduplicated,true);assert.equal(f.jobs.size,1);assert.deepEqual(source,snapshot);assert.equal(f.journal.some(([kind])=>['submit','providerUpload','credit','moderate'].includes(kind)),false);await rejectCode(f.service().prepare(input({story:'changed'}),'c'.repeat(64)),'DEDUPE_MISMATCH');assert.equal(cloudRequestHash(token,'stable-request-01',secret),cloudRequestHash(token,'stable-request-01',secret));assert.notEqual(cloudRequestHash(token,'stable-request-01',secret),cloudRequestHash(otherToken,'stable-request-01',secret));});
 test('a lost prepare response across the default-model change recovers the older pinned recipe and still rejects changed input or owner',async()=>{
+ for(const legacyModel of ['marble-1.0','marble-1.1']){
   const f=fixture(),source=input(),first=await f.prepared(source),job=f.jobs.get(first.id);
-  job.document.generation.worldlabs.model='marble-1.0';job.inputHash=hash(JSON.stringify(job.document));
+  job.document.generation.worldlabs.model=legacyModel;job.inputHash=hash(JSON.stringify(job.document));
   const recovered=await f.service().prepare(source,'c'.repeat(64));assert.equal(recovered.id,first.id);assert.equal(recovered.deduplicated,true);
-  assert.equal(job.document.generation.worldlabs.model,'marble-1.0');assert.equal(f.jobs.size,1);
+  assert.equal(job.document.generation.worldlabs.model,legacyModel);assert.equal(f.jobs.size,1);
   await rejectCode(f.service().prepare(input({story:'Changed user input'}),'c'.repeat(64)),'DEDUPE_MISMATCH');
   await rejectCode(f.service().prepare(source,'e'.repeat(64)),'DEDUPE_MISMATCH');
   assert.equal(f.journal.some(([kind])=>['submit','providerUpload','credit','moderate'].includes(kind)),false);
-  const created=await f.service().prepare(input({dedupeKey:'new-model-request-02'}),'c'.repeat(64));assert.equal(f.jobs.get(created.id).document.generation.worldlabs.model,'marble-1.1');
+  const created=await f.service().prepare(input({dedupeKey:'new-model-request-02'}),'c'.repeat(64));assert.equal(f.jobs.get(created.id).document.generation.worldlabs.model,'marble-1.1-plus');
+ }
+});
+
+test('Plus affordability checks its maximum before uploading or submitting while legacy accepted jobs keep their cost',async()=>{
+ for(const [model,balance,cost,allowed] of [['marble-1.1-plus',3079,3080,false],['marble-1.1-plus',3080,3080,true],['marble-1.1',1580,1580,true],['marble-1.0',1580,1580,true]]){
+  const f=fixture(),out=await f.queued(input({images:{original:image(png),world:image(png2)}})),job=f.jobs.get(out.id);job.document.generation.worldlabs.model=model;
+  f.providers.credit=async(provider,reservation)=>{f.journal.push(['credit',provider,reservation]);if(balance<reservation)throw new AppError('PROVIDER_INSUFFICIENT_CREDITS',402);};
+  await f.service().tick('moderation-worker',out.id);await f.service().tick('world-worker',out.id);
+  assert.deepEqual(f.journal.filter(([kind])=>kind==='credit'),[['credit','worldlabs',cost]]);
+  assert.equal(f.journal.some(([kind,provider])=>kind==='providerUpload'&&provider==='worldlabs'),allowed,'Affordability precedes even the source image upload');
+  assert.equal(f.journal.some(([kind,stage])=>kind==='submit'&&stage==='worldlabs'),allowed);
+  assert.equal(job.document.generation.worldlabs.model,model);
+ }
+});
+
+test('explicit Plus retry retains Plus and its exact inputs, reserves3080 once and preserves the completed Tripo gift',async()=>{
+ const f=await failedWorldFixture(),job=f.jobs.get(f.out.id),before=copy(job);assert.equal(job.document.generation.worldlabs.model,'marble-1.1-plus');
+ const pending=await f.service().retryWorld(job.id,token,'plus-world-retry-01','c'.repeat(64));
+ await f.service().retryWorld(job.id,token,'plus-world-retry-01','c'.repeat(64));
+ assert.equal(f.retries.size,1);assert.equal([...f.retries.values()][0].credits,3080);assert.equal(pending.generation.worldlabs.model,'marble-1.1-plus');
+ assert.deepEqual(job.document.worldRetry.recipeOverride,{});assert.deepEqual(job.document.generation,before.document.generation);assert.deepEqual(job.document.images,before.document.images);
+ assert.deepEqual(job.stages.tripo,before.stages.tripo);assert.deepEqual(job.assets,before.assets);assert.equal(job.expires_at,before.expires_at);
+ f.providers.poll=f.successfulPoll;const start=f.journal.length;for(let i=0;i<3;i++)await f.service().advance(job.id,token,'c'.repeat(64));
+ assert.deepEqual(f.journal.slice(start).filter(([kind])=>kind==='credit'),[['credit','worldlabs',3080]]);
+ assert.equal(job.state,'completed');assert.equal(f.journal.filter(([kind,stage])=>kind==='submit'&&stage==='tripo').length,1);
 });
 test('crossed prompt release recovers one exact accepted recipe while changed caller declarations remain rejected',async()=>{
   for(const photoIntent of ['object','place']){
@@ -171,7 +197,7 @@ test('crossed prompt release recovers one exact accepted recipe while changed ca
     await rejectCode(f.service().prepare(source,'e'.repeat(64)),'DEDUPE_MISMATCH');assert.deepEqual(job,before);
     assert.equal(f.journal.some(([kind])=>['submit','providerUpload','credit','moderate'].includes(kind)),false);
     const created=await f.service().prepare({...source,dedupeKey:`new-photographic-v12-${photoIntent}`},'c'.repeat(64));
-    const recipe=f.jobs.get(created.id).document.generation.worldlabs;assert.equal(recipe.model,'marble-1.1');assert.equal(recipe.promptVersion,'giftportals-world-photographic-v12');
+    const recipe=f.jobs.get(created.id).document.generation.worldlabs;assert.equal(recipe.model,'marble-1.1-plus');assert.equal(recipe.promptVersion,'giftportals-world-photographic-v12');
     assert.match(recipe.textPrompt,/Never infer an enclosing ceiling, roof, arches, window frame or interior foreground absent from the photograph/);
     assert.deepEqual(job.document.generation.worldlabs,accepted);
     const submit=f.providers.submit;let worldSubmissions=0;
@@ -185,7 +211,7 @@ test('crossed prompt release recovers one exact accepted recipe while changed ca
     const repeated=await f.service().prepare(source,'c'.repeat(64));assert.equal(repeated.id,first.id);assert.equal(repeated.deduplicated,true);assert.equal(worldSubmissions,1);
   }
 });
-test('metadata enforces consent, image limits, hashes, roles, prompt lengths, explicit recipe and exact story',()=>{const doc=cloudInputDocument(input({photoIntent:'place'}));assert.equal(doc.needsReference,true);assert.equal(doc.generation.tripo.face_limit,30000);assert.equal(doc.generation.worldlabs.model,'marble-1.1');assert.equal(doc.generation.tripoReference.model,'chat_image_2');assert.equal(doc.story,'My exact story');for(const bad of[{consent:false},{photoIntent:'other'},{images:{original:{...image(png),bytes:6*1024*1024+1}}},{images:{original:{...image(png),sha256:'no'}}},{images:{original:null}},{images:{original:image(png),audio:image(png)}},{worldPrompt:'short'},{photoIntent:'place',images:{original:image(png),object:image(png2)}},{photoIntent:'place',objectImageRole:'miniature-reference',images:{original:image(png),object:image(png)}}])assert.throws(()=>cloudInputDocument(input(bad)),error=>Boolean(error.code));});
+test('metadata enforces consent, image limits, hashes, roles, prompt lengths, explicit recipe and exact story',()=>{const doc=cloudInputDocument(input({photoIntent:'place'}));assert.equal(doc.needsReference,true);assert.equal(doc.generation.tripo.face_limit,30000);assert.equal(doc.generation.worldlabs.model,'marble-1.1-plus');assert.equal(doc.generation.tripoReference.model,'chat_image_2');assert.equal(doc.story,'My exact story');for(const bad of[{consent:false},{photoIntent:'other'},{images:{original:{...image(png),bytes:6*1024*1024+1}}},{images:{original:{...image(png),sha256:'no'}}},{images:{original:null}},{images:{original:image(png),audio:image(png)}},{worldPrompt:'short'},{photoIntent:'place',images:{original:image(png),object:image(png2)}},{photoIntent:'place',objectImageRole:'miniature-reference',images:{original:image(png),object:image(png)}}])assert.throws(()=>cloudInputDocument(input(bad)),error=>Boolean(error.code));});
 test('finalize verifies original plus every derivative against actual bytes and leaves all bytes private before moderation',async()=>{const f=fixture(),out=await f.prepared(input({images:{original:image(png),object:image(png2),world:image(png2)}})),job=f.jobs.get(out.id);const badPath=out.uploads.find(v=>v.id==='world').url.replace('https://storage.invalid/upload/','');f.bytes.set(badPath,png);await rejectCode(f.service().finalize(out.id,token),'IMAGE_CONTENT_INVALID');assert.equal(job.state,'awaiting_upload');f.bytes.set(badPath,png2);const dto=await f.service().finalize(out.id,token);assert.equal(dto.state,'processing');assert.equal(dto.assets.photoUrl,'');assert.equal(f.journal.some(([kind])=>kind==='signRead'||kind==='submit'),false);});
 test('GET exposes pending uploads without work and finalization changes only the existing job upload state',async()=>{const f=fixture(),out=await f.prepared();const pending=await f.service().get({id:out.id,token});assert.equal(pending.uploadState,'pending');await f.service().advance(out.id,token);assert.equal(f.journal.some(([kind])=>['claim','submit','moderate'].includes(kind)),false);const finalized=await f.service().finalize(out.id,token);assert.equal(finalized.uploadState,'finalized');assert.equal((await f.service().get({id:out.id,token})).uploadState,'finalized');assert.equal(f.jobs.size,1);assert.equal(f.journal.filter(([kind])=>kind==='prepare').length,1);assert.equal(f.journal.some(([kind])=>kind==='submit'),false);});
 test('partial upload recovery signs only absent files and verifies existing files before signing anything',async()=>{const f=fixture(),source=input({images:{original:image(png),object:image(png2),world:image(png2)}}),out=await f.prepared(source);const objectPlan=out.uploads.find(value=>value.id==='object'),originalPath=out.uploads.find(value=>value.id==='original').url.replace('https://storage.invalid/upload/','');f.bytes.delete(objectPlan.url.replace('https://storage.invalid/upload/',''));const pending=await f.service().get({id:out.id,token});assert.deepEqual(pending.uploads.map(value=>value.id),['object']);assert.equal(pending.uploads[0].sha256,hash(png2));assert.deepEqual((await f.service().prepare(source,'c'.repeat(64))).uploads.map(value=>value.id),['object']);f.bytes.set(originalPath,png2);let signatures=0;f.repository.signUpload=async()=>{signatures++;return 'must-not-sign-invalid-recovery';};await rejectCode(f.service().get({id:out.id,token}),'IMAGE_CONTENT_INVALID');await rejectCode(f.service().prepare(source,'c'.repeat(64)),'IMAGE_CONTENT_INVALID');assert.equal(signatures,0);assert.equal(f.jobs.size,1);assert.equal(f.journal.some(([kind])=>kind==='submit'),false);});

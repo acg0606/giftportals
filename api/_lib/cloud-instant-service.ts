@@ -165,7 +165,7 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       // Current caller declarations, other recipes, input hash and creator identity
       // must still match in the RPC before it can return the existing job.
       const acceptedRecipe=original.document.generation.worldlabs;
-      if(!['marble-1.0','marble-1.1'].includes(String(acceptedRecipe.model)))throw error;
+      if(!['marble-1.0','marble-1.1','marble-1.1-plus'].includes(String(acceptedRecipe.model)))throw error;
       const pinned={...document,generation:{...document.generation,worldlabs:{...acceptedRecipe}}};
       result=await repo.prepare({...values,document:pinned,inputHash:hash(JSON.stringify(pinned))});
     }
@@ -196,7 +196,9 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       ensure(receipt.done===true&&receipt.error!==null&&typeof receipt.error==='object'&&!Array.isArray(receipt.error)&&Object.keys(receipt.error).length>0&&receipt.response==null,'WORLD_RETRY_UNAVAILABLE',409);
       diagnostics={...cloudWorldDiagnostics(receipt),taskId:previous.taskId};
     }
-    return dto(await repo.retryWorld(validated.id,giftHash(token),ownerHash,requestKeyHash,{model:'marble-1.0'},diagnostics),token,ownerHash);
+    // Retain Plus on explicit recovery; older jobs keep their established fallback.
+    const recipeOverride=validated.document.generation.worldlabs.model==='marble-1.1-plus'?{}:{model:'marble-1.0' as const};
+    return dto(await repo.retryWorld(validated.id,giftHash(token),ownerHash,requestKeyHash,recipeOverride,diagnostics),token,ownerHash);
   };
   const diagnoseWorld=async(id:string,token:string)=>{
     const job=await repo.get(uuid(id),giftHash(token)),expiry=job.expires_at?Date.parse(job.expires_at):NaN;
@@ -243,7 +245,10 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
       if(stage?.state==='submitting'||stage?.state==='submission_uncertain'){await save(job,'submission_uncertain');return {processed:true,state:'submission_uncertain'};}
       if(!stage){
         const active=deps.settings();ensure(active.enabled&&active.providers[selected==='worldlabs'?'worldlabs':'tripo']&&deps.moderator.configured,'GENERATION_PAUSED',503);const images=await approvedInputs(job);verifyCloudSafety(job.document.photoSafety!,images);
-        const provider=selected==='worldlabs'?'worldlabs':'tripo';await deps.providers.credit(provider,provider==='worldlabs'?1580:selected==='tripo'&&job.document.needsReference?60:100);
+        const provider=selected==='worldlabs'?'worldlabs':'tripo';
+        const worldRecipe:Record<string,unknown>={...job.document.generation.worldlabs,...job.document.worldRetry?.recipeOverride};
+        const worldReservation=worldRecipe.model==='marble-1.1-plus'?3080:1580;
+        await deps.providers.credit(provider,provider==='worldlabs'?worldReservation:selected==='tripo'&&job.document.needsReference?60:100);
         let asset=selected==='tripo-reference'?job.assets.original:selected==='worldlabs'?(job.assets.world|| (job.document.photoIntent==='place'?job.assets.original:undefined)):job.assets.reference||job.assets.object||job.assets.original;
         if(selected==='tripo'&&job.document.needsReference){ensure(job.stages['tripo-reference']?.state==='completed'&&job.assets.reference&&job.document.objectSafety,'PHOTO_SAFETY_REQUIRED',503);const derived={id:'object' as const,mime:job.assets.reference.mime,bytes:await verifiedBytes(job.assets.reference),sha256:job.assets.reference.sha256};verifyCloudSafety(job.document.objectSafety!,[derived]);}
         const uploaded=asset?await deps.providers.upload(provider,await verifiedBytes(asset),asset.mime):'';
