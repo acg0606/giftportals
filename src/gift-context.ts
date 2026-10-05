@@ -105,7 +105,7 @@ export function mountGiftContext(host: HTMLElement, options: GiftContextOptions 
     element<HTMLButtonElement>('[data-gc-map-mode]').hidden = !position;
     element('[data-gc-map-mode]').textContent = showStreets ? 'Use local map' : 'Show street map';
     mapNotice.textContent = showStreets ? 'Street map from OpenStreetMap. Exploring the map keeps your selected place.' : streetFailed ? 'Street map unavailable. The local map and your selected place still work.' : position ? 'Local overview. Show the street map for roads and place names.' : 'Choose a listed city to see its map. Your place name also works without a map.';
-    element('[data-gc-coordinates]').textContent = position ? `${position.latitude.toFixed(2)}°, ${position.longitude.toFixed(2)}° · ${context.mode === 'device' ? 'approximate' : 'city centre'}` : mapFailed ? 'Map unavailable · your place name still works' : 'Local map · no remote tiles';
+    element('[data-gc-coordinates]').textContent = position ? `${position.latitude.toFixed(2)}°, ${position.longitude.toFixed(2)}° · ${context.mode === 'device' ? 'approximate' : 'selected place'}` : mapFailed ? 'Map unavailable · your place name still works' : 'Local map · no remote tiles';
     const dto = state.getContext(), signature = JSON.stringify({ dto, lookupReady: Boolean(lookupLocation), lookupEpoch });
     if (signature !== lastChange) { lastChange = signature; options.onChange?.(dto); }
     if (hasPlace) loadMap();
