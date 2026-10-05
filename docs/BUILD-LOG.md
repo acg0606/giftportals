@@ -179,8 +179,9 @@ The following English updates were published on 4 October 2026:
 - [X four-image build update](https://x.com/derivativador/status/2106935050348675082)
 - [Instagram narrated and captioned walkthrough Reel](https://www.instagram.com/p/DeGI_1PPtxS/)
 - [Instagram four-image carousel](https://www.instagram.com/p/DeGJbd8jPcD/)
+- [LinkedIn participation and project idea, with organizer and sponsor thanks](https://www.linkedin.com/feed/update/urn:li:activity:7512704462604382208/)
 
 The Reel uses the 80-second English walkthrough. Published captions credit the
 tools and providers, the carousel has four English image descriptions, and the
-posts include AI labels. These publications do not change the hardware and
+X and Instagram posts include AI labels. These publications do not change the hardware and
 third-track limits recorded above or establish a final submission.
