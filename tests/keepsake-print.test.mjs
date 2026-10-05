@@ -43,7 +43,7 @@ test('ZIP contains exact local bytes, standard CRC and a complete central direct
   const message=new TextEncoder().encode('hello world'),zip=makePrintZIP([{name:'readme.txt',bytes:message}]),view=new DataView(zip.buffer);assert.equal(view.getUint32(0,true),0x04034b50);assert.equal(view.getUint32(14,true),0x0d4a1185);assert.deepEqual(zip.subarray(40,51),message);const end=zip.length-22;assert.equal(view.getUint32(end,true),0x06054b50);assert.equal(view.getUint16(end+10,true),1);assert.equal(view.getUint32(view.getUint32(end+16,true),true),0x02014b50);assert.throws(()=>makePrintZIP([{name:'../private',bytes:message}]),/PRINT_PACKAGE_LIMIT/);
   assert.equal(await printSHA256(message),'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9');
 });
-async function fixture(action,{defer=false,current=true}={}){
+async function fixture(action,{defer=false,current=true,geometry=new Three.BoxGeometry()}={}){
   const names=['document','HTMLElement','location','fetch','crypto','URL','setTimeout','clearTimeout','__printFixture'],saved=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)])),urls=new Map(),revoked=[],timers=new Map();let sequence=0,resolveParse;
   class Element extends EventTarget{
     constructor(tag='div',attrs={}){super();this.tag=tag;this.attrs=attrs;this.className=attrs.class||'';this.children=[];this.parent=null;this.hidden='hidden'in attrs;this.disabled=false;this.isConnected=true;this.value=attrs.value||'';this.textContent='';this.removed=false;}
@@ -51,7 +51,7 @@ async function fixture(action,{defer=false,current=true}={}){
     set innerHTML(value){const stack=[this];for(const token of value.matchAll(/<\/?[A-Za-z][^>]*>/g)){const raw=token[0],tag=/^<\/?([\w-]+)/.exec(raw)[1];if(raw.startsWith('</')){while(stack.length>1&&stack.at(-1).tag!==tag)stack.pop();if(stack.length>1)stack.pop();continue;}const attrs={};for(const match of raw.slice(tag.length+1,-1).matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[match[1]]=match[2]??'';const child=new Element(tag,attrs);stack.at(-1).append(child);if(!['input','br'].includes(tag)&&!raw.endsWith('/>'))stack.push(child);}}
     descendants(){return this.children.flatMap(child=>[child,...child.descendants()]);}querySelector(selector){return this.descendants().find(element=>selector.startsWith('.')?element.className.split(' ').includes(selector.slice(1)):selector.startsWith('[')?selector.slice(1,-1)in element.attrs:element.tag===selector);}
   }
-  const sourceBytes=glb(new Three.BoxGeometry()),state={current,host:new Element(),urls,revoked,timers,sourceBytes,models:[],calls:[],closes:0};const returnFocus=new Element('button');
+  const sourceBytes=glb(geometry),state={current,host:new Element(),urls,revoked,timers,sourceBytes,models:[],calls:[],closes:0};const returnFocus=new Element('button');
   const BrowserURL=class extends URL{static createObjectURL(blob){const value=`blob:print-${++sequence}`;urls.set(value,blob);return value;}static revokeObjectURL(value){revoked.push(value);}};
   class Loader{constructor(manager){this.manager=manager;}async parseAsync(bytes){const gltf=await new GLTFLoader(this.manager).parseAsync(bytes,'');state.models.push(gltf.scene);if(defer)await new Promise(resolve=>resolveParse=resolve);return gltf;}}
   const values={document:{activeElement:returnFocus,createElement:tag=>new Element(tag)},HTMLElement:Element,location:{origin:'http://127.0.0.1:4323'},fetch:async(url,options)=>{state.calls.push({url,options});return new Response(sourceBytes,{headers:{'content-length':String(sourceBytes.length)}});},crypto:webcrypto,URL:BrowserURL,setTimeout:callback=>{const id=++sequence;timers.set(id,callback);return id;},clearTimeout:id=>timers.delete(id),__printFixture:{Loader}};
@@ -66,6 +66,19 @@ test('modal prepares original GLB and a four-file ZIP locally, changes scale wit
   state.find('input').value='120';state.find('form').dispatchEvent(new Event('submit',{cancelable:true}));await state.finish();assert.match(state.find('.kp-dimensions').textContent,/120.0/);assert.equal(state.calls.length,1);
   let geometryDisposed=0,materialDisposed=0;const child=state.models[0].children[0];child.geometry.addEventListener('dispose',()=>geometryDisposed++);child.material.addEventListener('dispose',()=>materialDisposed++);state.handle.destroy();state.handle.destroy();assert.equal(geometryDisposed,1);assert.equal(materialDisposed,1);assert.equal(state.revoked.length,state.urls.size);assert.equal(state.timers.size,0);assert.equal(state.calls[0].options.signal.aborted,true);
 }));
+test('print measurements stay in English when the browser number-formatting default is Portuguese',async()=>{
+  const nativeFormat=Number.prototype.toLocaleString,requestedLocales=[];
+  Number.prototype.toLocaleString=function(locale,options){requestedLocales.push(locale);return nativeFormat.call(this,locale??'pt-BR',options);};
+  try{
+    await fixture(async state=>{
+      assert.match(state.find('.kp-dimensions').textContent,/1,200 triangles/);
+      assert.doesNotMatch(state.find('.kp-dimensions').textContent,/1\.200 triangles/);
+      assert.ok(requestedLocales.length>0);assert.ok(requestedLocales.every(locale=>locale==='en-US'));
+      assert.equal(state.calls.length,1);
+    },{geometry:new Three.BoxGeometry(1,1,1,10,10,10)});
+  }finally{Number.prototype.toLocaleString=nativeFormat;}
+});
+
 test('a late decoded model is disposed after close and a stale route never installs downloads or attaches a package',async()=>{
   await fixture(async state=>{assert.equal(state.models.length,1);let disposed=0;state.models[0].children[0].geometry.addEventListener('dispose',()=>disposed++);state.handle.destroy();const urls=state.urls.size;state.complete();await state.finish();assert.equal(disposed,1);assert.equal(state.urls.size,urls);assert.equal(state.host.children.length,0);},{defer:true});
   await fixture(async state=>{assert.equal(state.calls.length,0);assert.equal(state.models.length,0);assert.equal(state.urls.size,0);},{current:false});

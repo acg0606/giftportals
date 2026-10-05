@@ -103,7 +103,7 @@ def decode_audio(raw):
 
 def transcribe(request):
     from faster_whisper import WhisperModel
-    language = request.get("language", "pt")
+    language = request.get("language", "en")
     if language not in ("pt", "en", "auto"):
         raise AudioError("AUDIO_LANGUAGE_INVALID")
     url = request.get("audioDataUrl", "")
