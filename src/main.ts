@@ -302,7 +302,7 @@ async function mountGiftWalk(id: string, gift: GeneratedGiftData, epoch: number,
   if (epoch !== renderId || abort.signal.aborted) return;
   const returnPath = generatedGiftPath(id);
   const walk = mountGiftWorldExperience(app, { gift,
-    isCurrent: () => epoch === renderId && !abort.signal.aborted, onExit: () => navigate(returnPath),
+    isCurrent: () => epoch === renderId && !abort.signal.aborted, onExit: () => navigate(gift.modelUrl ? returnPath : 'collection'),
     onCollection: () => navigate('collection') });
   cleanup = () => { abort.abort(); walk.destroy(); };
 }
@@ -329,7 +329,7 @@ async function generatedGiftPage(id: string, epoch: number) {
     app.innerHTML = '<main id="generated-gift-root"></main>';
     const journeyPath = generatedGiftPath(id) + '&view=world';
     const viewer = mountGeneratedGift(app.querySelector<HTMLElement>('#generated-gift-root')!, {
-      gift, shareScope: ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'local' : 'cloud', initialView: routeParams().get('view') === 'world' && gift.worldUrl ? 'world' : 'object',
+      gift, shareScope: routeParams().get('public') === '1' ? 'public' : ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'local' : 'cloud', initialView: routeParams().get('view') === 'world' && gift.worldUrl ? 'world' : 'object',
       isCurrent: () => epoch === renderId && generation === sessionGeneration(), onExit: () => navigate('collection'),
       onCollection: () => navigate('collection'),
       cinematicWorld: true,

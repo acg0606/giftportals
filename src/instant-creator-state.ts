@@ -107,10 +107,11 @@ export function validateInstantPhoto(file: { type: string; size: number }, maxBy
   return null;
 }
 
-/** A terminal gift can open as soon as its real keepsake has been delivered,
- * including a partial creation whose world could not be made. */
+/** A terminal gift preserves either completed output. During an explicit world
+ * retry, its previously delivered model remains available. */
 export function instantGiftReady(job: InstantJob): boolean {
-  return (job.state === 'completed' || job.state === 'partial' || job.state === 'processing' && Boolean(job.worldRetry && job.worldRetry.attempts > 0)) && instantModelReady(job);
+  if (job.state === 'completed' || job.state === 'partial') return instantModelReady(job) || instantWorldReady(job);
+  return job.state === 'processing' && Boolean(job.worldRetry && job.worldRetry.attempts > 0) && instantModelReady(job);
 }
 
 export function instantModelReady(job: InstantJob): boolean {

@@ -38,7 +38,9 @@ See [world generation receipts and source licenses](V11-WORLD-GENERATION.md).
 
 ## Executed verification
 
-- Full code suite: 1,086 tests passed; frontend/server TypeScript and Vite build passed.
+- Full current code suite: 1,090 tests passed; frontend/server TypeScript passed.
+  The preceding preview passed the local Vite build and actual Vercel build.
+  The final branch build is checked before sharing its new deployment.
 - Applied database migration: read-only assertions passed for RLS, grants,
   current consent, archive paths and exclusion of older private jobs.
 - Supabase preview function: active, using encrypted Secrets through `Deno.env`.
@@ -47,12 +49,24 @@ See [world generation receipts and source licenses](V11-WORLD-GENERATION.md).
 - Real mobile browser: unchanged Paris Tripo model rendered; the new world
   started automatically; the newspaper appeared at tour completion; closing
   it enabled exploration controls. Original photo and source attribution were
-  visibly present in the newspaper.
+  visibly present in the newspaper. The calibrated deployment was also checked
+  at the normal 1280 × 720 desktop viewport. Temporary phone overrides were reset.
 - Paris camera calibration: actual 500k SPZ/collider and Rapier/BVH approved
   the 30-second route at yaw 0.339 and pitch 0.104. Camera height moves from
   3.53 to 1.11 scene units, finishing at the safe spawn. 66 focused viewer
   tests passed. Eight relay tests passed after removing an unused anonymous
   Supabase header; the separate relay authentication remains required.
+- Creator/viewer tests preserve a completed world when Tripo fails, open it
+  directly, and hide unavailable model/printing/VR actions. The world-only exit
+  returns to the collection instead of repeating the arrival. Public gift copy
+  distinguishes renewable media signatures from the durable public link.
+
+The GET-only `tools/download-v11-public-world.mjs` can download the future actual
+published Rio world using a fresh public gift response and a narrowly projected
+database receipt, then verify archive paths, sizes, hashes and file formats.
+It emits no signed tokens or provider requests. Its receipt is compatible with
+the static-world exporter. Local validation used the real Paris files without
+creating a gallery record; Rio has not yet been generated.
 
 ## Remaining before the complete preview is ready
 

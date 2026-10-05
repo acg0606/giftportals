@@ -53,6 +53,7 @@ async function fixture(action,settings={}){
 
 test('automatic arrival opens one newspaper at completion; closing it enables manual walking and the story can reopen under Portuguese host defaults',async()=>{
   await fixture(async state=>{
+    assert.equal(state.find('[data-gw-exit]').textContent,'Back to keepsake');
     const options=state.options();assert.equal(options.cinematicArrival,true);assert.deepEqual(options.points,[]);assert.equal(state.find('[data-gw-paper]').hidden,true);assert.equal(state.find('[data-gw-explore]').hidden,true);
     options.onReady();options.onWalkingChange({available:true,enabled:false});options.onCinematicState({phase:'flying',progress:.5});assert.equal(state.find('[data-gw-skip]').hidden,false);assert.equal(state.find('[data-gw-paper]').hidden,true);
     options.onCinematicState({phase:'completed',progress:1});const paper=state.find('[data-gw-paper]');assert.equal(paper.hidden,false);assert.match(paper.innerHTML,/THE GIFTPORTALS MEMORY EDITION/);assert.match(paper.innerHTML,/original\.jpg/);assert.equal(state.find('[data-gw-explore]').hidden,true);
@@ -64,7 +65,7 @@ test('automatic arrival opens one newspaper at completion; closing it enables ma
 });
 
 test('reduced-motion completion goes straight to the newspaper and a failed world preserves media without offering invented walking',async()=>{
-  await fixture(async state=>{state.options().onReady();state.options().onCinematicState({phase:'completed',progress:1,reason:'motion'});assert.equal(state.find('[data-gw-paper]').hidden,false);});
+  await fixture(async state=>{assert.equal(state.find('[data-gw-exit]').textContent,'Close world');state.options().onReady();state.options().onCinematicState({phase:'completed',progress:1,reason:'motion'});assert.equal(state.find('[data-gw-paper]').hidden,false);state.find('[data-gw-exit]').dispatchEvent(new Event('click'));assert.equal(state.exits(),1);assert.equal(state.calls.filter(call=>call[0]==='destroy').length,1);},{gift:{...gift,modelUrl:undefined}});
   await fixture(async state=>{state.options().onError('Unavailable');assert.equal(state.find('[data-gw-paper]').hidden,false);state.find('[data-gw-close-paper]').dispatchEvent(new Event('click'));assert.match(state.find('[data-gw-explore-status]').textContent,/3D world is unavailable/);assert.equal(state.find('[data-gw-direction]').hidden,true);});
 });
 

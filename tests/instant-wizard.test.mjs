@@ -493,6 +493,26 @@ test('a delivered partial souvenir registers once and opens while its failed wor
   });
 });
 
+test('a partial world registers and opens after model failure while a nonterminal first creation stays pending, without resubmission', async () => {
+  const reference = { id: 'partial-world', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.equal(state.completed.length, 0); assert.equal(state.find('[data-instant-open]').hidden, true);
+    assert.equal(state.scheduled.length, 1); const scheduled = state.scheduled[0]; scheduled.callback(); await flush();
+    assert.equal(state.completed.length, 1); assert.equal(state.completed[0].state, 'partial');
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.match(state.find('[data-instant-open]').innerHTML, /Open your world/);
+    assert.equal(state.find('#instant-progress-heading').textContent, 'Your world is ready.');
+    assert.match(state.find('[data-instant-job-status]').textContent, /world is ready.*3D keepsake is unavailable/);
+    assert.equal(state.find('[data-instant-job-note]').textContent, 'Step inside your world and read your story.');
+    assert.equal(state.find('[data-instant-model-preview]').hidden, true); assert.equal(state.scheduled.length, 1);
+    state.find('[data-instant-open]').click(); assert.equal(state.opened.length, 1);
+    assert.equal(state.opened[0].assets.worldUrl, '/world'); assert.equal(state.opened[0].assets.modelUrl, undefined);
+    scheduled.callback(); await flush(); assert.equal(state.completed.length, 1); assert.equal(state.creates.length, 0); assert.equal(state.retries.length, 0);
+  }, {
+    language: 'pt-BR', storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
+    jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: state.jobs.length === 1 ? 'processing' : 'partial', tripo: { state: 'failed', errorCode: 'PROVIDER_GENERATION_FAILED' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo', worldUrl: '/world' } }),
+  });
+});
+
 test('a new Make entry saves a restored partial souvenir and opens Photo instead of the previous result', async () => {
   const reference = { id: 'restored-partial-souvenir', token: 'x'.repeat(43) };
   await fixture(async state => {

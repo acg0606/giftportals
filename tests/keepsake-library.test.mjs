@@ -60,7 +60,8 @@ test('expiry follows the server deadline, removes stale capabilities and never e
 
 test('unfinished and invalid records are rejected; storage failures do not interrupt a ready gift', () => {
   const storage = memoryStorage();
-  assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job('synthetic-gift-a', { state: 'partial', tripo: { state: 'failed' } }), now), undefined);
+  assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job('synthetic-gift-a', { state: 'partial', tripo: { state: 'failed' }, worldlabs: { state: 'failed' } }), now), undefined);
+  assert.equal(library.rememberCreatedKeepsake(memoryStorage(), 'anonymous', job('synthetic-world-only', { state: 'partial', tripo: { state: 'failed' }, assets: { photoUrl: '/photo.jpg', worldUrl: '/world.spz' } }), now).id, 'synthetic-world-only');
   assert.equal(library.rememberCreatedKeepsake(storage, 'anonymous', job('invalid/token'), now), undefined);
   assert.deepEqual(library.readKeepsakeReferences(JSON.stringify([{ id: 'synthetic-gift-a', token: 'short', expiresAt: now + 10 }]), now), []);
   assert.equal(library.readKeepsakeReferences(JSON.stringify(Array.from({ length: 101 }, () => ({ id: 'synthetic-gift-a', token: 'a'.repeat(43), expiresAt: now + 10 }))), now).length, 1, 'Large repeated records are deduplicated instead of discarding the library');
