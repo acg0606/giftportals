@@ -31,10 +31,22 @@ test('missing provider configuration and unreadable storage configuration still 
  const failed=fixture(t,{error:{code:'42703',message:'private query owner_hash and photos',details:'private rows'}});
  await assert.rejects(failed.repo.status(),{code:'DATABASE_REQUEST_FAILED'});assert.equal(logs.length,1);assert.equal(logs[0].operation,'status-budgets');assert.doesNotMatch(JSON.stringify(logs),/owner_hash|photos|private|query|rows|token/);
 });
+test('status accepts either rollout reservation metadata while unknown prices still fail closed',async t=>{
+ for(const price of [1580,3080]){
+  const f=fixture(t,{budgets:budgets.map(row=>row.provider==='worldlabs'?{...row,reservation_per_job:price}:row)}),status=await f.repo.status();
+  assert.equal(status.canCreate,true);assert.equal(status.budget.worldlabs.nextReservation,price);
+ }
+ for(const price of [0,1579,3079,3100,'3080',null]){
+  const f=fixture(t,{budgets:budgets.map(row=>row.provider==='worldlabs'?{...row,reservation_per_job:price}:row)});
+  assert.equal((await f.repo.status()).canCreate,false);
+ }
+ const badTripo=fixture(t,{budgets:budgets.map(row=>row.provider==='tripo'?{...row,reservation_per_job:101}:row)});
+ assert.equal((await badTripo.repo.status()).canCreate,false);
+});
 test('fresh provider affordability accepts exactly the task cost, subtracts frozen Tripo credits and makes only one GET',async t=>{
  const prior={fetch:globalThis.fetch,tripo:process.env.TRIPO_API_KEY,world:process.env.WORLD_LABS_API_KEY};process.env.TRIPO_API_KEY='synthetic-tripo-key';process.env.WORLD_LABS_API_KEY='synthetic-world-key';
  t.after(()=>{globalThis.fetch=prior.fetch;prior.tripo===undefined?delete process.env.TRIPO_API_KEY:process.env.TRIPO_API_KEY=prior.tripo;prior.world===undefined?delete process.env.WORLD_LABS_API_KEY:process.env.WORLD_LABS_API_KEY=prior.world;});
- for(const [provider,balance,cost,allowed]of [['worldlabs',{remaining_credits:1580},1580,true],['worldlabs',{remaining_credits:1579},1580,false],['worldlabs',{},1580,false],['worldlabs',{remaining_credits:'Infinity'},1580,false],['tripo',{balance:150,frozen:50},100,true],['tripo',{balance:100,frozen:1},100,false],['tripo',{},100,false]]){
+ for(const [provider,balance,cost,allowed]of [['worldlabs',{remaining_credits:1580},1580,true],['worldlabs',{remaining_credits:1579},1580,false],['worldlabs',{remaining_credits:3080},3080,true],['worldlabs',{remaining_credits:3079},3080,false],['worldlabs',{},3080,false],['worldlabs',{remaining_credits:'Infinity'},3080,false],['tripo',{balance:150,frozen:50},100,true],['tripo',{balance:100,frozen:1},100,false],['tripo',{},100,false]]){
   const calls=[];globalThis.fetch=async(url,init)=>{calls.push([String(url),init.method]);return new Response(JSON.stringify(provider==='tripo'?{code:0,data:balance}:balance));};
   const task=createCloudProviderHTTP(Date.now()+165000).credit(provider,cost);
   if(allowed)await task;else await assert.rejects(task,{code:'PROVIDER_INSUFFICIENT_CREDITS'});

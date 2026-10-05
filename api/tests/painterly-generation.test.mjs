@@ -28,7 +28,7 @@ test('photo world recipes preserve the actual outdoor or indoor enclosure withou
  const local=instant.composeInstantWorldPrompt(source),remote=cloud.cloudWorldPrompt(source);assert.equal(local,remote);
  for(const cue of ['if the supplied photograph shows an outdoor scene','actual open outdoor viewpoint and visible sky','Never infer an enclosing ceiling, roof, arches, window frame or interior foreground absent from the photograph','If the photograph shows an indoor scene','preserve its photographed walls, ceiling, openings and enclosure','shelter or structure actually visible in the photograph intact'])assert.ok(local.includes(cue),cue);
  const noScene=cloud.cloudWorldPrompt({...source,photoIntent:'object',hasPlaceReference:false});assert.equal(noScene.includes('Scene enclosure:'),false);
- assert.equal(cloud.CLOUD_WORLD_MODEL,'marble-1.1');assert.equal(art.WORLD_ART_PROMPT_VERSION,'giftportals-world-photographic-v12');
+ assert.equal(cloud.CLOUD_WORLD_MODEL,'marble-1.1-plus');assert.equal(art.WORLD_ART_PROMPT_VERSION,'giftportals-world-photographic-v12');
  assert.ok(local.includes(source.worldPrompt));
 });
 test('world enclosure refinement leaves the accepted Tripo reference art direction and maximum-length recipe byte-identical',()=>{
