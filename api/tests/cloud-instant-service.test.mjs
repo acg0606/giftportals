@@ -156,6 +156,35 @@ test('a lost prepare response across the default-model change recovers the older
   assert.equal(f.journal.some(([kind])=>['submit','providerUpload','credit','moderate'].includes(kind)),false);
   const created=await f.service().prepare(input({dedupeKey:'new-model-request-02'}),'c'.repeat(64));assert.equal(f.jobs.get(created.id).document.generation.worldlabs.model,'marble-1.1');
 });
+test('crossed prompt release recovers one exact accepted recipe while changed caller declarations remain rejected',async()=>{
+  for(const photoIntent of ['object','place']){
+    const f=fixture(),source=input({photoIntent,images:{original:image(png),world:image(png2)}}),first=await f.prepared(source),job=f.jobs.get(first.id);
+    const accepted={...job.document.generation.worldlabs,textPrompt:'The exact previously accepted photographic scene direction.',promptVersion:'giftportals-world-photographic-v11'};
+    job.document.generation.worldlabs=copy(accepted);job.inputHash=hash(JSON.stringify(job.document));const before=copy(job);
+    for(let repeat=0;repeat<2;repeat++){
+      const recovered=await f.service().prepare(source,'c'.repeat(64));assert.equal(recovered.id,first.id);assert.equal(recovered.deduplicated,true);
+      assert.deepEqual(job,before);assert.equal(f.jobs.size,1);
+    }
+    for(const changes of [{title:'Changed title'},{worldPrompt:'A different scene with another shoreline.'},{story:'Changed story'},{dedication:'Changed dedication'},{senderName:'Changed sender'},{recipientName:'Changed recipient'},{photoIntent:photoIntent==='place'?'object':'place'},{images:{original:image(png2),world:image(png2)}},{images:{original:image(png),world:image(png)}}]){
+      await rejectCode(f.service().prepare({...source,...changes},'c'.repeat(64)),'DEDUPE_MISMATCH');assert.deepEqual(job,before);
+    }
+    await rejectCode(f.service().prepare(source,'e'.repeat(64)),'DEDUPE_MISMATCH');assert.deepEqual(job,before);
+    assert.equal(f.journal.some(([kind])=>['submit','providerUpload','credit','moderate'].includes(kind)),false);
+    const created=await f.service().prepare({...source,dedupeKey:`new-photographic-v12-${photoIntent}`},'c'.repeat(64));
+    const recipe=f.jobs.get(created.id).document.generation.worldlabs;assert.equal(recipe.model,'marble-1.1');assert.equal(recipe.promptVersion,'giftportals-world-photographic-v12');
+    assert.match(recipe.textPrompt,/Never infer an enclosing ceiling, roof, arches, window frame or interior foreground absent from the photograph/);
+    assert.deepEqual(job.document.generation.worldlabs,accepted);
+    const submit=f.providers.submit;let worldSubmissions=0;
+    f.providers.submit=async(stage,record,...args)=>{
+      if(stage==='worldlabs'){worldSubmissions++;assert.equal(record.id,first.id);assert.deepEqual(record.document.generation.worldlabs,accepted);}
+      return submit(stage,record,...args);
+    };
+    await f.service().finalize(first.id,token);
+    for(let tick=0;tick<9;tick++)await f.service().tick(`snapshot-worker-${tick}`,first.id);
+    assert.equal(worldSubmissions,1);assert.deepEqual(job.document.generation.worldlabs,accepted);
+    const repeated=await f.service().prepare(source,'c'.repeat(64));assert.equal(repeated.id,first.id);assert.equal(repeated.deduplicated,true);assert.equal(worldSubmissions,1);
+  }
+});
 test('metadata enforces consent, image limits, hashes, roles, prompt lengths, explicit recipe and exact story',()=>{const doc=cloudInputDocument(input({photoIntent:'place'}));assert.equal(doc.needsReference,true);assert.equal(doc.generation.tripo.face_limit,30000);assert.equal(doc.generation.worldlabs.model,'marble-1.1');assert.equal(doc.generation.tripoReference.model,'chat_image_2');assert.equal(doc.story,'My exact story');for(const bad of[{consent:false},{photoIntent:'other'},{images:{original:{...image(png),bytes:6*1024*1024+1}}},{images:{original:{...image(png),sha256:'no'}}},{images:{original:null}},{images:{original:image(png),audio:image(png)}},{worldPrompt:'short'},{photoIntent:'place',images:{original:image(png),object:image(png2)}},{photoIntent:'place',objectImageRole:'miniature-reference',images:{original:image(png),object:image(png)}}])assert.throws(()=>cloudInputDocument(input(bad)),error=>Boolean(error.code));});
 test('finalize verifies original plus every derivative against actual bytes and leaves all bytes private before moderation',async()=>{const f=fixture(),out=await f.prepared(input({images:{original:image(png),object:image(png2),world:image(png2)}})),job=f.jobs.get(out.id);const badPath=out.uploads.find(v=>v.id==='world').url.replace('https://storage.invalid/upload/','');f.bytes.set(badPath,png);await rejectCode(f.service().finalize(out.id,token),'IMAGE_CONTENT_INVALID');assert.equal(job.state,'awaiting_upload');f.bytes.set(badPath,png2);const dto=await f.service().finalize(out.id,token);assert.equal(dto.state,'processing');assert.equal(dto.assets.photoUrl,'');assert.equal(f.journal.some(([kind])=>kind==='signRead'||kind==='submit'),false);});
 test('GET exposes pending uploads without work and finalization changes only the existing job upload state',async()=>{const f=fixture(),out=await f.prepared();const pending=await f.service().get({id:out.id,token});assert.equal(pending.uploadState,'pending');await f.service().advance(out.id,token);assert.equal(f.journal.some(([kind])=>['claim','submit','moderate'].includes(kind)),false);const finalized=await f.service().finalize(out.id,token);assert.equal(finalized.uploadState,'finalized');assert.equal((await f.service().get({id:out.id,token})).uploadState,'finalized');assert.equal(f.jobs.size,1);assert.equal(f.journal.filter(([kind])=>kind==='prepare').length,1);assert.equal(f.journal.some(([kind])=>kind==='submit'),false);});

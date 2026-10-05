@@ -28,7 +28,7 @@ for (let index = 0; index < args.length; index++) {
  const key = args[index];
  if (['--confirm-provider-spend', '--inspect-operation', '--include-100k', '--include-full-res'].includes(key)) { if (flags.has(key)) throw Error('DUPLICATE_ARGUMENT'); flags.add(key); }
  else {
-  if (!['--action', '--manifest', '--trial', '--output-version'].includes(key) || values[key] !== undefined || !args[index + 1] || args[index + 1].startsWith('--')) throw Error('INVALID_ARGUMENT');
+  if (!['--action', '--manifest', '--trial', '--output-version', '--minimum-remaining-credits'].includes(key) || values[key] !== undefined || !args[index + 1] || args[index + 1].startsWith('--')) throw Error('INVALID_ARGUMENT');
   values[key] = args[++index];
  }
 }
@@ -48,6 +48,7 @@ try {
  const service = createWorldQualityTrial({
   directory: join(app, '.local-giftportals/quality-trials/worlds'),
   reserve: budget.reserve, settle: budget.settle, release: budget.release,
+  minimumRemainingCredits: values['--minimum-remaining-credits'] === undefined ? 0 : Number(values['--minimum-remaining-credits']),
  });
  const receipt = action === 'create'
   ? await service.create(JSON.parse(await readFile(resolve(values['--manifest']), 'utf8')), true)

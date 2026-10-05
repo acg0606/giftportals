@@ -110,7 +110,7 @@ export function connectWorldFlight(from: WorldFlightPose, to: WorldFlightPose): 
   return [from, to];
 }
 
-export const WORLD_CINEMATIC_DURATION_MS = 30_000;
+export const WORLD_CINEMATIC_DURATION_MS = 20_000;
 export interface WorldFlightBounds { min: WorldFlightVector; max: WorldFlightVector }
 export interface WorldCinematicState { phase: 'preparing' | 'flying' | 'paused' | 'completed'; progress: number; reason?: 'motion' | 'unavailable' | 'hidden' | 'skip' }
 
@@ -157,7 +157,7 @@ export function createBoundedWorldFlight(bounds: WorldFlightBounds, spawn: World
 /** Active foreground time only: returning from another app cannot fast-forward
  * the experience. Completion is terminal, so its newspaper opens once. */
 export function createWorldCinematicSession(path: readonly WorldFlightPose[], reducedMotion = false, durationMs = WORLD_CINEMATIC_DURATION_MS) {
-  const duration = clamp(Number.isFinite(durationMs) ? durationMs : WORLD_CINEMATIC_DURATION_MS, 25_000, 35_000);
+  const duration = clamp(Number.isFinite(durationMs) ? durationMs : WORLD_CINEMATIC_DURATION_MS, 15_000, 25_000);
   let elapsed = 0, phase: WorldCinematicState['phase'] = reducedMotion || !path.length ? 'completed' : 'flying';
   let reason: WorldCinematicState['reason'] = reducedMotion ? 'motion' : !path.length ? 'unavailable' : undefined;
   const state = (): WorldCinematicState => ({ phase, progress: phase === 'completed' ? 1 : elapsed / duration, reason });

@@ -9,13 +9,16 @@ export function readGiftWorldSemantics(value: unknown): GiftWorldSemantics | und
   return typeof scale === 'number' && Number.isFinite(scale) && scale >= .05 && scale <= 100 && typeof offset === 'number' && Number.isFinite(offset) && Math.abs(offset) <= 500
     ? { metricScaleFactor: scale, groundPlaneOffset: offset } : undefined;
 }
+export function readGiftWorldSpawn(value: unknown): [number, number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 3 || ![0, 1, 2].every(index => typeof value[index] === 'number' && Number.isFinite(value[index]) && Math.abs(value[index]) <= 250)) return undefined;
+  return [value[0], value[1], value[2]];
+}
+export function readGiftWorldEyeHeight(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= .5 && value <= 3 ? value : undefined;
+}
 const parisRoutes: readonly LivingGardenRoute[] = [
   { start: [4.1, -6.65], end: [6.55, -6.5], initialProgress: .1 },
   { start: [5.15, -8], end: [7.5, -7.9], initialProgress: .35, reverse: true },
-];
-const rioRoutes: readonly LivingGardenRoute[] = [
-  { start: [-.75, -2.25], end: [.8409902576697321, -3.8409902576697323], initialProgress: .1 },
-  { start: [.75, -2.25], end: [1.8106601717798214, -3.3106601717798214], initialProgress: .35, reverse: true },
 ];
 const observatoryRoutes: readonly LivingGardenRoute[] = [
   { start: [-.75, -2.25], end: [.8409902576697321, -3.8409902576697323], initialProgress: .1 },
@@ -26,10 +29,6 @@ type Profile = { name: string; title: string; intro: string; mode: 'book' | 'new
 // to its completed provider receipt. Every viewpoint/reset and visitor corridor
 // was probed against that mesh with the actual Rapier controller.
 const profiles: Record<string, Profile> = {
-  'rio-example': { name: 'Rio', title: 'A walk beside the bay', intro: 'Follow the water. Feel the place around you.', mode: 'newspaper', scale: 3.4777204990386963, offset: 1.5319561958312988, routes: rioRoutes, probeY: -.297626,
-    // Entry order selects the default. Keep the clear audited view and its stable
-    // ID; the removed foreground-heavy views must not remain public options.
-    viewpoints: [{ id: 'rio-waterside', name: 'The waterside path', at: [.000694, -1.317488, -4.044342], yaw: 0 }] },
   'paris-example': { name: 'Paris', title: 'A walk toward the tower', intro: 'Walk toward the tower. Turn your head. Take your time.', mode: 'book', scale: 2.9049978, offset: 1.6893421, world: '/demo/v23/paris-approach-world.spz', collider: '/demo/v23/paris-approach-collider.glb', panorama: '/demo/v23/paris-approach-panorama.png', routes: parisRoutes, probeY: 1.5,
     viewpoints: [{ name: 'The tower gardens', at: [0, 1.329693672, 0], yaw: 0 }, { name: 'Closer to the tower', at: [-.002786, 1.341834, -4.001120], yaw: 0 }, { name: 'Across the gardens', at: [-3.540262, 1.326496, -3.536546], yaw: -Math.PI / 4 }] },
   'antikythera-example': { name: 'The observatory', title: 'A walk through human curiosity', intro: 'Explore the terrace. Follow a little curiosity.', mode: 'tablet', scale: 2.4615827, offset: 1.4774647, routes: observatoryRoutes, probeY: 2.15062,
@@ -49,8 +48,9 @@ export function createGiftWalkScenes(id: string, gift: GeneratedGiftData): reado
     maxRadius: 20, walkSpeed: 1.6, livingGarden: false, gardenRoutes: profile.routes.map(route => ({ ...route, start: [...route.start] as [number, number], end: [...route.end] as [number, number] })), groundProbeY: profile.probeY, journalMode: profile.mode,
   }));
   const semantics = readGiftWorldSemantics(gift.worldSemantics);
-  return [{ id: 'your-place', name: 'Your place', title: gift.title, intro: 'Walk into your memory. Look around. Take your time.', story,
+  const rio = id === 'rio-example';
+  return [{ id: rio ? 'rio-waterside' : 'your-place', name: rio ? 'The waterside path' : 'Your place', title: rio ? 'A walk beside the bay' : gift.title, intro: rio ? 'Follow the water. Feel the place around you.' : 'Walk into your memory. Look around. Take your time.', story,
     world, collider, panorama: gift.panoramaUrl, metricScale: semantics?.metricScaleFactor, groundOffset: semantics?.groundPlaneOffset,
-    mediaExpiresAt: gift.mediaExpiresAt,
-    yaw: gift.initialYaw || 0, pitch: gift.initialPitch || .04, maxRadius: 20, walkSpeed: 1.6, livingGarden: false, autoCalibrate: true, journalMode: 'book' }];
+    mediaExpiresAt: gift.mediaExpiresAt, spawn: readGiftWorldSpawn(gift.initialSpawn), eyeHeight: readGiftWorldEyeHeight(gift.initialEyeHeight),
+    yaw: gift.initialYaw ?? 0, pitch: gift.initialPitch ?? .04, maxRadius: 20, walkSpeed: 1.6, livingGarden: false, autoCalibrate: true, journalMode: rio ? 'newspaper' : 'book' }];
 }

@@ -1,0 +1,99 @@
+{
+  "version": 12,
+  "slug": "pracinha-court",
+  "targetPublicGiftId": "c864acd7-88d0-4b02-bff7-67ae186243dc",
+  "provider": "worldlabs",
+  "model": "marble-1.1-plus",
+  "createdAt": "2026-10-05T22:01:18.188Z",
+  "completedAt": "2026-10-05T22:11:30.757Z",
+  "reference": {
+    "sha256": "2364ff368b4c479088b0d33ee01129a26ad2aaef00e3db5a63b214b9119f2dda",
+    "bytes": 569631,
+    "mime": "image/jpeg",
+    "prompt": "Create an ultra photorealistic full human-scale outdoor world faithfully grounded in this original photograph of a leafy public square. Preserve the turquoise fenced sports court at the left, the gently curving concrete walking path at the right, the low turquoise retaining wall beside the wooded slope, the two modest stone benches at the centre, the narrow metal light pole and the mature tree trunks, roots, soil and fallen leaves. Preserve their photographed scale, relative positions and real surface textures. The camera stands on the existing concrete path at normal human eye height. Continue that actual path a few metres behind and to the sides with safe connected walking space; preserve the slope and court boundaries. This is an open-air urban park with real sky and natural tree canopy above. Do not invent a roof, ceiling, indoor room, window frame, archway, enclosed pavilion or indoor furniture around the viewer. Preserve the photograph's natural lighting, ordinary Brazilian urban details, true materials and vegetation. Resolve individual leaves, bark, weathered concrete, small stones and playground paint with clear photographic detail and believable depth, without painterly texture, toy proportions, fantasy decoration, excessive saturation, text, captions, logos or watermarks. Any unseen surroundings should plausibly continue the photographed outdoor place; they are generated interpretations rather than a measured reconstruction. Prioritize photo fidelity over beautifying or redesigning the park.",
+    "provenance": "Original user photograph from the already published GiftPortals example c864acd7-88d0-4b02-bff7-67ae186243dc; the exact archived photo bytes were verified by SHA-256. Re-generated with Marble 1.1 Plus on October 5, 2026. Unseen surroundings are generated interpretations. The existing photograph, Tripo keepsake and personal memory remain unchanged."
+  },
+  "config": {
+    "sha256": "607d7cb15922a0367ff43b83965c989397cfb32406ac626dcc27ad78ee92c1ce",
+    "bytes": 2255
+  },
+  "promptSha256": "963a7a53a00a43a4ffb56a6520f3a5395175dc168d758e1dbef45c3c710b8d03",
+  "maxReservedCredits": 3080,
+  "actualCredits": 3080,
+  "costStatus": "reported",
+  "assets": [
+    {
+      "suffix": "spz",
+      "url": "/demo/v12/pracinha-court/world-500k.spz",
+      "bytes": 8000093,
+      "sha256": "97e39f76f021faa2d71110d1083d2e034af042b2b9378f2b876398ea259f9f8d",
+      "mime": "application/octet-stream",
+      "validation": {
+        "type": "spz",
+        "version": 2,
+        "points": 500000
+      }
+    },
+    {
+      "suffix": "spz100k",
+      "url": "/demo/v12/pracinha-court/world-100k.spz",
+      "bytes": 1481809,
+      "sha256": "d9303245c82de7ac9821cb2bfdc5a191ae7c920e3656efb76fd815bf0b243a0a",
+      "mime": "application/octet-stream",
+      "validation": {
+        "type": "spz",
+        "version": 2,
+        "points": 99846
+      }
+    },
+    {
+      "suffix": "pano",
+      "url": "/demo/v12/pracinha-court/panorama.png",
+      "bytes": 14843914,
+      "sha256": "159bf202f4c57381239fcefff2a60fed9f5ffc1f7522b8223e462cb60b996029",
+      "mime": "image/png",
+      "validation": {
+        "type": "image",
+        "width": 4608,
+        "height": 2304
+      }
+    },
+    {
+      "suffix": "collider",
+      "url": "/demo/v12/pracinha-court/collider.glb",
+      "bytes": 2738028,
+      "sha256": "c5b66d1379d34aabd08e4bcc446a487814228eff67c57c204ba611493c2828b6",
+      "mime": "model/gltf-binary",
+      "validation": {
+        "type": "glb",
+        "primitives": 1,
+        "triangles": 103869,
+        "extents": [
+          80.66990661621094,
+          23.28611671924591,
+          76.44794654846191
+        ],
+        "depthRatio": 0.2886592745176982,
+        "externalDependencies": false
+      }
+    }
+  ],
+  "worldSemantics": {
+    "metricScaleFactor": 1.9704711,
+    "groundPlaneOffset": 1.3106898
+  },
+  "defaultQuality": "500k",
+  "mobileQuality": {
+    "exported": true,
+    "quality": "100k",
+    "activatedByExport": false
+  },
+  "fullResolution": {
+    "status": "notRequested",
+    "operatorOnly": true,
+    "published": false
+  },
+  "archive": "Only the world experience is replaced. The original archived photograph, miniature model, sender, recipient, story and dedication remain unchanged.",
+  "providerCalls": 0,
+  "privateRecordsExported": false
+}

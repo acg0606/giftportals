@@ -5,15 +5,15 @@ import type { CollectionRoomItem } from './collection-types';
 // user snapshot or provider URL is used to construct these three routes.
 const showroom: readonly CollectionRoomItem[] = [
   {
-    id: 'rio-example', title: 'A little piece of Rio', subtitle: 'Ready example · Tripo + World Labs',
-    story: 'I wanted you to feel the warm light, the sea breeze, and the afternoon that made me think of you. Follow the light across the bay and find the little moments I left for you.',
-    imageUrl: '/assets/portal-dusk/rio-keepsake.png', modelUrl: '/demo/rio-keepsake.glb', mobileModelUrl: '/assets/daylight-desk/keepsakes/rio-mobile.glb', modelYaw: -Math.PI / 2,
-    openPath: 'generated/rio-example', worldPath: 'generated/rio-example?view=world', kind: 'generated', demo: true, photoIntent: 'object',
+    id: 'rio-example', title: 'Rio de Janeiro · Sailboats', subtitle: 'Ready example · Tripo + World Labs',
+    story: 'Imagine the warm light and sea breeze along an open Rio promenade, with white sailboats crossing the bay and Sugarloaf Mountain ahead. A little world to share with someone you love.',
+    imageUrl: '/assets/portal-dusk/rio-keepsake.png', originalImageUrl: '/assets/examples/v12/rio-sailboats-reference.png', modelUrl: '/demo/rio-keepsake.glb', mobileModelUrl: '/assets/daylight-desk/keepsakes/rio-mobile.glb', modelYaw: -Math.PI / 2,
+    openPath: 'generated/rio-example', worldPath: 'generated/rio-example?view=world', kind: 'generated', demo: true, photoIntent: 'place', objectRepresentation: 'souvenir-miniature',
   },
   {
-    id: 'paris-example', title: 'An evening in Paris', subtitle: 'Ready example · Tripo + World Labs',
-    story: 'Imagine an evening walk along the Seine, with the city glowing around a quiet moment. A little piece of Paris to keep close.',
-    imageUrl: '/demo/v17/paris-tripo-input.png', originalImageUrl: '/demo/v13/paris-photo.jpg', modelUrl: '/demo/v17/paris-model.glb', mobileModelUrl: '/assets/daylight-desk/keepsakes/paris-mobile.glb', modelYaw: -Math.PI / 2,
+    id: 'paris-example', title: 'Paris by the Seine', subtitle: 'Ready example · Tripo + World Labs',
+    story: 'Imagine a quiet walk along the Seine, with the city and river around you. A little piece of Paris you can keep close and step inside.',
+    imageUrl: '/demo/v17/paris-tripo-input.png', originalImageUrl: '/assets/examples/v11/paris-scene.jpg', modelUrl: '/demo/v17/paris-model.glb', mobileModelUrl: '/assets/daylight-desk/keepsakes/paris-mobile.glb', modelYaw: -Math.PI / 2,
     openPath: 'generated/paris-example', worldPath: 'generated/paris-example?view=world', kind: 'generated', demo: true, photoIntent: 'place', objectRepresentation: 'souvenir-miniature',
   },
   {

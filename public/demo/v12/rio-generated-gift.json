@@ -1,0 +1,35 @@
+{
+  "senderName": "Clara",
+  "recipientName": "Alex",
+  "dedication": "This little piece of Rio made me think of you.",
+  "originalUrl": "/assets/examples/v12/rio-sailboats-reference.png",
+  "photoIntent": "place",
+  "title": "Rio de Janeiro · Sailboats",
+  "story": "Imagine the warm light and sea breeze along an open Rio promenade, with white sailboats crossing the bay and Sugarloaf Mountain ahead. A little world to share with someone you love.",
+  "modelUrl": "/demo/rio-keepsake.glb",
+  "worldUrl": "/demo/v12/rio-world-500k.spz",
+  "panoramaUrl": "/demo/v12/rio-panorama.png",
+  "worldSemantics": {
+    "metricScaleFactor": 2.8094594,
+    "groundPlaneOffset": 2.1216264
+  },
+  "sourceAttribution": {
+    "author": "GiftPortals · original AI artwork and photographic reinterpretation",
+    "sourceUrl": "/assets/rio/rio-panorama.png",
+    "license": "Original GiftPortals AI artwork",
+    "licenseUrl": "/assets/examples/v12/rio-sailboats-reference.png",
+    "changes": "Photographic AI reinterpretation of the original V7 Rio sailboats composition, used as an artistic reference for a generated spatial world. This is not a real geographic photograph or a surveyed reconstruction."
+  },
+  "initialSpawn": [
+    0,
+    2.13686443,
+    2
+  ],
+  "initialEyeHeight": 2.2,
+  "collisionUrl": "/demo/v12/rio-collider.glb",
+  "mobileWorldUrl": "/demo/v12/rio-world-100k.spz",
+  "sourcePhotoUrl": "/assets/examples/v12/rio-sailboats-reference.png",
+  "keepsakeImageUrl": "/assets/portal-dusk/rio-keepsake.png",
+  "sourceImageKind": "artistic-reference",
+  "objectRepresentation": "souvenir-miniature"
+}

@@ -1,0 +1,124 @@
+{
+  "version": 12,
+  "scene": "rio",
+  "provider": "worldlabs",
+  "model": "marble-1.1-plus",
+  "operationId": "9a441786-4924-43b7-a15d-1f339c41ded9",
+  "worldId": "2c923e65-5129-4edf-a963-c797a5dd70b7",
+  "trialId": "rio-sailboats-v12-plus-20261005",
+  "createdAt": "2026-10-05T21:48:45.913Z",
+  "completedAt": "2026-10-05T21:58:29.321Z",
+  "maxReservedCredits": 3080,
+  "actualCredits": 3080,
+  "costStatus": "reported",
+  "worldSemantics": {
+    "metricScaleFactor": 2.8094594,
+    "groundPlaneOffset": 2.1216264
+  },
+  "reviewedInitialPose": {
+    "preferredEye": [
+      0,
+      2.13686443,
+      2
+    ],
+    "requiresGroundAndBodyCalibration": true,
+    "eyeHeight": 2.2
+  },
+  "reference": {
+    "url": "/assets/examples/v12/rio-sailboats-reference.png",
+    "prompt": "Create a crisp, ultra photorealistic full human-scale outdoor Rio de Janeiro waterfront world from this supplied image. Preserve its inviting first GiftPortals Rio composition: central Sugarloaf Mountain and green Morro da Urca, large clearly visible white sailboats across the blue bay, natural sunset reflections, tropical leaves and palm trunks at the side edges, distant apartments and mountains. The camera is standing OUTSIDE on the continuous stone promenade immediately behind the LOW rough stone waterfront balustrade with thin dark metal rails. Show open sky above and open water in front. Extend the actual stone promenade horizontally to both sides and several metres behind the camera, with connected walkable paving and believable stone joins. Keep the existing low parapet and water boundaries, never put a walking surface across the bay. This is an OPEN AIR waterfront promenade: there is absolutely no roof, ceiling, room, indoor floor, archway, window, pavilion, portico, enclosure or furniture anywhere around the viewer. Preserve the source scene's visible geometry and natural golden afternoon illumination, but render it as real travel photography with physically correct natural materials: sharply resolved irregular stone, individual palm leaves, granite rock strata, clear distant building structure, delicate yacht masts and white cloth sails, realistic water ripples and glints. Natural contrast, clean depth and detail, subtle atmospheric distance. Keep sailboats prominent at middle distance and preserve the complete recognizable Sugarloaf outline ahead. No cartoon, illustration, brush strokes, painted canvas, toy scale, souvenir platform, decorative fantasy props, faces, people, captions, text, logos or watermarks. Unseen surrounds should be a plausible continuation of this imaginative photographic reference rather than a measured city reconstruction. The 3D scene must remain continuously outdoors at a stable human eye height, with a safe open promenade and an uninterrupted bay view.",
+    "provenance": "GiftPortals original V7 AI sailboats artwork, photorealistically reinterpreted using the built-in OpenAI image generation tool on October 5, 2026. Ordinary perspective reference, not a real photograph or a surveyed Rio location. Original Tripo souvenir is preserved.",
+    "bytes": 3017295,
+    "sha256": "28c6d3277fcb065487fce6e08bde2ff8107c04f7cdc23f517683fa62a9a303c1",
+    "mime": "image/png"
+  },
+  "sourceAttribution": {
+    "author": "GiftPortals · original AI artwork and photographic reinterpretation",
+    "sourceUrl": "/assets/rio/rio-panorama.png",
+    "license": "Original GiftPortals AI artwork",
+    "licenseUrl": "/assets/examples/v12/rio-sailboats-reference.png",
+    "changes": "Photographic AI reinterpretation of the original V7 Rio sailboats composition, used as an artistic reference for a generated spatial world. This is not a real geographic photograph or a surveyed reconstruction."
+  },
+  "promptSha256": "ea5ce81995562e2df6a9f1d4d4b7b23912855292a42b8044aef17808eb412ea2",
+  "assets": [
+    {
+      "suffix": "spz",
+      "url": "/demo/v12/rio-world-500k.spz",
+      "bytes": 8100652,
+      "sha256": "cc936ace7731afc52bc76a31366cf057080849a7e98d716039cd4fcd718707f7",
+      "mime": "application/octet-stream",
+      "validation": {
+        "type": "spz",
+        "version": 2,
+        "points": 500000
+      }
+    },
+    {
+      "suffix": "spz100k",
+      "url": "/demo/v12/rio-world-100k.spz",
+      "bytes": 1514393,
+      "sha256": "f5b2917e7f10656148ebec85160d1e55817907bb16481a0a813fcb58c6c2ac2e",
+      "mime": "application/octet-stream",
+      "validation": {
+        "type": "spz",
+        "version": 2,
+        "points": 99846
+      }
+    },
+    {
+      "suffix": "pano",
+      "url": "/demo/v12/rio-panorama.png",
+      "bytes": 14973790,
+      "sha256": "da34f0fb42d4df3b5666b434179e6b50f85f0e3c145c8bb2e9b8ca628c8a88e6",
+      "mime": "image/png",
+      "validation": {
+        "type": "image",
+        "width": 4608,
+        "height": 2304
+      }
+    },
+    {
+      "suffix": "collider",
+      "url": "/demo/v12/rio-collider.glb",
+      "bytes": 738896,
+      "sha256": "5cca9cf520c348f3cf1f16dde822be76d728ed4fae493e7b1243002f45b8762c",
+      "mime": "model/gltf-binary",
+      "validation": {
+        "type": "glb",
+        "primitives": 1,
+        "triangles": 27144,
+        "extents": [
+          125.37461471557617,
+          79.79182720184326,
+          190.1350440979004
+        ],
+        "depthRatio": 0.4196587093158824,
+        "externalDependencies": false
+      }
+    }
+  ],
+  "baseline": {
+    "giftUrl": "/demo/rio-generated-gift.json",
+    "sha256": "fcac99257197bc4857cd3ffecc717f48dd1c6da9b12ec4d4c5e73feab0d8b457",
+    "model": {
+      "url": "/demo/rio-keepsake.glb",
+      "bytes": 17545328,
+      "sha256": "ffb29a30265b97ade97ee646f2ca14070c5bd947e8faef62a28d370b07d68bad"
+    }
+  },
+  "defaultQuality": "500k",
+  "mobileQuality": {
+    "exported": true,
+    "quality": "100k",
+    "activatedByExport": false
+  },
+  "fullResolution": {
+    "status": "downloadFailed",
+    "operatorOnly": true,
+    "published": false,
+    "errorCode": "GENERATED_ASSET_SIZE_LIMIT"
+  },
+  "tripo": "Existing original miniature GLB, sender, recipient and dedication are preserved. No Tripo request was made by this export.",
+  "providerCalls": 0,
+  "privateRecordsExported": false
+}

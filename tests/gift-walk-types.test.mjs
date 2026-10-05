@@ -33,3 +33,13 @@ test('authored calibration and audited XZ visitor routes pass through while moti
   assert.equal(walkSceneFirstPerson({ maxRadius: 999 }).maxRadius, 60);
   assert.equal(walkSceneFirstPerson({ autoCalibrate: false }).autoCalibrate, false);
 });
+
+test('a validated curated eye height reaches walking without changing the collider calibration or other body defaults', () => {
+  const spawn=[0,2.13686443,2], scene={spawn,metricScale:2.8094594,groundOffset:2.1216264,autoCalibrate:true};
+  for(const eyeHeight of [.5,2.2,3]) {
+    const state=walkSceneFirstPerson({...scene,eyeHeight});assert.equal(state.eyeHeight,eyeHeight);assert.equal(state.spawn,spawn);assert.equal(state.autoCalibrate,true);
+    assert.equal(state.metricScale,scene.metricScale);assert.equal(state.groundOffset,scene.groundOffset);assert.equal(state.radius,.2);assert.equal(state.walkSpeed,1.6);assert.equal(state.maxRadius,20);
+  }
+  for(const eyeHeight of [undefined,null,'2.2',NaN,Infinity,-Infinity,.499999,3.000001,1e20]) assert.equal(walkSceneFirstPerson({...scene,eyeHeight}).eyeHeight,1.65,'Malformed heights preserve the existing walking default');
+  assert.equal(walkSceneFirstPerson(scene).eyeHeight,1.65,'A curated height does not become a global default');
+});

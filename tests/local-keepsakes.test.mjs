@@ -50,6 +50,15 @@ test('session keepsake preserves the original and uses encoded private routes wi
   assert.equal(createdSessionKeepsake({ ...completed, story: '' }).story, completed.worldPrompt);
 });
 
+test('known public square copies use the same English device presentation without rewriting the authorized job', () => {
+  const source = { ...completed, id: 'c864acd7-88d0-4b02-bff7-67ae186243dc', title: 'pracinha', story: 'plantei uma arvore' }, before = structuredClone(source);
+  const item = createdSessionKeepsake(source);
+  assert.equal(item.title, 'A quiet square'); assert.equal(item.story, 'A quiet square to enjoy nature. I planted a tree here.'); assert.deepEqual(source, before);
+  assert.equal(item.openPath, `generated/${source.id}?key=${encodeURIComponent(source.token)}`); assert.equal(item.originalImageUrl, source.assets.photoUrl); assert.equal(item.modelUrl, source.assets.modelUrl);
+  const playground = createdSessionKeepsake({ ...completed, id: 'cc997d6d-faf2-4b5a-8bfa-9196716bec71', story: '', worldPrompt: 'Uma praca para curtir.' });
+  assert.equal(playground.title, 'A little square to share'); assert.equal(playground.story, '', 'No unreviewed place prompt becomes the empty curated story');
+});
+
 test('a miniature uses its own reference thumbnail and preserves original, representation and explicit model yaw', () => {
   const job = { ...completed, objectRepresentation: 'souvenir-miniature', modelYaw: -Math.PI / 2, assets: { ...completed.assets, tripoInputUrl: '/souvenir-reference.png' } };
   const item = createdSessionKeepsake(job);

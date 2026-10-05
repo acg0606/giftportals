@@ -29,7 +29,7 @@ test('V11 arrival measures the scene, checks every camera corridor, starts eleva
   const turned=createBoundedWorldFlight(bounds,spawn,Math.PI/2,()=>true);assert.ok(turned[0].target[0]<-2);assert.ok(Math.abs(turned[0].target[2])<1e-8);
 });
 
-test('a low local ceiling retains a checked lateral thirty-second arrival, while insufficient headroom remains unavailable', () => {
+test('a low local ceiling retains a checked lateral twenty-second arrival, while insufficient headroom remains unavailable', () => {
   const bounds={min:[-10,-3,-20],max:[10,30,10]},spawn=[0,1.6,0],ceiling=2.3,checks=[];
   const clear=(a,b)=>{checks.push([a,b]);return a[1]<ceiling&&b[1]<ceiling;};
   const path=createBoundedWorldFlight(bounds,spawn,0,clear);
@@ -37,20 +37,33 @@ test('a low local ceiling retains a checked lateral thirty-second arrival, while
   assert.ok(Math.abs(path[0].position[0])>1,'A safe lateral arc is preferred over a stationary vertical descent');
   assert.deepEqual(path.at(-1).position,spawn);assert.ok(checks.length>241,'Blocked high arrivals are checked before the smaller supported arc');
   for(let index=0;index<=1000;index++){const pose=sampleWorldFlight(path,index/1000);assert.ok(pose.position[1]<ceiling);pose.position.forEach((value,axis)=>assert.ok(value>bounds.min[axis]&&value<bounds.max[axis]));}
-  const flight=createWorldCinematicSession(path);for(let step=0;step<29;step++)flight.step(1000);assert.equal(flight.state().phase,'flying');flight.step(1000);assert.equal(flight.state().phase,'completed');
+  const flight=createWorldCinematicSession(path);for(let step=0;step<19;step++)flight.step(1000);assert.equal(flight.state().phase,'flying');flight.step(1000);assert.equal(flight.state().phase,'completed');
   const unsupported=createBoundedWorldFlight(bounds,spawn,0,(a,b)=>a[1]<spawn[1]+.1&&b[1]<spawn[1]+.1);
   assert.equal(unsupported,undefined);assert.deepEqual(createWorldCinematicSession(unsupported||[]).state(),{phase:'completed',progress:1,reason:'unavailable'});
 });
 
-test('the cinematic uses thirty seconds of foreground time, pauses without catch-up and completes once', () => {
+test('the cinematic uses exactly twenty seconds of foreground time, pauses without catch-up and completes once', () => {
   const path=createBoundedWorldFlight({min:[-4,-2,-4],max:[4,6,4]},[0,1.6,0],0,()=>true), flight=createWorldCinematicSession(path);
-  assert.equal(WORLD_CINEMATIC_DURATION_MS,30000);
-  for(let i=0;i<29;i++) flight.step(1000); assert.equal(flight.state().phase,'flying');
+  assert.equal(WORLD_CINEMATIC_DURATION_MS,20000);
+  for(let i=0;i<19;i++) flight.step(1000);flight.step(999);assert.equal(flight.state().phase,'flying');assert.equal(flight.state().progress,19999/20000);
   flight.pause(); const progress=flight.state().progress; flight.step(60000); assert.equal(flight.state().progress,progress);
-  flight.resume(); flight.step(1000); assert.equal(flight.state().phase,'completed'); assert.deepEqual(flight.pose(),path.at(-1));
+  flight.resume(); flight.step(1); assert.equal(flight.state().phase,'completed'); assert.deepEqual(flight.pose(),path.at(-1));
   flight.resume();flight.pause();flight.step(1000);assert.equal(flight.state().phase,'completed');
   assert.deepEqual(createWorldCinematicSession(path,true).state(),{phase:'completed',progress:1,reason:'motion'});
   assert.deepEqual(createWorldCinematicSession([]).state(),{phase:'completed',progress:1,reason:'unavailable'});
+});
+
+test('the 1.5x arrival follows the identical checked spline, look target and field of view at each elapsed time', () => {
+  const path=createBoundedWorldFlight({min:[-4,-2,-4],max:[4,6,4]},[0,1.6,0],0,()=>true), snapshot=structuredClone(path), flight=createWorldCinematicSession(path);
+  assert.deepEqual(flight.pose(),path[0]);
+  for(let elapsed=1000;elapsed<=20000;elapsed+=1000) {
+    flight.step(1000);
+    assert.deepEqual(flight.pose(),sampleWorldFlight(path,elapsed*1.5/30000),'Only elapsed timing changes the camera pose along the existing route');
+    assert.equal(flight.state().progress,elapsed/20000);
+    assert.equal(flight.state().phase,elapsed<20000?'flying':'completed');
+  }
+  assert.deepEqual(path,snapshot,'Faster playback does not rewrite the checked corridor');
+  const invalidDuration=createWorldCinematicSession(path,false,NaN);for(let i=0;i<19;i++)invalidDuration.step(1000);assert.equal(invalidDuration.state().phase,'flying');invalidDuration.step(1000);assert.equal(invalidDuration.state().phase,'completed');
 });
 
 test('cached-world profiles have real spatial arrival and different camera positions for every story point', () => {

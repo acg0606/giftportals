@@ -300,6 +300,121 @@ test('single-image admission and settlement use3080 while an unsubmitted failure
  assert.ok(!g.calls.some(call => call[0] === 'settle'));
 });
 
+test('explicit operator reserve protects the remaining21860 credits before any upload or generation', async t => {
+ for (const balance of [24939, 24940]) {
+  const f = await fixture(t, { minimumRemainingCredits: 21860, json: async (provider, path, method = 'GET', body) => {
+   f.calls.push(['json', provider, path, method, body]);
+   return path === '/credits' ? { remaining_credits: balance } : { operation_id: 'world-operation' };
+  } });
+  const input = asSingleImage(f.input), result = await f.service.create(input, true);
+  if (balance === 24939) {
+   assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'WORLD_TRIAL_RESERVE_REQUIRED');
+   assert.deepEqual(f.calls.map(call => call[0]), ['safety', 'reserve', 'json', 'release']);
+   assert.equal(f.calls.some(call => call[0] === 'upload' || call[0] === 'json' && call[3] === 'POST'), false);
+  } else {
+   assert.equal(result.state, 'processing'); assert.equal(result.maxReservedCredits, 3080);
+   const before = f.calls.length;
+   const recovery = module.createWorldQualityTrial({ ...f.deps, minimumRemainingCredits: 31100 });
+   assert.equal((await recovery.create(input, true)).operationId, result.operationId);
+   assert.equal(f.calls.length, before);
+  }
+ }
+});
+
+test('operator reserve configuration fails closed for noninteger, negative, unsafe or nonnumeric values', async t => {
+ const f = await fixture(t);
+ for (const minimumRemainingCredits of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '21860', null]) {
+  assert.throws(() => module.createWorldQualityTrial({ ...f.deps, minimumRemainingCredits }), { code: 'WORLD_TRIAL_RESERVE_INVALID' });
+ }
+ assert.equal(f.calls.length, 0);
+});
+
+test('pending World Labs error placeholders preserve processing and inspection without completion, settlement or another POST', async t => {
+ for (const error of [undefined, null, {}]) {
+  let response = { done: false, error };
+  const f = await fixture(t, { json: async (provider, path, method = 'GET', body) => {
+   f.calls.push(['json', provider, path, method, body]);
+   return path === '/credits' ? { remaining_credits: 9000 } : method === 'POST' ? { operation_id: 'world-operation' } : response;
+  }, complete: async () => { throw Error('PENDING_OPERATION_MUST_NOT_DOWNLOAD'); } });
+  await f.service.create(asSingleImage(f.input), true);
+  const record = join(f.deps.directory, f.input.trialId, 'job.json'), before = await readFile(record, 'utf8'); f.calls.length = 0;
+  assert.equal((await f.service.poll(f.input.trialId)).state, 'processing');
+  const inspection = (await f.service.inspect(f.input.trialId)).operationInspection;
+  assert.equal(inspection.done, false); assert.equal(inspection.hasProviderError, false); assert.equal(inspection.providerError, undefined);
+  assert.deepEqual(f.calls.map(call => call.slice(0, 4)), Array.from({ length: 2 }, () => ['json', 'worldlabs', '/operations/world-operation', 'GET']));
+  assert.equal(await readFile(record, 'utf8'), before);
+ }
+});
+
+test('terminal World Labs error objects preserve failed holds and never trigger completion or a replacement request', async t => {
+ for (const response of [{ done: true, error: {} }, { done: true, error: { code: 13, message: 'fixture failure' } }, { done: false, error: { code: 13 } }]) {
+  const f = await fixture(t, { json: async (provider, path, method = 'GET', body) => {
+   f.calls.push(['json', provider, path, method, body]);
+   return path === '/credits' ? { remaining_credits: 9000 } : method === 'POST' ? { operation_id: 'world-operation' } : response;
+  }, complete: async () => { throw Error('FAILED_OPERATION_MUST_NOT_DOWNLOAD'); } });
+  const input = asSingleImage(f.input); await f.service.create(input, true); f.calls.length = 0;
+  const result = await f.service.poll(input.trialId);
+  assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'PROVIDER_GENERATION_FAILED'); assert.equal(result.actualCredits, undefined);
+  assert.equal(result.maxReservedCredits, 3080);
+  assert.equal((await f.service.create(input, true)).state, 'failed'); assert.equal((await f.service.poll(input.trialId)).state, 'failed');
+  assert.deepEqual(f.calls.map(call => call.slice(0, 4)), [['json', 'worldlabs', '/operations/world-operation', 'GET']]);
+ }
+});
+
+test('malformed World Labs status and error shapes remain resumable and cannot advance downloaded assets', async t => {
+ for (const response of [{ done: 'false' }, { error: {} }, { done: false, error: [] }, { done: true, error: 'failed' }]) {
+  const f = await fixture(t, { json: async (provider, path, method = 'GET') => path === '/credits' ? { remaining_credits: 9000 } : method === 'POST' ? { operation_id: 'world-operation' } : response,
+   complete: async () => { throw Error('MALFORMED_OPERATION_MUST_NOT_DOWNLOAD'); } });
+  await f.service.create(asSingleImage(f.input), true);
+  const record = join(f.deps.directory, f.input.trialId, 'job.json'), before = await readFile(record, 'utf8');
+  await assert.rejects(() => f.service.poll(f.input.trialId), { code: 'PROVIDER_RESPONSE_INVALID' });
+  assert.equal(await readFile(record, 'utf8'), before); assert.equal(f.calls.some(call => ['settle', 'release'].includes(call[0])), false);
+ }
+});
+
+test('operator media uploads fill absent MIME and preserve signed Content-Type casing and values', async t => {
+ const previousFetch = globalThis.fetch, previousKey = process.env.WORLD_LABS_API_KEY;
+ try {
+  process.env.WORLD_LABS_API_KEY = 'synthetic-worldlabs-fixture';
+  for (const [info, expected] of [
+   [{}, { 'Content-Type': 'image/png' }],
+   [{ required_headers: null }, { 'Content-Type': 'image/png' }],
+   [{ required_headers: {} }, { 'Content-Type': 'image/png' }],
+   [{ required_headers: { 'x-goog-meta-fixture': 'unchanged' } }, { 'x-goog-meta-fixture': 'unchanged', 'Content-Type': 'image/png' }],
+   [{ required_headers: { 'content-type': 'application/octet-stream', 'x-goog-meta-fixture': 'unchanged' } }, { 'content-type': 'application/octet-stream', 'x-goog-meta-fixture': 'unchanged' }],
+   [{ required_headers: { 'CONTENT-TYPE': 'image/custom' } }, { 'CONTENT-TYPE': 'image/custom' }],
+  ]) {
+   const network = [], f = await fixture(t, { upload: undefined });
+   globalThis.fetch = async (url, init) => {
+    network.push([url, init]);
+    if (url === 'https://api.worldlabs.ai/marble/v1/media-assets:prepare_upload') return new Response(JSON.stringify({ media_asset: { media_asset_id: 'fixture-upload' }, upload_info: { upload_method: 'PUT', upload_url: 'https://storage.googleapis.com/fixture-image', ...info } }));
+    assert.equal(String(url), 'https://storage.googleapis.com/fixture-image'); assert.equal(init.method, 'PUT'); return new Response('');
+   };
+   const result = await f.service.create(asSingleImage(f.input), true);
+   assert.equal(result.state, 'processing'); assert.equal(network.length, 2); assert.deepEqual(network[1][1].headers, expected);
+   assert.deepEqual(Buffer.from(network[1][1].body), png()); assert.equal(network[1][1].redirect, 'error');
+   assert.equal(f.calls.filter(call => call[0] === 'json' && call[3] === 'POST').length, 1);
+  }
+ } finally { globalThis.fetch = previousFetch; if (previousKey === undefined) delete process.env.WORLD_LABS_API_KEY; else process.env.WORLD_LABS_API_KEY = previousKey; }
+});
+
+test('operator media upload rejects malformed or credential headers before PUT or a paid request', async t => {
+ const previousFetch = globalThis.fetch, previousKey = process.env.WORLD_LABS_API_KEY;
+ try {
+  process.env.WORLD_LABS_API_KEY = 'synthetic-worldlabs-fixture';
+  for (const required_headers of [[], true, 'invalid', { 'Content-Type': null }, { Authorization: 'fixture' }, { Cookie: 'fixture' }, { 'WLT-Api-Key': 'fixture' }]) {
+   const network = [], f = await fixture(t, { upload: undefined });
+   globalThis.fetch = async (url, init) => {
+    network.push([url, init]); assert.equal(url, 'https://api.worldlabs.ai/marble/v1/media-assets:prepare_upload');
+    return new Response(JSON.stringify({ media_asset: { media_asset_id: 'fixture-upload' }, upload_info: { upload_method: 'PUT', upload_url: 'https://storage.googleapis.com/fixture-image', required_headers } }));
+   };
+   const result = await f.service.create(asSingleImage(f.input), true);
+   assert.equal(result.state, 'failed'); assert.equal(result.errorCode, 'PROVIDER_RESPONSE_INVALID'); assert.equal(network.length, 1);
+   assert.equal(f.calls.some(call => call[0] === 'json' && call[3] === 'POST'), false); assert.equal(f.calls.filter(call => call[0] === 'release').length, 1);
+  }
+ } finally { globalThis.fetch = previousFetch; if (previousKey === undefined) delete process.env.WORLD_LABS_API_KEY; else process.env.WORLD_LABS_API_KEY = previousKey; }
+});
+
 test('single-image dedupe is content-based across restarts and ambiguous paid submission never repeats', async t => {
  const f = await fixture(t), input = asSingleImage(f.input); const first = await f.service.create(input, true);
  const restarted = module.createWorldQualityTrial(f.deps); assert.equal((await restarted.create(input, true)).operationId, first.operationId);

@@ -1,0 +1,99 @@
+{
+  "version": 12,
+  "slug": "pracinha-playground",
+  "targetPublicGiftId": "cc997d6d-faf2-4b5a-8bfa-9196716bec71",
+  "provider": "worldlabs",
+  "model": "marble-1.1-plus",
+  "createdAt": "2026-10-05T22:02:27.658Z",
+  "completedAt": "2026-10-05T22:11:32.573Z",
+  "reference": {
+    "sha256": "7ec67ecc34a519689e69a6aa972849385907382ac77a7d91a8fb9c9814b3db82",
+    "bytes": 672118,
+    "mime": "image/jpeg",
+    "prompt": "Create an ultra photorealistic full human-scale outdoor world faithfully grounded in this original photograph of a leafy public square. Preserve the small yellow playground carousel in the foreground, the stone picnic table with its checkerboard top and stone stools at the left, the wooden A-frame rope climbing structure at the right, the mature trees and shrubs, the ordinary paved ground, the street fence and the real apartment buildings visible beyond. Keep the original playground layout, scale and daylight. The camera stands on the existing open pedestrian paving at normal human eye height. Extend connected paving a few metres around and behind the viewer; keep playground structures, trunks, fences and tables solid and separate from walkable ground. Omit transient people and animals rather than inventing faces. This is an open-air urban park with real sky and natural tree canopy above. Do not invent a roof, ceiling, indoor room, window frame, archway, enclosed pavilion or indoor furniture around the viewer. Preserve the photograph's natural lighting, ordinary Brazilian urban details, true materials and vegetation. Resolve individual leaves, bark, weathered concrete, small stones and playground paint with clear photographic detail and believable depth, without painterly texture, toy proportions, fantasy decoration, excessive saturation, text, captions, logos or watermarks. Any unseen surroundings should plausibly continue the photographed outdoor place; they are generated interpretations rather than a measured reconstruction. Prioritize photo fidelity over beautifying or redesigning the park.",
+    "provenance": "Original user photograph from the already published GiftPortals example cc997d6d-faf2-4b5a-8bfa-9196716bec71; the exact archived photo bytes were verified by SHA-256. Re-generated with Marble 1.1 Plus on October 5, 2026. Unseen surroundings are generated interpretations. The existing photograph, Tripo keepsake and personal memory remain unchanged."
+  },
+  "config": {
+    "sha256": "d39410e488276a214c215dc91c5e03609a562b1f91d0e5248434ee82e73db76e",
+    "bytes": 2359
+  },
+  "promptSha256": "19883aeec1f5fd9775c3e3f98e3542aa47f41137670a3780245f057fa359b924",
+  "maxReservedCredits": 3080,
+  "actualCredits": 3080,
+  "costStatus": "reported",
+  "assets": [
+    {
+      "suffix": "spz",
+      "url": "/demo/v12/pracinha-playground/world-500k.spz",
+      "bytes": 7816623,
+      "sha256": "1348ebbf22dd16a2548e3be2a04fb59a21240891f0f61d8fdf2fb0ac64a9e969",
+      "mime": "application/octet-stream",
+      "validation": {
+        "type": "spz",
+        "version": 2,
+        "points": 500000
+      }
+    },
+    {
+      "suffix": "spz100k",
+      "url": "/demo/v12/pracinha-playground/world-100k.spz",
+      "bytes": 1426691,
+      "sha256": "6b41949e5779f2278f775ac0b764309f70545da6d539fbf7f43e00d6bc058278",
+      "mime": "application/octet-stream",
+      "validation": {
+        "type": "spz",
+        "version": 2,
+        "points": 99846
+      }
+    },
+    {
+      "suffix": "pano",
+      "url": "/demo/v12/pracinha-playground/panorama.png",
+      "bytes": 15937955,
+      "sha256": "cd96cb740c68777e7c6a0b1b7da1a30e9521b51afdc0c666a5aca447d75a6265",
+      "mime": "image/png",
+      "validation": {
+        "type": "image",
+        "width": 4608,
+        "height": 2304
+      }
+    },
+    {
+      "suffix": "collider",
+      "url": "/demo/v12/pracinha-playground/collider.glb",
+      "bytes": 5012860,
+      "sha256": "8528550e24402c9722ba7779ec35c76c38d465099da4a43e31cabe66e9e4affa",
+      "mime": "model/gltf-binary",
+      "validation": {
+        "type": "glb",
+        "primitives": 1,
+        "triangles": 191649,
+        "extents": [
+          17.877217769622803,
+          9.302780568599701,
+          41.533226013183594
+        ],
+        "depthRatio": 0.22398405954901712,
+        "externalDependencies": false
+      }
+    }
+  ],
+  "worldSemantics": {
+    "metricScaleFactor": 3.4232333,
+    "groundPlaneOffset": 1.9075297
+  },
+  "defaultQuality": "500k",
+  "mobileQuality": {
+    "exported": true,
+    "quality": "100k",
+    "activatedByExport": false
+  },
+  "fullResolution": {
+    "status": "notRequested",
+    "operatorOnly": true,
+    "published": false
+  },
+  "archive": "Only the world experience is replaced. The original archived photograph, miniature model, sender, recipient, story and dedication remain unchanged.",
+  "providerCalls": 0,
+  "privateRecordsExported": false
+}

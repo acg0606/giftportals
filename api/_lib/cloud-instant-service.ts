@@ -160,12 +160,13 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     catch(error){
       if(!(error instanceof AppError)||error.code!=='DEDUPE_MISMATCH')throw error;
       const original=await repo.lookup(values.requestKeyHash,tokenHash);
-      // A lost prepare response can cross the server's default-model change.
-      // Keep that existing job's accepted recipe; the RPC still verifies every
-      // input field, its hash and creator identity before returning a duplicate.
-      const acceptedModel=original.document.generation.worldlabs.model;
-      if(!['marble-1.0','marble-1.1'].includes(String(acceptedModel)))throw error;
-      const pinned={...document,generation:{...document.generation,worldlabs:{...document.generation.worldlabs,model:acceptedModel}}};
+      // A lost prepare response can cross a server model or prompt release.
+      // Only the server-authored world recipe is pinned to its accepted snapshot.
+      // Current caller declarations, other recipes, input hash and creator identity
+      // must still match in the RPC before it can return the existing job.
+      const acceptedRecipe=original.document.generation.worldlabs;
+      if(!['marble-1.0','marble-1.1'].includes(String(acceptedRecipe.model)))throw error;
+      const pinned={...document,generation:{...document.generation,worldlabs:{...acceptedRecipe}}};
       result=await repo.prepare({...values,document:pinned,inputHash:hash(JSON.stringify(pinned))});
     }
     const uploads=result.job.state==='awaiting_upload'?await missingUploads(result.job):[];

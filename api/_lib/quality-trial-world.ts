@@ -33,6 +33,8 @@ interface StoredTrial {
 }
 interface Dependencies {
  directory: string; safety?: ImageSafetyAdapter; json?: typeof providerJSON; complete?: typeof completedAssets;
+ // Optional operator session reserve; ordinary creator admission is unchanged.
+ minimumRemainingCredits?: number;
  upload?: (bytes: Buffer, mime: string, label: string) => Promise<string>;
  downloadFullRes?: (url: unknown) => Promise<{ bytes: Buffer; sha256: string }>;
  reserve: (input: { trialId: string; provider: 'worldlabs'; credits: number }) => Promise<unknown>;
@@ -110,11 +112,13 @@ async function uploadWorldImage(bytes: Buffer, mime: string, label: string): Pro
  ensure(info?.upload_method === 'PUT' && typeof info.upload_url === 'string', 'PROVIDER_RESPONSE_INVALID', 502);
  let url: URL; try { url = new URL(info.upload_url); } catch { throw new AppError('PROVIDER_RESPONSE_INVALID', 502); }
  ensure(url.protocol === 'https:' && !url.username && !url.password && (!url.port || url.port === '443') && ['worldlabs.ai', 'googleapis.com'].some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)), 'PROVIDER_ASSET_ORIGIN_DENIED', 502);
- ensure(info.required_headers && typeof info.required_headers === 'object', 'PROVIDER_RESPONSE_INVALID', 502);
+ ensure(info.required_headers === undefined || info.required_headers === null || (info.required_headers && typeof info.required_headers === 'object' && !Array.isArray(info.required_headers)), 'PROVIDER_RESPONSE_INVALID', 502);
  const headers: Record<string, string> = {};
- for (const [name, value] of Object.entries(info.required_headers)) {
+ for (const [name, value] of Object.entries(info.required_headers || {})) {
   ensure(typeof value === 'string' && !/authorization|cookie|api-key/i.test(name), 'PROVIDER_RESPONSE_INVALID', 502); headers[name] = value;
  }
+ // Preserve the exact signed headers. Uint8Array otherwise carries no image MIME.
+ if (!Object.keys(headers).some(name => name.toLowerCase() === 'content-type')) headers['Content-Type'] = mime;
  let response: Response;
  try { response = await fetch(url, { method: 'PUT', body: new Uint8Array(bytes), headers, signal: AbortSignal.timeout(30000), redirect: 'error' }); }
  catch { throw new AppError('PROVIDER_UPLOAD_FAILED', 502); }
@@ -140,6 +144,8 @@ export async function downloadFullResolutionWorld(url: unknown) {
  return { bytes, sha256: digest(bytes) };
 }
 export function createWorldQualityTrial(deps: Dependencies) {
+ const minimumRemainingCredits = deps.minimumRemainingCredits === undefined ? 0 : deps.minimumRemainingCredits;
+ ensure(Number.isSafeInteger(minimumRemainingCredits) && minimumRemainingCredits >= 0, 'WORLD_TRIAL_RESERVE_INVALID');
  const directory = resolve(deps.directory), json = deps.json || providerJSON, safety = deps.safety || createImageSafetyAdapter();
  const upload = deps.upload || uploadWorldImage, complete = deps.complete || completedAssets, now = deps.now || Date.now;
  const downloadFull = deps.downloadFullRes || downloadFullResolutionWorld;
@@ -206,9 +212,10 @@ export function createWorldQualityTrial(deps: Dependencies) {
    await save(job); let paidPostStarted = false, reserved = false;
    try {
     await deps.reserve({ trialId: id, provider: 'worldlabs', credits: reservation }); reserved = true;
-    // Fresh balance covers the documented input-specific maximum plus 1000 credits.
+    // Cover the documented maximum and preserve any explicit operator session reserve.
     const balance = await json('worldlabs', '/credits');
     ensure(Number.isFinite(Number(balance.remaining_credits)) && Number(balance.remaining_credits) >= reservation, 'PROVIDER_INSUFFICIENT_CREDITS', 403);
+    ensure(Number(balance.remaining_credits) - reservation >= minimumRemainingCredits, 'WORLD_TRIAL_RESERVE_REQUIRED', 403);
     if (!textOnly) { job.state = 'uploading'; await save(job); }
     for (let index = 0; index < images.length; index++) {
      await writeFile(join(directory, id, job.images[index].file), images[index].bytes);
@@ -235,7 +242,14 @@ export function createWorldQualityTrial(deps: Dependencies) {
    if (!job.operationId) { job.state = 'ambiguous'; job.errorCode ||= 'SUBMISSION_AMBIGUOUS'; await save(job); return worldTrialReceipt(job); }
    // This resumable path contains only GETs and bounded asset downloads, never paid POST or upload.
    const result = await json('worldlabs', `/operations/${encodeURIComponent(providerId(job.operationId))}`);
-   if (result.error) { job.state = 'failed'; job.errorCode = 'PROVIDER_GENERATION_FAILED'; await save(job); return worldTrialReceipt(job); }
+   ensure(typeof result.done === 'boolean', 'PROVIDER_RESPONSE_INVALID', 502);
+   if (result.error !== undefined && result.error !== null) {
+    ensure(typeof result.error === 'object' && !Array.isArray(result.error), 'PROVIDER_RESPONSE_INVALID', 502);
+    // A pending empty placeholder is not a failed generation. Terminal error objects
+    // and nonempty errors follow the same fail-closed rule as the cloud adapter.
+    if (result.done || Object.keys(result.error).length > 0) { job.state = 'failed'; job.errorCode = 'PROVIDER_GENERATION_FAILED'; await save(job); return worldTrialReceipt(job); }
+   }
+   if (!result.done) return worldTrialReceipt(job);
    if (job.state === 'completed') {
     if (needs100k) await add100k(job, result);
     if (needsFull) await addFullRes(job, result);
@@ -302,11 +316,11 @@ export function createWorldQualityTrial(deps: Dependencies) {
   const updatedAt = result.updated_at;
   return { ...worldTrialReceipt(job), operationInspection: {
    observedAt: iso(), generationRequests: 0, providerURLsOutput: false,
-   done: result.done === true, hasProviderError: Boolean(result.error),
+   done: result.done === true, hasProviderError: result.error !== undefined && result.error !== null && (typeof result.error !== 'object' || Array.isArray(result.error) || result.done === true || Object.keys(result.error).length > 0),
    progress: typeof progress === 'number' && Number.isFinite(progress) && progress >= 0 && progress <= 100 ? progress : undefined,
    providerUpdatedAt: typeof updatedAt === 'string' && updatedAt.length <= 40 && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(updatedAt) && Number.isFinite(Date.parse(updatedAt)) ? updatedAt : undefined,
    metadataKeys: metadata ? Object.keys(metadata).filter(key => /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)).slice(0, 24) : [],
-   providerError: safeOperationError(result.error, job.input.textPrompt),
+   providerError: result.error && typeof result.error === 'object' && Object.keys(result.error).length > 0 ? safeOperationError(result.error, job.input.textPrompt) : undefined,
    settledOperationCredits: typeof credits === 'number' && Number.isFinite(credits) && credits >= 0 ? credits : undefined,
    responsePresent: result.response !== undefined && result.response !== null,
   } };

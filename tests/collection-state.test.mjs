@@ -11,16 +11,21 @@ const world = memories => ({ user: { id: 'me', displayName: 'Alex', demo: false 
 
 test('public showroom contains exactly three completed cached gifts and only static public navigation', async () => {
   const items = publicCollectionItems();
+  const routeSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const routeMap = routeSource.match(/const examples: Record<string, string> = \{([^}]+)\}/)?.[1];
+  assert.ok(routeMap, 'The viewer declares its static example manifests');
+  const manifests = Object.fromEntries([...routeMap.matchAll(/'([^']+-example)': '([^']+)'/g)].map(match => [match[1], match[2]]));
   assert.deepEqual(items.map(item => item.id), ['rio-example', 'paris-example', 'antikythera-example']);
   for (const item of items) {
-    const name = item.id.replace('-example', ''), manifestPath = name === 'rio' ? '../public/demo/rio-generated-gift.json' : `../public/demo/${name === 'paris' ? 'v17' : 'v13'}/${name}-generated-gift.json`;
-    const manifest = JSON.parse(await readFile(new URL(manifestPath, import.meta.url), 'utf8'));
-    assert.equal(item.title, manifest.title); assert.equal(item.story, manifest.story); assert.equal(item.imageUrl, name === 'paris' ? manifest.keepsakeImageUrl : manifest.originalUrl); assert.equal(item.modelUrl, manifest.modelUrl); assert.equal(item.photoIntent, manifest.photoIntent);
+    const name = item.id.replace('-example', ''), manifestPath = manifests[item.id];
+    assert.match(manifestPath, /^\/demo\//);
+    const manifest = JSON.parse(await readFile(new URL(`../public${manifestPath}`, import.meta.url), 'utf8'));
+    assert.equal(item.title, manifest.title); assert.equal(item.story, manifest.story); assert.equal(item.imageUrl, manifest.keepsakeImageUrl || manifest.originalUrl); assert.equal(item.modelUrl, manifest.modelUrl); assert.equal(item.photoIntent, manifest.photoIntent);
     assert.equal(item.openPath, `generated/${item.id}`); assert.equal(item.worldPath, `generated/${item.id}?view=world`);
     assert.equal(item.kind, 'generated'); assert.equal(item.demo, true);
-    if (name === 'paris') { assert.equal(item.originalImageUrl, manifest.originalUrl); assert.equal(item.objectRepresentation, 'souvenir-miniature'); assert.equal(manifest.objectRepresentation, 'souvenir-miniature'); assert.equal(item.modelYaw, -Math.PI / 2); assert.equal(manifest.modelYaw, undefined, 'The keepsake viewer retains native orientation'); assert.notEqual(item.imageUrl, item.originalImageUrl); }
+    if (manifest.photoIntent === 'place') { assert.equal(item.originalImageUrl, manifest.originalUrl); assert.equal(item.objectRepresentation, 'souvenir-miniature'); assert.equal(manifest.objectRepresentation, 'souvenir-miniature'); assert.equal(item.modelYaw, -Math.PI / 2); assert.equal(manifest.modelYaw, undefined, 'The keepsake viewer retains native orientation'); assert.notEqual(item.imageUrl, item.originalImageUrl); }
     assert.equal(item.mobileModelUrl, `/assets/daylight-desk/keepsakes/${name}-mobile.glb`);
-    for (const path of [item.imageUrl, item.modelUrl, item.mobileModelUrl, manifest.worldUrl]) { assert.match(path, /^\/(assets|demo)\//); assert.equal(/[?#]/.test(path), false); await access(new URL(`../public${path}`, import.meta.url)); }
+    for (const path of [item.imageUrl, item.originalImageUrl, item.modelUrl, item.mobileModelUrl, manifest.worldUrl].filter(Boolean)) { assert.match(path, /^\/(assets|demo)\//); assert.equal(/[?#]/.test(path), false); await access(new URL(`../public${path}`, import.meta.url)); }
   }
   const first = publicCollectionItems(); first[0].modelUrl = '/api/instant?action=asset&token=private'; first.pop();
   assert.equal(publicCollectionItems().length, 3); assert.equal(publicCollectionItems()[0].modelUrl, '/demo/rio-keepsake.glb');

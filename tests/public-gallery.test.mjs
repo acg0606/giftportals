@@ -26,6 +26,46 @@ test('full public projection retains approved model, world, photo and journal wi
  assert.equal(data.modelUrl,source.modelUrl);assert.equal(data.worldUrl,source.worldUrl);assert.equal(data.panoramaUrl,source.panoramaUrl);assert.equal(data.collisionUrl,source.colliderUrl);
  assert.deepEqual(data.worldSemantics,{metricScaleFactor:2,groundPlaneOffset:1});assert.deepEqual(source,gift());
 });
+
+test('owner-approved court example uses reviewed English presentation in both the gift and gallery without changing its archive',()=>{
+ const court='c864acd7-88d0-4b02-bff7-67ae186243dc',source=gift({id:court,title:'pracinha',senderName:'Andre',recipientName:'Voce',dedication:'Queria voce aqui tambem , curtindo esse role!',story:'praca pra curtir a natureza\n\nA place worth keeping close. What happened here that made it yours?\n\nplantei uma arvore'}),before=structuredClone(source);
+ const data=publicGiftData(source,now),[item]=publicGalleryItems([source],now);
+ assert.equal(data.title,'A quiet square');assert.equal(data.senderName,'Andrew');assert.equal(data.recipientName,'You');
+ assert.equal(data.dedication,'I wish you were here, enjoying this place with me!');assert.equal(data.story,'A quiet square to enjoy nature. I planted a tree here.');
+ assert.equal(item.title,data.title);assert.equal(item.story,data.story);assert.doesNotMatch(JSON.stringify(data),/pracinha|Queria voce|plantei uma arvore|What happened here/);
+ for(const field of ['modelUrl','worldUrl','panoramaUrl','mediaExpiresAt'])assert.equal(data[field],source[field]);assert.equal(data.originalUrl,source.sourcePhotoUrl);assert.equal(data.collisionUrl,source.colliderUrl);
+ assert.deepEqual(source,before);data.title='Changed projection';assert.equal(publicGiftData(source,now).title,'A quiet square');
+});
+
+test('the empty playground example gets an English title without inventing names, words or dedication; Rio remains English as archived',()=>{
+ const playground=gift({id:'cc997d6d-faf2-4b5a-8bfa-9196716bec71',title:'A little world for you',story:'',dedication:'',senderName:'',recipientName:''}),data=publicGiftData(playground,now);
+ assert.equal(data.title,'A little square to share');for(const field of ['story','dedication','senderName','recipientName'])assert.equal(data[field],'');
+ assert.equal(publicGalleryItems([playground],now)[0].title,data.title);
+ const rio=gift({id:'cbb27b09-92ea-41d9-a54a-e93b4438bd7a',title:'Rio de Janeiro, for you',story:'A bright afternoon at Botafogo Beach, watching the calm bay and Sugarloaf Mountain. A little piece of Rio to revisit and share.',dedication:'',senderName:'',recipientName:''}),rioData=publicGiftData(rio,now);
+ for(const field of ['title','story','dedication','senderName','recipientName'])assert.equal(rioData[field],rio[field]);
+});
+
+test('future public gifts keep their author’s language and names even when they resemble a curated square',()=>{
+ const source=gift({title:'pracinha',story:'Plantei uma arvore aqui.',dedication:'Queria voce aqui.',senderName:'Andre',recipientName:'Voce'}),data=publicGiftData(source,now),[item]=publicGalleryItems([source],now);
+ for(const field of ['title','story','dedication','senderName','recipientName'])assert.equal(data[field],source[field]);assert.equal(item.title,source.title);assert.equal(item.story,source.story);
+ for(const candidate of ['__proto__','constructor','toString'])assert.equal(publicGiftData({...source,id:candidate},now),undefined);
+});
+
+test('a raw session or memory group winning the merge still gets only the approved square presentation',()=>{
+ const court='c864acd7-88d0-4b02-bff7-67ae186243dc',[shared]=publicGalleryItems([gift({id:court})],now);
+ const local={...shared,id:`session:${court}`,title:'pracinha',story:'plantei uma arvore'},before=structuredClone(local),[selected]=mergeGalleryItems([local],[shared]);
+ assert.equal(selected.id,local.id);assert.equal(selected.title,'A quiet square');assert.equal(selected.story,'A quiet square to enjoy nature. I planted a tree here.');assert.equal(selected.openPath,local.openPath);assert.deepEqual(local,before);
+ const memory={...local,id:court,kind:'memory'};assert.equal(mergeGalleryItems([memory])[0].title,'A quiet square');
+ const unrelated={...local,id:'session:00000000-0000-4000-8000-000000000099'};assert.equal(mergeGalleryItems([unrelated])[0],unrelated);assert.equal(unrelated.story,'plantei uma arvore');
+});
+
+test('a gallery thumbnail never becomes a keepsake reference when its gift has no generated preview',()=>{
+ const source=gift({keepsakeImageUrl:undefined});source.thumbnailUrl=source.sourcePhotoUrl;
+ const data=publicGiftData(source,now),[item]=publicGalleryItems([source],now);
+ assert.equal(data.keepsakeImageUrl,undefined);assert.equal(data.originalUrl,source.sourcePhotoUrl);assert.equal(data.modelUrl,source.modelUrl);
+ assert.equal(item.imageUrl,source.thumbnailUrl,'The collection can still use its original-photo thumbnail');
+ const invalid=publicGiftData({...source,keepsakeImageUrl:'javascript:alert(1)'},now);assert.equal(invalid.keepsakeImageUrl,undefined);
+});
 test('model-only partial souvenirs remain viewable with a real source-photo fallback and no world path',()=>{
  const source=gift({photoIntent:'object',objectRepresentation:'original-object',worldUrl:undefined,panoramaUrl:undefined,colliderUrl:undefined,keepsakeImageUrl:undefined,thumbnailUrl:undefined}),data=publicGiftData(source,now);
  assert.ok(data.modelUrl);assert.equal(data.worldUrl,undefined);assert.equal(data.originalUrl,source.sourcePhotoUrl);
@@ -70,6 +110,29 @@ test('collection projection deduplicates IDs, retains successful records and mer
  const publicItems=publicGalleryItems([gift(),gift({title:'Duplicate'}),gift({id:other,modelUrl:undefined}),gift({id:'bad'})],now);assert.equal(publicItems.length,2);assert.equal(publicItems[0].title,'A shared souvenir');
  const session=[{...publicItems[0],id:`session:${id}`,title:'Session duplicate'},{...publicItems[1],id:'another-souvenir',title:'Another souvenir'}],merged=mergeGalleryItems(publicItems,session);
  assert.deepEqual(merged.map(item=>item.id),[`public:${id}`,`public:${other}`,'another-souvenir']);assert.equal(merged[0].title,'A shared souvenir');
+});
+
+test('the Rio showroom suppresses only its exact legacy public mirror in either merge order',()=>{
+ const legacyId='cbb27b09-92ea-41d9-a54a-e93b4438bd7a',source=gift({id:legacyId,title:'Rio de Janeiro',story:'The original published words.'});
+ const [legacy]=publicGalleryItems([source],now),[unrelated]=publicGalleryItems([gift({id:other,title:'Rio de Janeiro',story:'Another person’s Rio memory.'})],now);
+ const showroom={...unrelated,id:'rio-example',title:'Rio de Janeiro · Sailboats',openPath:'generated/rio-example',worldPath:'generated/rio-example?view=world',demo:true};
+ const sessionLegacy={...legacy,id:`session:${legacyId}`},before=JSON.stringify({source,legacy,unrelated,showroom,sessionLegacy});
+ for(const groups of [[[legacy,unrelated],[sessionLegacy],[showroom]],[[showroom],[legacy,unrelated],[sessionLegacy]]]){
+  const merged=mergeGalleryItems(...groups);assert.equal(merged.length,2);assert.ok(merged.some(item=>item.id==='rio-example'));assert.ok(merged.some(item=>item.id===`public:${other}`));
+  assert.equal(merged.some(item=>item.id.endsWith(legacyId)),false);
+ }
+ assert.equal(JSON.stringify({source,legacy,unrelated,showroom,sessionLegacy}),before);
+ assert.equal(publicGiftData(source,now).story,'The original published words.');assert.equal(publicGalleryItems([source],now)[0].id,`public:${legacyId}`);
+ assert.deepEqual(mergeGalleryItems([legacy,unrelated]).map(item=>item.id),[`public:${legacyId}`,`public:${other}`]);
+ assert.deepEqual(mergeGalleryItems([legacy],[{...showroom,demo:false}]).map(item=>item.id),[`public:${legacyId}`,'rio-example']);
+ const authorizedMemory={...legacy,id:legacyId,kind:'memory'};assert.ok(mergeGalleryItems([authorizedMemory],[showroom]).includes(authorizedMemory));
+});
+
+test('the legacy Rio public gift remains readable directly after showroom display replacement',async()=>{
+ const legacyId='cbb27b09-92ea-41d9-a54a-e93b4438bd7a',source=gift({id:legacyId,title:'Rio de Janeiro',story:'The original published words.'});
+ let captured;const data=await readPublicGift(legacyId,new AbortController().signal,async(url,init)=>{captured={url,init};return response(source);});
+ assert.equal(captured.url,`/api/instant-gallery?action=gift&id=${legacyId}`);assert.equal(captured.init.method,'GET');assert.equal(data.story,source.story);assert.equal(data.worldUrl,source.worldUrl);
+ assert.equal(publicGiftPath(legacyId),`generated/${legacyId}?public=1`);assert.equal(publicGiftPath(legacyId,true),`generated/${legacyId}?public=1&view=world`);
 });
 test('public navigation uses only a verified UUID and the public/read-only mode',()=>{
  assert.equal(publicGiftPath(id),`generated/${id}?public=1`);assert.equal(publicGiftPath(id,true),`generated/${id}?public=1&view=world`);

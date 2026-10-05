@@ -167,13 +167,14 @@ const pointerEvent = (target, type, values = {}) => {
 
 const gardenSettings = { firstPerson: { spawn: [0, 1.65, 0], eyeHeight: 1.65, metricScale: 1, groundOffset: 0, livingGarden: true }, collisionUrl: '/synthetic/collider.glb' };
 
-test('V11 automatic real-world arrival lasts thirty seconds and blocks manual input until the newspaper closes', async () => {
+test('automatic real-world arrival lasts twenty seconds and blocks manual input until the newspaper closes', async () => {
   await fixture(async state => {
     assert.equal(state.cinematicStates.length,0); await state.decode();state.draw();
     assert.equal(state.cinematicStates.at(-1).phase,'flying');const first=state.renderers[0].frames.at(-1).clone();
     state.draw(); const elevated=state.renderers[0].frames.at(-1).clone();assert.ok(elevated.y>first.y+1);
     state.viewer.look(1,1);state.viewer.move(1,1);state.viewer.setMoveInput(1,1);assert.equal(state.viewer.setWalking(true),false);
-    for(let i=0;i<29;i++)state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'flying');state.draw(1000);
+    for(let i=0;i<10;i++)state.draw(1000);assert.equal(state.cinematicStates.at(-1).progress,.5);
+    for(let i=0;i<9;i++)state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'flying');assert.equal(state.cinematicStates.at(-1).progress,.95);state.draw(1000);
     assert.equal(state.cinematicStates.at(-1).phase,'completed');assert.equal(state.cinematicStates.filter(s=>s.phase==='completed').length,1);
     assert.ok(state.renderers[0].frames.at(-1).distanceTo(new Three.Vector3(...state.physicsInstances[0].spawn))<1e-6);
     state.viewer.setInteractionEnabled(true);assert.equal(state.viewer.setWalking(true),true);state.viewer.setMoveInput(0,1);state.draw();state.draw(60);assert.ok(state.physicsInstances[0].advances.length>0);
@@ -224,11 +225,11 @@ test('exit cancels both viewer deadlines and the separate pending collider reque
   },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[],deferCollisionFetch:true,fakeTimers:true});
 });
 
-test('a real Three ceiling selects a lower lateral arrival without crossing its plane or shortening thirty seconds', async () => {
+test('a real Three ceiling selects a lower lateral arrival without crossing its plane or shortening twenty seconds', async () => {
   await fixture(async state => {
     await state.decode();state.draw();state.draw();assert.equal(state.cinematicStates.at(-1).phase,'flying');
     const first=state.renderers[0].frames.at(-1);assert.ok(first.y>state.physicsInstances[0].spawn[1]+.2);assert.ok(first.y<2.1);assert.ok(Math.abs(first.x)>1);
-    for(let step=0;step<29;step++)state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'flying');state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'completed');
+    for(let step=0;step<19;step++)state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'flying');state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'completed');
     assert.ok(state.renderers[0].frames.every(position=>position.y<2.1));assert.ok(state.renderers[0].frames.at(-1).distanceTo(new Three.Vector3(...state.physicsInstances[0].spawn))<1e-6);
     state.viewer.setInteractionEnabled(true);assert.equal(state.viewer.setWalking(true),true);
   },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[],blockedRoof:true,roofHeight:2.1});
