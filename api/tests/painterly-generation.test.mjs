@@ -23,6 +23,22 @@ test('local and cloud world prompts share faithful photographic direction withou
   if(hasPlaceReference)assert.match(local,/original scene photograph is the primary visual evidence/);if(exampleTitle)assert.match(local,/does not authenticate/);
  }
 });
+test('photo world recipes preserve the actual outdoor or indoor enclosure without inventing a foreground interior',()=>{
+ const source={worldPrompt:'A sunny outdoor bay with sailboats and an open shoreline.',photoIntent:'place',hasPlaceReference:true};
+ const local=instant.composeInstantWorldPrompt(source),remote=cloud.cloudWorldPrompt(source);assert.equal(local,remote);
+ for(const cue of ['if the supplied photograph shows an outdoor scene','actual open outdoor viewpoint and visible sky','Never infer an enclosing ceiling, roof, arches, window frame or interior foreground absent from the photograph','If the photograph shows an indoor scene','preserve its photographed walls, ceiling, openings and enclosure','shelter or structure actually visible in the photograph intact'])assert.ok(local.includes(cue),cue);
+ const noScene=cloud.cloudWorldPrompt({...source,photoIntent:'object',hasPlaceReference:false});assert.equal(noScene.includes('Scene enclosure:'),false);
+ assert.equal(cloud.CLOUD_WORLD_MODEL,'marble-1.1');assert.equal(art.WORLD_ART_PROMPT_VERSION,'giftportals-world-photographic-v12');
+ assert.ok(local.includes(source.worldPrompt));
+});
+test('world enclosure refinement leaves the accepted Tripo reference art direction and maximum-length recipe byte-identical',()=>{
+ const baselines=[
+  [{title:'Paris memory',worldPrompt:'A recognizable place, with a small bridge and trees.'},'67c947b55cb085d7d2819c60c5830cb8753cd72cdb98f4cacc98c84cc9c9e680'],
+  [{title:'A'.repeat(120),worldPrompt:'B'.repeat(1600)},'458739a5cc23bc842a3b73379d8b2370d4ac52c724cccac400a04aca46aea5e0'],
+ ];
+ for(const [input,acceptedHash] of baselines){const prompt=cloud.cloudSouvenirPrompt(input);assert.equal(hash(prompt),acceptedHash);assert.equal(prompt,instant.composeSouvenirReferencePrompt(input));}
+ assert.equal(art.SOUVENIR_ART_PROMPT_VERSION,'giftportals-souvenir-cinematic-v10-compact1');
+});
 test('souvenir references require a refined physical collectible with coherent fronts/sides/backs and no flat photograph substitute',()=>{
  for(const title of['Paris memory','A seaside plaza','An imaginary greenhouse']){
   const value=freeze({title,worldPrompt:'A recognizable place, with a small bridge and trees.'}),snapshot=structuredClone(value),local=instant.composeSouvenirReferencePrompt(value);assert.equal(local,cloud.cloudSouvenirPrompt(value));

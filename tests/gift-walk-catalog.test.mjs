@@ -13,12 +13,11 @@ let require = createRequire(import.meta.url);
 try { require.resolve('typescript'); } catch { require = createRequire(resolve(canonical, 'package.json')); }
 const ts = require('typescript');
 const compiled = ts.transpileModule(await readFile(new URL('../src/gift-walk-catalog.ts', import.meta.url), 'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
-const { createGiftWalkScenes, readGiftWorldSemantics } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { createGiftWalkScenes, readGiftWorldSemantics, readGiftWorldSpawn, readGiftWorldEyeHeight } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const freeze = value => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
 const gift = extra => ({title:'The memory title',senderName:'The sender',recipientName:'The recipient',dedication:'  For the person I remember.  ',story:'  This is our own story, with its exact meaning.  ',worldUrl:'/private/world.spz',collisionUrl:'/private/collider.glb',panoramaUrl:'/private/panorama.png',...extra});
 
 for (const profile of [
-  {id:'rio-example',views:1,scale:3.4777204990386963,offset:1.5319561958312988,mode:'newspaper'},
   {id:'paris-example',views:3,scale:2.9049978,offset:1.6893421,mode:'book'},
   {id:'antikythera-example',views:3,scale:2.4615827,offset:1.4774647,mode:'tablet'},
 ]) test(`${profile.id}: audited views retain the calibrated body, story and independent visitor routes`, () => {
@@ -38,35 +37,16 @@ for (const profile of [
   const reopened = createGiftWalkScenes(profile.id, input); assert.notEqual(reopened[0].spawn[0], 999); assert.notEqual(reopened[0].gardenRoutes[0].start[0], 999); assert.notEqual(reopened[0].gardenRoutes[1].end[1], 999);
 });
 
-test('Rio opens only its clear waterside view with a stable ID and exact audited pose/semantics', () => {
-  const scenes = createGiftWalkScenes('rio-example', freeze(gift()));
-  assert.deepEqual(scenes.map(scene => ({id:scene.id,name:scene.name,spawn:scene.spawn,yaw:scene.yaw,pitch:scene.pitch})), [{id:'rio-waterside',name:'The waterside path',spawn:[.000694,-1.317488,-4.044342],yaw:0,pitch:.04}]);
-  assert.equal(scenes[0].metricScale,3.4777204990386963); assert.equal(scenes[0].groundOffset,1.5319561958312988); assert.equal(scenes[0].groundProbeY,-.297626);
+test('Rio retains its waterside route identity while calibrating only its own delivered world and collider', () => {
+  const input = freeze(gift({worldUrl:'/demo/v12/rio-world-500k.spz',collisionUrl:'/demo/v12/rio-collider.glb',panoramaUrl:'/demo/v12/rio-panorama.png',worldSemantics:{metricScaleFactor:1.25,groundPlaneOffset:.7},initialYaw:.2,initialPitch:0})), before = structuredClone(input);
+  const scenes = createGiftWalkScenes('rio-example', input);
+  assert.equal(scenes.length,1);const scene=scenes[0];assert.equal(scene.id,'rio-waterside');assert.equal(scene.name,'The waterside path');
+  assert.equal(scene.world,input.worldUrl);assert.equal(scene.collider,input.collisionUrl);assert.equal(scene.panorama,input.panoramaUrl);
+  assert.equal(scene.metricScale,1.25);assert.equal(scene.groundOffset,.7);assert.equal(scene.yaw,.2);assert.equal(scene.pitch,0);
+  assert.equal(scene.autoCalibrate,true);assert.equal(scene.spawn,undefined);assert.equal(scene.groundProbeY,undefined);assert.equal(scene.gardenRoutes,undefined);assert.equal(scene.journalMode,'newspaper');
+  assert.equal(scene.story,'For the person I remember.\n\nThis is our own story, with its exact meaning.');assert.deepEqual(input,before);
+  const unmeasured=createGiftWalkScenes('rio-example',gift())[0];assert.equal(unmeasured.metricScale,undefined);assert.equal(unmeasured.groundOffset,undefined);assert.equal(unmeasured.spawn,undefined);assert.equal(unmeasured.autoCalibrate,true);
   for (const id of ['paris-example','antikythera-example']) assert.deepEqual(createGiftWalkScenes(id,gift()).map(scene=>scene.id),[`${id}-0`,`${id}-1`,`${id}-2`], 'Other profiles retain their existing IDs/order');
-});
-
-test('Rio curated entry uses the actual provider collider for its floor, first step and reset', async () => {
-  const THREE = await import('three'), { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
-  const physicsSource = ts.transpileModule(await readFile(new URL('../src/first-person-physics.ts', import.meta.url), 'utf8'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText
-    .replace(/from ['"]three['"]/g, `from '${import.meta.resolve('three')}'`)
-    .replace(/from ['"]@dimforge\/rapier3d-compat['"]/g, `from '${import.meta.resolve('@dimforge/rapier3d-compat')}'`);
-  const { createFirstPersonPhysics } = await import(`data:text/javascript;base64,${Buffer.from(physicsSource).toString('base64')}`);
-  const original = JSON.parse(await readFile(resolve(assetProject,'public/demo/rio-generated-gift.json'),'utf8'));
-  const scene = createGiftWalkScenes('rio-example',original)[0];
-  assert.equal(scene.world,original.worldUrl); assert.equal(scene.collider,original.collisionUrl); assert.equal(scene.panorama,original.panoramaUrl);
-  const bytes=await readFile(resolve(assetProject,'public',scene.collider.slice(1))),glb=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
-  const root=glb.scene; root.rotation.x=Math.PI; root.scale.setScalar(scene.metricScale); root.position.y=scene.groundOffset;
-  let physics;
-  try {
-    physics=await createFirstPersonPhysics(root,{spawn:scene.spawn,eyeHeight:1.65,radius:.20,maxRadius:scene.maxRadius});
-    assert.ok(physics.triangles>1000 && physics.meshes>0); assert.equal(physics.spawn[0],scene.spawn[0]); assert.equal(physics.spawn[2],scene.spawn[2]);
-    assert.ok(Math.abs(physics.spawn[1]-scene.spawn[1])<.03,'Audited camera height must remain on the same real floor');
-    let moved={position:physics.spawn,grounded:true}; for(let i=0;i<60;i++)moved=physics.advance(moved.position,[0,0,-.01],1/120);
-    assert.ok(moved.position.every(Number.isFinite)); assert.equal(moved.grounded,true); assert.ok(moved.position[2]<physics.spawn[2]-.4,'The curated entry supports a real forward step');
-    assert.deepEqual(physics.reset(),physics.spawn);
-  } finally {
-    physics?.destroy(); root.traverse(item=>{if(item instanceof THREE.Mesh){item.geometry.dispose();for(const material of Array.isArray(item.material)?item.material:[item.material])material.dispose();}});
-  }
 });
 
 test('Paris preserves its actual approved V23 walking pair while other gifts use their own assets', async () => {
@@ -88,6 +68,38 @@ test('semantic numeric bounds accept exact endpoints and reject malformed, nonfi
     {metricScaleFactor:.04999,groundPlaneOffset:0},{metricScaleFactor:100.00001,groundPlaneOffset:0},{metricScaleFactor:0,groundPlaneOffset:0},{metricScaleFactor:-1,groundPlaneOffset:0},
     {metricScaleFactor:NaN,groundPlaneOffset:0},{metricScaleFactor:Infinity,groundPlaneOffset:0},{metricScaleFactor:2,groundPlaneOffset:NaN},{metricScaleFactor:2,groundPlaneOffset:Infinity},
     {metricScaleFactor:2,groundPlaneOffset:500.00001},{metricScaleFactor:2,groundPlaneOffset:-500.00001}]) assert.equal(readGiftWorldSemantics(value), undefined, JSON.stringify(value));
+});
+
+test('world spawns require exactly three finite bounded numbers, copy the tuple and ignore malformed or untrusted coordinates', () => {
+  for (const value of [[0,1.76932806,4],[-250,250,0]]) {
+    const input = freeze(value), spawn = readGiftWorldSpawn(input); assert.deepEqual(spawn,input); assert.notEqual(spawn,input);
+    spawn[0]=123; assert.notEqual(spawn[0],input[0]);
+  }
+  for (const value of [undefined,null,{},'0,2,4',[],[0,2],[0,2,4,0],new Array(3),{0:0,1:2,2:4,length:3},new Float32Array([0,2,4]),['0',2,4],[0,NaN,4],[0,2,Infinity],[-Infinity,2,4],[250.000001,2,4],[0,-250.000001,4],[0,2,1e30]]) {
+    assert.equal(readGiftWorldSpawn(value),undefined);
+    const scene=createGiftWalkScenes('rio-example',gift({initialSpawn:value}))[0];assert.equal(scene.spawn,undefined);assert.equal(scene.autoCalibrate,true);
+  }
+});
+
+test('a gift supplies only its own copied starting viewpoint and cannot replace the prepared Paris or observatory profiles', () => {
+  const input=freeze(gift({initialSpawn:[0,1.76932806,4]})), scenes=createGiftWalkScenes('rio-example',input);
+  assert.deepEqual(scenes[0].spawn,input.initialSpawn);assert.notEqual(scenes[0].spawn,input.initialSpawn);assert.equal(scenes[0].autoCalibrate,true);
+  scenes[0].spawn[2]=200;assert.equal(input.initialSpawn[2],4);assert.deepEqual(createGiftWalkScenes('rio-example',input)[0].spawn,[0,1.76932806,4]);
+  assert.equal(createGiftWalkScenes('another-gift',gift())[0].spawn,undefined,'Rio does not set a global starting position');
+  for(const id of ['paris-example','antikythera-example']) assert.deepEqual(createGiftWalkScenes(id,input).map(scene=>scene.spawn),createGiftWalkScenes(id,gift()).map(scene=>scene.spawn));
+});
+
+test('curated eye height uses only finite safe values and leaves other gifts and prepared profiles at their existing defaults', () => {
+  for(const height of [.5,2.2,3]) {
+    assert.equal(readGiftWorldEyeHeight(height),height);
+    const scene=createGiftWalkScenes('rio-example',gift({initialEyeHeight:height}))[0];assert.equal(scene.eyeHeight,height);assert.equal(scene.autoCalibrate,true);
+  }
+  for(const height of [undefined,null,'2.2',{},NaN,Infinity,-Infinity,0,.499999,3.000001,1e9]) {
+    assert.equal(readGiftWorldEyeHeight(height),undefined);
+    assert.equal(createGiftWalkScenes('rio-example',gift({initialEyeHeight:height}))[0].eyeHeight,undefined);
+  }
+  assert.equal(createGiftWalkScenes('another-gift',gift())[0].eyeHeight,undefined);
+  for(const id of ['paris-example','antikythera-example']) assert.deepEqual(createGiftWalkScenes(id,gift({initialEyeHeight:2.2})),createGiftWalkScenes(id,gift()),'A new Rio height cannot override prepared profiles');
 });
 
 test('prototype-like gift IDs cannot select or mutate prepared profiles', () => {

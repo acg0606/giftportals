@@ -16,6 +16,8 @@ async function moduleUrl(path) {
 const library = await import(await moduleUrl(new URL('../src/keepsake-library.ts', import.meta.url)));
 const state = await import(await moduleUrl(new URL('../src/instant-creator-state.ts', import.meta.url)));
 const projection = await import(await moduleUrl(new URL('../src/local-keepsakes.ts', import.meta.url)));
+const presentation = await import(await moduleUrl(new URL('../src/public-example-presentation.ts', import.meta.url)));
+const overlay = await import(await moduleUrl(new URL('../src/public-world-overlay.ts', import.meta.url)));
 const source = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 const parsed = ts.createSourceFile('main.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
 // Run the actual route/controller functions. Rendering/GPU and network are injected;
@@ -25,7 +27,7 @@ const functions = parsed.statements.filter(node => ts.isFunctionDeclaration(node
   .replaceAll("import('./collection-room')", 'Promise.resolve(roomModule)').replaceAll("import('./collection-state')", 'Promise.resolve(stateModule)');
 const variables = parsed.statements.filter(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => ['esc', 'keepsakeScope', 'keepsakeStorage'].includes(declaration.name.getText(parsed)))).map(node => node.getText(parsed)).join('\n');
 const controller = `export function makeController(deps) {
- const {storage:localStorage,tabStorage:sessionStorage,app,roomModule,stateModule,readKeepsakeJob,mountInstantCreator,ensureWorld,createdSessionKeepsake,instantGiftReady,instantWorldReady,readInstantJobReference,clearKeepsakeScope,forgetKeepsakeReference,instantJobStorageKey,rememberCreatedKeepsake,storedKeepsakeReferences} = deps;
+ const {storage:localStorage,tabStorage:sessionStorage,app,roomModule,stateModule,readKeepsakeJob,mountInstantCreator,ensureWorld,createdSessionKeepsake,instantGiftReady,instantWorldReady,readInstantJobReference,clearKeepsakeScope,forgetKeepsakeReference,instantJobStorageKey,rememberCreatedKeepsake,storedKeepsakeReferences,presentedPublicExampleGift,presentedPublicExampleItem,readPublicWorldOverlay} = deps;
  const location = {hostname:deps.hostname || 'giftportals.vercel.app'}, icon = ()=>'→', miniArt = ()=>'<span>Gift</span>', header = ()=>'', footer = ()=>'', notice = ()=>'', memoryCard = ()=>'', scopedPath = path=>path, bindCommon = ()=>{}, toast = ()=>{}, render = ()=>{}, missing = message=>{throw Error(message)};
  let actor = deps.actor || null, generation = 0, renderId = 1, cleanup;
  const session = ()=>actor, sessionGeneration = ()=>generation, demoScope = ()=>deps.demoScope || null, navigate = deps.navigate;
@@ -43,17 +45,59 @@ function harness(extra = {}) {
   const inputs = { search:{value:''},month:{value:''} }, grid = {innerHTML:''}, label = {textContent:''};
   const buttons = ['all','self','received','sent'].map(filter=>({dataset:{filter},classList:{toggle(){}},onclick:null}));
   const app = { innerHTML:'', querySelector(selector){ if(selector==='#gallery-grid') return grid; if(selector.includes('input[type="search"]')) return inputs.search; if(selector.includes('input[type="month"]')) return inputs.month; if(selector==='.world-heading .eyebrow') return label; if(selector==='.service-note') return {remove(){}}; return {}; }, querySelectorAll(selector){ return selector==='[data-filter]' ? buttons : selector==='.gallery-filters input' ? Object.values(inputs) : []; } };
-  const captures = {creator:null,room:null,navigation:[],reads:[]};
+  const captures = {creator:null,room:null,navigation:[],reads:[],overlays:[]};
   const publicWorld = {user:{id:'demo',displayName:'Maya',demo:true},memories:[],sent:[],received:[],discoveries:[],jobs:[]};
-  const deps = { ...library, ...state, ...projection, storage,tabStorage,app, actor:extra.actor, demoScope:extra.demoScope, hostname:extra.hostname, routeKey:extra.routeKey, setTimeout:extra.setTimeout, clearTimeout:extra.clearTimeout,
+  const deps = { ...library, ...state, ...projection, ...presentation, storage,tabStorage,app, actor:extra.actor, demoScope:extra.demoScope, hostname:extra.hostname, routeKey:extra.routeKey, setTimeout:extra.setTimeout, clearTimeout:extra.clearTimeout,
     navigate:path=>captures.navigation.push(path), ensureWorld:async()=>publicWorld,
     readKeepsakeJob:extra.readKeepsakeJob || (async reference=>{ captures.reads.push(reference.id); return (extra.jobs || new Map([[gift().id,gift()],[gift('synthetic-gift-b').id,gift('synthetic-gift-b')]])).get(reference.id); }),
+    readPublicWorldOverlay:(id,gift,signal)=>overlay.readPublicWorldOverlay(id,gift,signal,async(url,init)=>{captures.overlays.push({url,init});return extra.overlayFetcher?extra.overlayFetcher(url,init):new Response('{}',{status:404});}),
     mountInstantCreator(_host,options){captures.creator=options;return {destroy(){}}},
     roomModule:{mountCollectionRoom(_host,options){captures.room=options;return {destroy(){}}}},
     stateModule:{publicCollectionItems:()=>[{id:'public-demo',demo:true}],collectionItemsFromWorld:()=>[]},
   };
   return {controller:makeController(deps),storage,tabStorage,captures,inputs,grid,label,buttons};
 }
+
+test('the approved court is English on a private reopen and device desk while its source job remains unchanged', async () => {
+  const id='c864acd7-88d0-4b02-bff7-67ae186243dc',original=gift(id,{title:'pracinha',story:'praca pra curtir a natureza\n\nplantei uma arvore',senderName:'Andre',recipientName:'Voce',dedication:'Queria voce aqui tambem , curtindo esse role!'}),before=structuredClone(original);
+  const view=harness({jobs:new Map([[id,original]])});view.controller.instantCreatorPage(1);view.captures.creator.onGiftCompleted(original);
+  assert.equal(view.controller.items()[0].title,'A quiet square');assert.equal(view.controller.items()[0].story,'A quiet square to enjoy nature. I planted a tree here.');
+  const reopened=await view.controller.readGeneratedGift(id,new AbortController().signal);
+  assert.equal(reopened.title,'A quiet square');assert.equal(reopened.senderName,'Andrew');assert.equal(reopened.recipientName,'You');assert.equal(reopened.dedication,'I wish you were here, enjoying this place with me!');assert.equal(reopened.story,'A quiet square to enjoy nature. I planted a tree here.');
+  assert.equal(reopened.originalUrl,original.assets.photoUrl);assert.equal(reopened.modelUrl,original.assets.modelUrl);assert.equal(reopened.worldUrl,original.assets.worldUrl);assert.deepEqual(original,before);
+  const playground=gift('cc997d6d-faf2-4b5a-8bfa-9196716bec71',{story:'',worldPrompt:'Uma praca para curtir.'}),empty=harness({jobs:new Map([[playground.id,playground]])});
+  const blank=await empty.controller.readGeneratedGift(playground.id,new AbortController().signal);assert.equal(blank.title,'A little square to share');assert.equal(blank.story,'');assert.equal(blank.senderName,'');assert.equal(blank.recipientName,'');
+  view.controller.destroy();empty.controller.destroy();
+});
+
+test('known private and session praça routes use the same verified public world without sending their capability or original media', async () => {
+  for(const[id,slug,hash]of[
+    ['c864acd7-88d0-4b02-bff7-67ae186243dc','pracinha-court','2364ff368b4c479088b0d33ee01129a26ad2aaef00e3db5a63b214b9119f2dda'],
+    ['cc997d6d-faf2-4b5a-8bfa-9196716bec71','pracinha-playground','7ec67ecc34a519689e69a6aa972849385907382ac77a7d91a8fb9c9814b3db82'],
+  ]){
+    const base=`/demo/v12/${slug}`,world={version:1,targetPublicGiftId:id,referenceSha256:hash,worldUrl:`${base}/world-500k.spz`,panoramaUrl:`${base}/panorama.png`,collisionUrl:`${base}/collider.glb`,worldSemantics:{metricScaleFactor:1.25,groundPlaneOffset:.7}};
+    const original=gift(id,{assets:{photoUrl:'https://private.example/source.jpg?capability=synthetic',tripoInputUrl:'/existing-reference.png',modelUrl:'/existing-model.glb',worldUrl:'/archived-world.spz',panoramaUrl:'/archived-panorama.png',colliderUrl:'/archived-collider.glb'}}),before=structuredClone(original);
+    const view=harness({jobs:new Map([[id,original]]),overlayFetcher:async()=>new Response(JSON.stringify(world))});
+    view.controller.instantCreatorPage(1);view.captures.creator.onGiftCompleted(original);
+    const reopened=await view.controller.readGeneratedGift(id,new AbortController().signal);
+    assert.equal(reopened.worldUrl,world.worldUrl);assert.equal(reopened.panoramaUrl,world.panoramaUrl);assert.equal(reopened.collisionUrl,world.collisionUrl);assert.deepEqual(reopened.worldSemantics,world.worldSemantics);
+    assert.equal(reopened.originalUrl,original.assets.photoUrl);assert.equal(reopened.modelUrl,original.assets.modelUrl);assert.equal(reopened.keepsakeImageUrl,original.assets.tripoInputUrl);assert.deepEqual(original,before);
+    assert.deepEqual(view.captures.reads,[id]);assert.equal(view.captures.overlays.length,1);
+    const request=view.captures.overlays[0];assert.equal(request.url,`${base}/world-overlay.json`);assert.equal(request.init.credentials,'omit');assert.equal(request.init.referrerPolicy,'no-referrer');assert.equal(request.init.headers,undefined);assert.equal(request.init.body,undefined);
+    assert.equal(JSON.stringify(request).includes(original.token),false);assert.equal(JSON.stringify(request).includes(original.assets.photoUrl),false);
+    view.controller.destroy();
+  }
+});
+
+test('missing or mismatched public overlays preserve private praça world fields and unrelated authors never request an overlay', async () => {
+  const id='c864acd7-88d0-4b02-bff7-67ae186243dc',original=gift(id),before=structuredClone(original);
+  for(const overlayFetcher of[async()=>new Response('{}',{status:404}),async()=>new Response(JSON.stringify({version:1,targetPublicGiftId:id,referenceSha256:'a'.repeat(64),worldUrl:'/demo/v12/pracinha-court/world-500k.spz',panoramaUrl:'/demo/v12/pracinha-court/panorama.png',worldSemantics:{metricScaleFactor:1,groundPlaneOffset:0}}))]){
+    const view=harness({jobs:new Map([[id,original]]),overlayFetcher}),reopened=await view.controller.readGeneratedGift(id,new AbortController().signal);
+    assert.equal(reopened.worldUrl,original.assets.worldUrl);assert.equal(reopened.originalUrl,original.assets.photoUrl);assert.deepEqual(original,before);assert.equal(view.captures.overlays.length,1);view.controller.destroy();
+  }
+  const future=gift('00000000-0000-4000-8000-000000000001',{title:'Minha praça',senderName:'André',recipientName:'Você',dedication:'Queria você aqui.'}),view=harness({jobs:new Map([[future.id,future]])});
+  const unchanged=await view.controller.readGeneratedGift(future.id,new AbortController().signal);assert.equal(unchanged.title,future.title);assert.equal(unchanged.senderName,future.senderName);assert.equal(unchanged.dedication,future.dedication);assert.equal(unchanged.worldUrl,future.assets.worldUrl);assert.deepEqual(view.captures.overlays,[]);view.controller.destroy();
+});
 
 test('completion saves automatically before Open gift; desk and memories retain two gifts after reload and deduplicate', async () => {
   const first = harness(); first.controller.instantCreatorPage(1);

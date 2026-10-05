@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "targetPublicGiftId": "c864acd7-88d0-4b02-bff7-67ae186243dc",
+  "referenceSha256": "2364ff368b4c479088b0d33ee01129a26ad2aaef00e3db5a63b214b9119f2dda",
+  "worldUrl": "/demo/v12/pracinha-court/world-500k.spz",
+  "mobileWorldUrl": "/demo/v12/pracinha-court/world-100k.spz",
+  "panoramaUrl": "/demo/v12/pracinha-court/panorama.png",
+  "collisionUrl": "/demo/v12/pracinha-court/collider.glb",
+  "worldSemantics": {
+    "metricScaleFactor": 1.9704711,
+    "groundPlaneOffset": 1.3106898
+  }
+}

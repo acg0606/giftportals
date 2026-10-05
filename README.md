@@ -2,11 +2,21 @@
 
 Some gifts fit in your hand. Others take you to an entire world.
 
-Release 11.1 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs daylight studio, open their memories and discover the sender's words. The welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Built-in demo people, journeys and stories are fictional; owner-authorized public gifts preserve their original photographs and reviewed words.
+Release 11.2 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs daylight studio, open their memories and discover the sender's words. The welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Built-in demo people, journeys and stories are fictional; owner-authorized public gifts preserve their original photographs and reviewed words.
 
 ## Build status
 
-Version 11 supplies a 30-second cinematic arrival, an automatic memory
+Release **11.2.0** restores the original Rio sailboats composition through a
+photographic AI reference and a new Marble 1.1 Plus world. Two public square
+examples receive Plus world overlays while retaining their original archived
+photos, Tripo models and memories. The duplicate old Rio card is hidden when
+the updated showroom example is present; its direct public link remains valid.
+Paris and the observatory remain unchanged. New live creations retain Marble
+1.1 with an improved outdoor prompt. The arrival now runs at 1.5× speed, taking
+20 seconds along the same route. The newspaper displays the actual 3D keepsake,
+and all reviewed public examples are presented in English. See the [11.2 world refresh evidence](docs/RELEASE-11.2-EXAMPLE-WORLDS.md).
+
+Version 11 introduced a 30-second cinematic arrival, an automatic memory
 newspaper and optional collision walking. New souvenirs use a separate
 consented public cloud archive without account screens. Its completed Rio
 creation and the photographic Paris world are documented in the
@@ -29,7 +39,7 @@ The 10.3.0 release implements the selected **Daylight atelier** desk for portrai
 
 **Release 10.2.2** includes the reference-conditioned World Labs studio, completed Tripo keepsakes, TapNow visual direction, standard WebXR and print preparation. Physical PICO, HeyGears and Jupiter validation remain pending. Live creation uses private Supabase storage and the server's pinned image moderation models.
 
-Production: [giftportals.vercel.app](https://giftportals.vercel.app). Source: [acg0606/giftportals](https://github.com/acg0606/giftportals). Current public-example evidence and exact limits are recorded in the [11.1 release notes](docs/RELEASE-11.1-PUBLIC-EXAMPLES.md); publication does not constitute a hackathon submission receipt. The [10.3 readiness audit](docs/RELEASE-10.3-READINESS.md) preserves the submitted baseline.
+Production: [giftportals.vercel.app](https://giftportals.vercel.app). Source: [acg0606/giftportals](https://github.com/acg0606/giftportals). Current world refresh evidence and limits are recorded in the [11.2 release notes](docs/RELEASE-11.2-EXAMPLE-WORLDS.md); publication does not constitute a hackathon submission receipt. The [10.3 readiness audit](docs/RELEASE-10.3-READINESS.md) preserves the submitted baseline.
 
 Current media: [narrated English product walkthrough](https://giftportals.vercel.app/media/giftportals-v11.1-narrated-walkthrough.mp4), [product script and printing boundaries](docs/PRODUCT-WALKTHROUGH.md), [current description and photo credits](docs/SUBMISSION-11.1.md), and the [public creator build log](https://andre-giftportals.kalmon4ever.chatgpt.site). The walkthrough emphasizes the creator flow, a completed Paris souvenir, a brief world visit, the memory newspaper, architecture, event partners and the possibility of a physical keepsake. Historical social-post footage remains at its original URL.
 
@@ -48,6 +58,7 @@ defaults, regardless of browser locale. See [product language instructions](AGEN
 
 ## Documentation
 
+- [Release 11.2 example worlds](docs/RELEASE-11.2-EXAMPLE-WORLDS.md): photographic Rio sailboats, two Plus public square worlds and preserved credit reserve.
 - [Release 11.1 public examples](docs/RELEASE-11.1-PUBLIC-EXAMPLES.md): exact owner-authorized gifts, independent archive verification and zero generation.
 - [Version 11 evidence](docs/VERSION-11-PREVIEW.md): public archive contract, cinematic arrival and creator verification.
 - [Release 10.0.0 sponsor and publication audit](docs/V10-SPONSOR-AUDIT.md): actual Tripo, World Labs and TapNow assets, XR/print boundaries, environment availability and payload inspection.

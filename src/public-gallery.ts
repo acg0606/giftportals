@@ -4,6 +4,8 @@ import { readGiftWorldSemantics } from './gift-walk-catalog';
 import type { PublicGalleryGiftDTO, PublicGalleryListDTO } from '../shared/instant-gallery';
 import type { CuriosityFact } from '../shared/gift-curiosities';
 import type { InstantSourceAttribution } from '../shared/instant-examples';
+import { readPublicWorldOverlay } from './public-world-overlay';
+import { publicExamplePresentation, presentedPublicExampleItem } from './public-example-presentation';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const text = (value: unknown, maximum: number) => typeof value === 'string' && value.length <= maximum ? value : '';
@@ -51,9 +53,10 @@ export function publicGiftData(value: unknown, now = Date.now() / 1000): Generat
     senderName: text(gift.senderName,80), recipientName: text(gift.recipientName,80),
     photoIntent: gift.photoIntent, objectRepresentation: gift.objectRepresentation,
     originalUrl, modelUrl, worldUrl, panoramaUrl: media(gift.panoramaUrl), collisionUrl: media(gift.colliderUrl),
-    keepsakeImageUrl: media(gift.keepsakeImageUrl) || media(gift.thumbnailUrl),
+    keepsakeImageUrl: media(gift.keepsakeImageUrl),
     mediaExpiresAt: gift.mediaExpiresAt, worldSemantics: readGiftWorldSemantics(gift.worldSemantics),
     ...(sourceAttribution ? {sourceAttribution} : {}), ...(curiosities ? {curiosities} : {}),
+    ...publicExamplePresentation(gift.id),
   };
 }
 export function publicGalleryItems(values: readonly unknown[], now = Date.now() / 1000): CollectionRoomItem[] {
@@ -73,9 +76,14 @@ export function publicGalleryItems(values: readonly unknown[], now = Date.now() 
 }
 export function mergeGalleryItems(...groups: readonly (readonly CollectionRoomItem[])[]): CollectionRoomItem[] {
   const seen = new Set<string>(), items: CollectionRoomItem[] = [];
+  // The built-in Rio replaces this one reviewed archive mirror on the desk.
+  // Its public gift and saved media remain available through their own routes.
+  const hasRioShowroom = groups.some(group => group.some(item => item.id === 'rio-example' && item.demo));
+  const legacyRioId = 'cbb27b09-92ea-41d9-a54a-e93b4438bd7a';
   for (const group of groups) for (const item of group) {
     const id = item.id.replace(/^(?:public|session):/,'');
-    if (!seen.has(id)) { seen.add(id); items.push(item); }
+    if (hasRioShowroom && /^(?:public|session):/.test(item.id) && id === legacyRioId) continue;
+    if (!seen.has(id)) { seen.add(id); items.push(presentedPublicExampleItem(item)); }
   }
   return items;
 }
@@ -107,5 +115,5 @@ export async function readPublicGift(id:string,signal:AbortSignal,fetcher:typeof
     throw new Error('This public souvenir could not be verified.');
   const gift = publicGiftData(result);
   if (!gift) throw new Error('This public souvenir is unavailable. Return to the collection and try again.');
-  return gift;
+  return readPublicWorldOverlay(id, gift, signal, fetcher);
 }

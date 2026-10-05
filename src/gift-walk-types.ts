@@ -16,6 +16,7 @@ export interface WalkScene {
   metricScale?: number;
   groundOffset?: number;
   spawn?: WalkPosition;
+  eyeHeight?: number;
   yaw?: number;
   pitch?: number;
   maxRadius?: number;
@@ -44,7 +45,7 @@ export function walkSceneFirstPerson(scene: WalkScene) {
     typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
   return {
     spawn: scene.spawn,
-    eyeHeight: 1.65,
+    eyeHeight: typeof scene.eyeHeight === 'number' && Number.isFinite(scene.eyeHeight) && scene.eyeHeight >= .5 && scene.eyeHeight <= 3 ? scene.eyeHeight : 1.65,
     metricScale: scene.metricScale,
     groundOffset: scene.groundOffset,
     radius: .20,

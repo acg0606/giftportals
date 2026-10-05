@@ -37,6 +37,8 @@ import { createdSessionKeepsake } from './local-keepsakes';
 import { clearKeepsakeScope, forgetKeepsakeReference, instantJobStorageKey, readKeepsakeJob, rememberCreatedKeepsake, storedKeepsakeReferences, type KeepsakeStorage } from './keepsake-library';
 import type { CollectionRoomItem } from './collection-types';
 import { readPublicGallery, readPublicGift, mergeGalleryItems, publicGiftPath } from './public-gallery';
+import { presentedPublicExampleGift, presentedPublicExampleItem } from './public-example-presentation';
+import { readPublicWorldOverlay } from './public-world-overlay';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let world: WorldDTO | null = null;
@@ -149,7 +151,7 @@ function header(active = '') {
   const href = (path: string) => `#/${scopedPath(path)}`;
   return `<header class="site-header"><a class="brand" href="#/home" aria-label="GiftPortals home"><img class="brand-image" src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a class="${active === 'gallery' ? 'active' : ''}" href="${href('collection')}">Explore</a><a class="${active === 'world' ? 'active' : ''}" href="${href('world')}">My world</a><a class="${active === 'atlas' ? 'active' : ''}" href="${href('atlas')}">Atlas</a></nav><div class="header-actions">${session() ? `<button class="avatar-button" data-account title="Account and sign out">${esc(session()!.user.displayName.slice(0, 1))}</button>` : `<button class="quiet-button login-trigger" data-auth>Sign in</button>`}<button class="button button-small" data-create>${giftIcon}Make a gift</button></div></header>`;
 }
-function footer() { return '<footer class="site-footer"><a class="brand footer-brand" href="#/home">GiftPortals</a><span>People. Places. Stories. Always with you.</span><span>Version 10.3.3 · Tripothon S1</span><a href="#/about">About & credits</a></footer>'; }
+function footer() { return '<footer class="site-footer"><a class="brand footer-brand" href="#/home">GiftPortals</a><span>People. Places. Stories. Always with you.</span><span>Version 11.2.0 · Tripothon S1</span><a href="#/about">About & credits</a></footer>'; }
 function bindCommon() {
   app.querySelectorAll<HTMLButtonElement>('[data-auth]').forEach((button) => button.onclick = () => showAuth());
   app.querySelectorAll<HTMLButtonElement>('[data-create]').forEach((button) => button.onclick = () => navigate('make'));
@@ -271,7 +273,7 @@ async function qualityReferenceCapturePage(epoch: number) {
 }
 async function readGeneratedGift(id: string, signal: AbortSignal): Promise<GeneratedGiftData> {
   if (routeParams().get('public') === '1') return readPublicGift(id, signal);
-  const examples: Record<string, string> = { 'rio-example': '/demo/v11/rio-generated-gift.json', 'paris-example': '/demo/v11/paris-generated-gift.json', 'antikythera-example': '/demo/v13/antikythera-generated-gift.json' };
+  const examples: Record<string, string> = { 'rio-example': '/demo/v12/rio-generated-gift.json', 'paris-example': '/demo/v11/paris-generated-gift.json', 'antikythera-example': '/demo/v13/antikythera-generated-gift.json' };
   if (Object.hasOwn(examples, id)) {
     const response = await fetch(examples[id], { signal });
     if (!response.ok) throw new Error('This example could not open. Return to your collection and try again.');
@@ -280,7 +282,7 @@ async function readGeneratedGift(id: string, signal: AbortSignal): Promise<Gener
   const job = await readKeepsakeJob({ id, token: routeParams().get('key') || '' }, signal, location.hostname);
   if (!instantGiftReady(job)) throw new Error('Your gift is still taking shape. Reopen the creator to check its progress.');
   const worldReady = instantWorldReady(job);
-  return {
+  const gift = presentedPublicExampleGift(id, {
     title: job.title, senderName: job.senderName, recipientName: job.recipientName,
     dedication: job.dedication, story: job.story || job.worldPrompt, curiosities: job.curiosities,
     originalUrl: job.assets.photoUrl, modelUrl: job.assets.modelUrl, mediaExpiresAt: job.mediaExpiresAt,
@@ -289,7 +291,8 @@ async function readGeneratedGift(id: string, signal: AbortSignal): Promise<Gener
     photoIntent: job.photoIntent, objectRepresentation: job.objectRepresentation, modelYaw: job.modelYaw,
     keepsakeImageUrl: job.assets.tripoInputUrl,
     worldRetry: job.worldRetry,
-  };
+  });
+  return await readPublicWorldOverlay(id, gift, signal);
 }
 function generatedGiftPath(id: string) {
   if (routeParams().get('public') === '1') return publicGiftPath(id);
@@ -516,7 +519,7 @@ async function collectionPage(epoch: number) {
       : current ? [...localItems, ...collectionItemsFromWorld(current)] : localItems.length ? localItems : publicCollectionItems();
     app.innerHTML = '<main id="collection-room-root"></main>';
     const room = mountCollectionRoom(app.querySelector<HTMLElement>('#collection-room-root')!, {
-      items, title: personal ? 'Your memory desk.' : 'The memory desk.',
+      items: items.map(presentedPublicExampleItem), title: personal ? 'Your memory desk.' : 'The memory desk.',
       subtitle: shared.enabled ? 'Souvenirs shared by their creators · saved in the cloud for everyone to revisit.' : current ? 'Your stories and gifts shared with you.' : localItems.length ? 'Your creations · saved on this device while their links are available.' : 'Three real keepsakes. Let a little world come to you.',
       isCurrent: () => epoch === renderId,
       onHome: () => navigate('home'), onCreate: () => navigate('make'),
@@ -1012,7 +1015,7 @@ function createPage() {
   review();
 }
 function about() {
-  app.innerHTML = `${header()}<main class="narrow about-page"><span class="eyebrow">GIFTPORTALS · VERSION 11</span><h1>GiftPortals</h1><p class="large-copy">Some gifts fit in your hand. Others take you to an entire world.</p><p>Start with a photo of a place you love. Tripo turns it into a 3D keepsake; World Labs creates the place its story carries. Open the gift, turn it in your hands, then step inside its little world.</p><h2>Make a gift. Share a place.</h2><p>Start with a camera photo, a selected file or a real place photograph from our examples. Add your words, then approve sharing your original photo, story and completed gift in the public collection. No account is required. Newly completed souvenirs and worlds are saved in the cloud for everyone to revisit.</p><h2>Step inside your souvenir.</h2><p>The viewer loads real Tripo models and World Labs worlds. A smooth 30-second arrival introduces the place, then opens a newspaper with the original photo, your memory and the souvenir. Close it to explore on your own or open another gift. World generation preserves the visible photograph with realistic depth, materials and light; unseen areas are inferred rather than surveyed. Movement depends on the actual generated collision mesh. Reduced motion and scenes without a safe flight path open the newspaper directly.</p><h2>A public collection without accounts.</h2><p>New gifts appear on the shared memory desk only after their real outputs are archived successfully. Their public links refresh access to the saved media whenever you reopen them. Older private gifts remain separate. Names and words in the Paris and Rio example stories are illustrative; their photographs, 3D models and worlds are real, with source credits in the newspaper.</p><h2>Built with</h2><p>Tripo, World Labs, Three.js, Spark, TypeScript and Vite. The local provider keys stay on the server. Credits, original artwork, earlier work and map sources are documented in the project.</p><button class="button" data-create>Make your little world ↗</button><a class="text-link" href="#/generated/rio-example">Open the Rio example ↗</a></main>${footer()}`; bindCommon();
+  app.innerHTML = `${header()}<main class="narrow about-page"><span class="eyebrow">GIFTPORTALS · VERSION 11.2.0</span><h1>GiftPortals</h1><p class="large-copy">Some gifts fit in your hand. Others take you to an entire world.</p><p>Start with a photo of a place you love. Tripo turns it into a 3D keepsake; World Labs creates the place its story carries. Open the gift, turn it in your hands, then step inside its little world.</p><h2>Make a gift. Share a place.</h2><p>Start with a camera photo, a selected file or an example reference. Add your words, then approve sharing your original photo, story and completed gift in the public collection. No account is required. Newly completed souvenirs and worlds are saved in the cloud for everyone to revisit.</p><h2>Step inside your souvenir.</h2><p>The viewer loads real Tripo models and World Labs worlds. A smooth 20-second arrival introduces the place, then opens a newspaper with the source image, your memory and the souvenir. Close it to explore on your own or open another gift. World generation aims to preserve visible scene structure with realistic depth, materials and light; unseen areas are inferred rather than surveyed. Movement depends on the actual generated collision mesh. Reduced motion and scenes without a safe flight path open the newspaper directly.</p><h2>A public collection without accounts.</h2><p>New gifts appear on the shared memory desk only after their real outputs are archived successfully. Their public links refresh access to the saved media whenever you reopen them. Older private gifts remain separate. Names and words in the Paris and Rio example stories are illustrative. Paris uses a real source photograph. Rio uses an AI artistic reference inspired by our original sailboats scene. Both include generated Tripo models and World Labs worlds, with source credits in the newspaper.</p><h2>Built with</h2><p>Tripo, World Labs, Three.js, Spark, TypeScript and Vite. The local provider keys stay on the server. Credits, original artwork, earlier work and map sources are documented in the project.</p><button class="button" data-create>Make your little world ↗</button><a class="text-link" href="#/generated/rio-example">Open the Rio example ↗</a></main>${footer()}`; bindCommon();
 }
 
 function missing(message: string) { app.innerHTML = `${header()}<main class="narrow"><span class="eyebrow">A CLOSED DOOR</span><h1>This little world is unavailable.</h1><p>${esc(message)}</p><a class="button" href="#/world">Explore the public demonstration ↗</a></main>${footer()}`; bindCommon(); }

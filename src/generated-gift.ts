@@ -12,9 +12,10 @@ export interface GeneratedGiftTouchpoint extends GeneratedWorldPoint { title: st
 export interface GeneratedGiftData {
   title: string; senderName: string; recipientName?: string; dedication?: string; story: string;
   originalUrl?: string; sourcePhotoUrl?: string; keepsakeImageUrl?: string; modelUrl?: string; panoramaUrl?: string; worldUrl?: string;
+  sourceImageKind?: 'photograph' | 'artistic-reference';
   sourceAttribution?: { author: string; sourceUrl: string; license: string; licenseUrl: string };
   mediaExpiresAt?: number; touchpoints?: readonly GeneratedGiftTouchpoint[];
-  initialYaw?: number; initialPitch?: number;
+  initialYaw?: number; initialPitch?: number; initialSpawn?: readonly [number, number, number]; initialEyeHeight?: number;
   photoIntent?: 'object' | 'place'; collisionUrl?: string; colliderUrl?: string;
   objectRepresentation?: InstantObjectRepresentation; modelYaw?: number;
   curiosities?: readonly CuriosityFact[];

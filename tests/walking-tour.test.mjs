@@ -10,6 +10,9 @@ const{deriveWalkingTour,createWalkingTourSession}=await import(data(compile(awai
 const physics=compile(await readFile(new URL('../src/first-person-physics.ts',import.meta.url),'utf8')).replace(/from ['"]three['"]/g,`from '${import.meta.resolve('three')}'`).replace(/from ['"]@dimforge\/rapier3d-compat['"]/g,`from '${import.meta.resolve('@dimforge/rapier3d-compat')}'`);
 const{createFirstPersonPhysics}=await import(data(physics));
 const{createGiftWalkScenes}=await import(data(compile(await readFile(new URL('../src/gift-walk-catalog.ts',import.meta.url),'utf8'))));
+const calibration=compile(await readFile(new URL('../src/walk-calibration.ts',import.meta.url),'utf8')).replace(/from ['"]three['"]/g,`from '${import.meta.resolve('three')}'`).replace(/from ['"]three-mesh-bvh['"]/g,`from '${import.meta.resolve('three-mesh-bvh')}'`);
+const{findWalkSpawn}=await import(data(calibration));
+const{walkSceneFirstPerson}=await import(data(compile(await readFile(new URL('../src/gift-walk-types.ts',import.meta.url),'utf8'))));
 const floor=(w=30,d=30)=>{const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,d),new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));mesh.rotation.x=-Math.PI/2;return mesh;};
 const dispose=root=>root.traverse(node=>{if(node instanceof THREE.Mesh){node.geometry.dispose();for(const m of Array.isArray(node.material)?node.material:[node.material])m.dispose();}});
 const create=(root,spawn=[0,1.65,0])=>createFirstPersonPhysics(root,{spawn,eyeHeight:1.65,radius:.2,maxRadius:20});
@@ -68,16 +71,28 @@ test('a slow frame spends its motion budget across multiple original waypoints w
  for(const travelled of runs)assert.ok(Math.abs(travelled-.55)<.000001,'waypoint spacing does not change commanded speed at 10/30/60 fps');
 });
 
-for(const[id,gift]of[
- ['rio-example',{title:'Rio',worldUrl:'/demo/rio-world-500k.spz',collisionUrl:'/demo/rio-collider.glb'}],
- ['paris-example',{title:'Paris',worldUrl:'/demo/v13/paris-world.spz',collisionUrl:'/demo/v13/paris-collider.glb'}],
+for(const[id,manifest]of[
+ ['rio-example','/demo/v12/rio-generated-gift.json'],
+ ['paris-example','/demo/v11/paris-generated-gift.json'],
 ])test(`${id}: the actual matching transformed collider supplies only grounded continuous chapters`,async()=>{
+ const gift=JSON.parse(await readFile(new URL('../public'+manifest,import.meta.url),'utf8'));
  const scene=createGiftWalkScenes(id,gift)[0],bytes=await readFile(new URL('../public'+scene.collider,import.meta.url)),parsed=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
- const root=parsed.scene;root.rotation.x=Math.PI;root.scale.setScalar(scene.metricScale);root.position.y=scene.groundOffset;const controller=await create(root,scene.spawn);
+ const root=parsed.scene;root.rotation.x=Math.PI;root.scale.setScalar(scene.metricScale);root.position.y=scene.groundOffset;
+ const options=walkSceneFirstPerson(scene),spawn=options.autoCalibrate?findWalkSpawn(root,options.spawn||[0,scene.groundOffset,0],options.eyeHeight,options.radius):options.spawn;
+ assert.ok(spawn,`${id}: the matching mesh must support the preferred human arrival`);
+ if(id==='rio-example'){
+  assert.equal(scene.collider,gift.collisionUrl);assert.equal(scene.world,gift.worldUrl);assert.equal(scene.panorama,gift.panoramaUrl);
+  assert.equal(scene.metricScale,gift.worldSemantics.metricScaleFactor);assert.equal(scene.groundOffset,gift.worldSemantics.groundPlaneOffset);assert.equal(options.autoCalibrate,true);
+  assert.deepEqual(scene.spawn,gift.initialSpawn);assert.ok(gift.initialSpawn,'The approved Rio manifest provides its own supported arrival');
+  assert.ok(distance(spawn,gift.initialSpawn)<=2.000001,'Calibration stays within the supported arrival search');
+ }
+ const controller=await createFirstPersonPhysics(root,{...options,spawn});
  try{const plan=deriveWalkingTour(controller,scene.yaw);assert.ok(plan,`${id} supports a connected real walk`);assert.ok(plan.chapters.length>=4&&plan.chapters.length<=6);assert.ok(plan.estimatedDurationMs>=55000&&plan.estimatedDurationMs<155000);
-  assert.ok(plan.chapters.every(chapter=>chapter.path.every(p=>p.every(Number.isFinite)&&distance(p,scene.spawn)<=6.05)));assert.deepEqual(controller.reset(),controller.spawn);
-  const session=createWalkingTourSession(plan);let position=controller.reset(),yaw=scene.yaw,ticks=0,turnFrames=0,straightYaw=[];while(session.state().phase==='playing'&&ticks++<12000){const before=session.state(),pose=session.step(1000/60,position,controller.advance,yaw);assert.ok(pose.position.every(Number.isFinite));if(pose.turning){turnFrames++;assert.deepEqual(pose.position,position,'alignment never translates the body');}const change=Math.max(-.8/60,Math.min(.8/60,pose.yaw-yaw));if(before.index===1&&pose.moving&&ticks/60>15)straightYaw.push(Math.abs(change)*180/Math.PI);yaw+=change;position=pose.position;}
+  assert.ok(plan.chapters.every(chapter=>chapter.path.every(p=>p.every(Number.isFinite)&&distance(p,controller.spawn)<=6.05)));assert.deepEqual(controller.reset(),controller.spawn);
+  let groundedSteps=0;const advance=(...args)=>{const result=controller.advance(...args);assert.equal(result.grounded,true,`${id}: every tour substep stays on the actual collider`);groundedSteps++;return result;};
+  const session=createWalkingTourSession(plan);let position=controller.reset(),yaw=scene.yaw,ticks=0,turnFrames=0,straightYaw=[];while(session.state().phase==='playing'&&ticks++<12000){const before=session.state(),pose=session.step(1000/60,position,advance,yaw);assert.ok(pose.position.every(Number.isFinite));if(pose.turning){turnFrames++;assert.deepEqual(pose.position,position,'alignment never translates the body');}const change=Math.max(-.8/60,Math.min(.8/60,pose.yaw-yaw));if(before.index===1&&pose.moving&&ticks/60>15)straightYaw.push(Math.abs(change)*180/Math.PI);yaw+=change;position=pose.position;}
   assert.equal(session.state().phase,'completed',`${id}: ${JSON.stringify(session.state())}`);assert.ok(distance(position,controller.spawn)<.06);
+  assert.ok(groundedSteps>100,'Continuous physical movement is exercised beyond the starting floor');
   assert.ok(turnFrames>100,'real returns align before translating');straightYaw.sort((a,b)=>a-b);assert.ok(straightYaw.length>100);assert.ok(straightYaw[Math.floor(straightYaw.length*.99)]<.08,`${id}: stable route yaw excludes capsule correction jitter`);
  }finally{controller.destroy();dispose(root);}
 });
