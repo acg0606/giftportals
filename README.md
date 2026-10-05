@@ -2,7 +2,7 @@
 
 Some gifts fit in your hand. Others take you to an entire world.
 
-Release 10.3.0 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs daylight studio, open their memories and discover the sender's words. The welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Demo people, journeys and stories are fictional.
+Release 10.3.3 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs daylight studio, open their memories and discover the sender's words. The welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Demo people, journeys and stories are fictional.
 
 ## Build status
 
@@ -21,6 +21,9 @@ Release 10.2.2 adds an explicit creator-only **Try world again** action, preserv
 ## Development
 
 Node 22+, pnpm. Run `pnpm install`, `pnpm dev`, `pnpm typecheck`, `pnpm test`, `pnpm build`. Frontend-only local previews use clearly marked precomputed demo content and report unavailable cloud actions honestly. Use a configured Vercel development/production runtime for server routes.
+
+The product language is English, including assistant drafts and voice-input
+defaults, regardless of browser locale. See [product language instructions](AGENTS.md).
 
 ## Documentation
 

@@ -9,7 +9,7 @@ export const AUDIO_MODEL_VERSION = 'giftportals-local-whisper-tiny-v1:ct2-int8';
 export const MAX_AUDIO_BYTES = 6 * 1024 * 1024;
 export const MAX_AUDIO_BODY_BYTES = 9 * 1024 * 1024;
 export const MAX_AUDIO_SECONDS = 60;
-export type AudioLanguage = 'pt' | 'en' | 'auto';
+export type AudioLanguage = 'en' | 'pt' | 'auto';
 export interface StoryAudioStatus { available: boolean; localOnly: true; maxAudioBytes: number; maxDurationSeconds: number; languages: AudioLanguage[]; modelVersion?: string; reason?: 'AUDIO_UNAVAILABLE' }
 export interface StoryTranscript { text: string; language: string; duration: number; modelVersion: string; localOnly: true }
 interface AudioRequest { id: string; audioDataUrl: string; language: AudioLanguage }
@@ -23,14 +23,14 @@ export const AUDIO_ERRORS: Record<string, {status: number; message: string}> = {
  AUDIO_SIZE_LIMIT: {status:413,message:'Choose an audio file smaller than 6 MB.'},
  AUDIO_DURATION_LIMIT: {status:422,message:'Keep your voice note to 60 seconds or less.'},
  AUDIO_NO_SPEECH: {status:422,message:'No clear speech was found. Try a closer microphone or a clearer voice note.'},
- AUDIO_LANGUAGE_INVALID: {status:400,message:'Choose Portuguese, English or Auto-detect.'},
+ AUDIO_LANGUAGE_INVALID: {status:400,message:'Choose English, Portuguese or Auto-detect.'},
  AUDIO_TRANSCRIPT_LIMIT: {status:422,message:'This transcript is longer than 1,200 characters. Record a shorter voice note.'},
 };
 export function audioError(code: string): AppError { const safe = Object.hasOwn(AUDIO_ERRORS,code) ? AUDIO_ERRORS[code] : AUDIO_ERRORS.AUDIO_UNAVAILABLE; return new AppError(Object.hasOwn(AUDIO_ERRORS,code)?code:'AUDIO_UNAVAILABLE',safe.status,safe.message); }
 
 export function parseAudioInput(value: unknown): Omit<AudioRequest,'id'> {
  ensure(value && typeof value==='object' && !Array.isArray(value),'INVALID_BODY');
- const input=value as Record<string,unknown>, language=input.language ?? 'pt';
+ const input=value as Record<string,unknown>, language=input.language ?? 'en';
  if(!['pt','en','auto'].includes(language as string))throw audioError('AUDIO_LANGUAGE_INVALID');
  if(typeof input.audioDataUrl!=='string')throw audioError('AUDIO_CONTENT_INVALID');
  if(input.audioDataUrl.length>MAX_AUDIO_BODY_BYTES)throw audioError('AUDIO_SIZE_LIMIT');
@@ -96,7 +96,7 @@ export function createStoryAudioAdapter(deps:Dependencies={}) {
   if(cached&&now()-cached.at<30000)return cached.value;
   if(probing)return probing;
   probing=(async()=>{
-   const value:StoryAudioStatus={available:false,localOnly:true,maxAudioBytes:MAX_AUDIO_BYTES,maxDurationSeconds:MAX_AUDIO_SECONDS,languages:['pt','en','auto'],reason:'AUDIO_UNAVAILABLE'};
+   const value:StoryAudioStatus={available:false,localOnly:true,maxAudioBytes:MAX_AUDIO_BYTES,maxDurationSeconds:MAX_AUDIO_SECONDS,languages:['en','pt','auto'],reason:'AUDIO_UNAVAILABLE'};
    try{const probe=await(deps.probe?deps.probe():probeWorker()) as Record<string,unknown>;if(probe?.ready===true&&probe.protocol===AUDIO_PROTOCOL&&probe.modelVersion===AUDIO_MODEL_VERSION){value.available=true;value.modelVersion=AUDIO_MODEL_VERSION;delete value.reason;}}catch{}
    cached={at:now(),value};return value;
   })();

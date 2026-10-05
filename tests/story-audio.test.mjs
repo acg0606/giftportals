@@ -20,7 +20,7 @@ async function fixture(action,settings={}){
   click(){if(!this.disabled)this.dispatchEvent(new Event('click'));}
  }
  class Root extends Element{
-  elements=new Map();set innerHTML(html){state.html=html;for(const [,tag,attrs,attribute]of html.matchAll(/<(\w+)\b([^>]*?\b(data-audio-[\w-]+)[^>]*)>/g)){const e=new Element();e.hidden=/\bhidden\b/.test(attrs);e.disabled=/\bdisabled\b/.test(attrs);e.value=tag==='select'?(settings.cloud?'pt-BR':'pt'):'';this.elements.set(`[${attribute}]`,e);}}
+   elements=new Map();set innerHTML(html){state.html=html;for(const [,tag,attrs,attribute]of html.matchAll(/<(\w+)\b([^>]*?\b(data-audio-[\w-]+)[^>]*)>/g)){const e=new Element();e.hidden=/\bhidden\b/.test(attrs);e.disabled=/\bdisabled\b/.test(attrs);e.value=tag==='select'?html.match(/<option value="([^"]+)"/)?.[1]||'':'';this.elements.set(`[${attribute}]`,e);}}
   querySelector(selector){return this.elements.get(selector);}
  }
  const document=new EventTarget();document.visibilityState='visible';document.createElement=()=>state.root=new Root();state.document=document;
@@ -40,7 +40,8 @@ async function fixture(action,settings={}){
   result(results){this.onresult?.({results:results.map(([transcript,isFinal=true])=>Object.assign([{transcript}],{isFinal}))});}
  }
  const window=new EventTarget();window.location={hostname:settings.hostname||(settings.cloud?'gift.example':'localhost')};if(settings.recognition)window[settings.recognition==='webkit'?'webkitSpeechRecognition':'SpeechRecognition']=Recognition;
- const values={document,window,isSecureContext:settings.insecure?false:true,navigator:settings.noMicrophone?{language:'fr-FR'}:{language:'fr-FR',mediaDevices:{async getUserMedia(){state.micCalls++;if(settings.permissionError)throw new DOMException('Synthetic','NotAllowedError');return settings.permission?.promise||stream();}}},MediaRecorder:settings.unsupported?undefined:Recorder,URL:{createObjectURL(blob){const url='blob:synthetic-'+state.urls.length;state.urls.push({url,blob});return url;},revokeObjectURL(url){state.revoked.push(url);}},fetch:async(url,options)=>{
+ const browserLanguage=settings.browserLanguage===undefined?'fr-FR':settings.browserLanguage;
+ const values={document,window,isSecureContext:settings.insecure?false:true,navigator:settings.noMicrophone?{language:browserLanguage}:{language:browserLanguage,mediaDevices:{async getUserMedia(){state.micCalls++;if(settings.permissionError)throw new DOMException('Synthetic','NotAllowedError');return settings.permission?.promise||stream();}}},MediaRecorder:settings.unsupported?undefined:Recorder,URL:{createObjectURL(blob){const url='blob:synthetic-'+state.urls.length;state.urls.push({url,blob});return url;},revokeObjectURL(url){state.revoked.push(url);}},fetch:async(url,options)=>{
   state.calls.push({url,options});if(url.includes('status'))return{ok:true,json:async()=>({ok:true,data:{available:settings.unavailable?false:true,localOnly:true}})};
   if(settings.pending)return settings.pending.promise;
   return{ok:true,json:async()=>({ok:true,data:{text:'A synthetic voice-note transcript.'}})};
@@ -56,7 +57,7 @@ test('upload and transcription never emit until explicit reviewed Use; edits hon
  assert.equal(state.micCalls,0);await state.upload();assert.equal(state.calls.length,1);state.element('transcribe').click();await flush();assert.equal(state.transcripts.length,0);
  state.element('text').value='My edited story.';state.element('text').dispatchEvent(new Event('input'));state.element('use').click();state.element('use').click();
  assert.deepEqual(state.transcripts,['My edited story.']);assert.equal(state.element('text').value,'My edited story.');assert.deepEqual(state.revoked,['blob:synthetic-0']);
- const input=JSON.parse(state.calls[1].options.body);assert.equal(input.language,'pt');assert.match(input.audioDataUrl,/^data:audio\/wav;base64,/);
+ const input=JSON.parse(state.calls[1].options.body);assert.equal(input.language,'en');assert.match(input.audioDataUrl,/^data:audio\/wav;base64,/);
 }));
 test('rejected parent append preserves editable draft and navigation/visibility preserve words while freeing audio',async()=>fixture(async state=>{
  await state.upload();state.element('transcribe').click();await flush();state.returnValue=false;state.element('use').click();assert.match(state.element('status').textContent,/story is full/);assert.equal(state.element('review').hidden,false);
@@ -82,13 +83,41 @@ test('review guard rejects whitespace and overflow without truncation',()=>{asse
 test('only exact loopback hosts use the local Python HTTP transport',()=>{for(const host of['localhost','LOCALHOST','127.0.0.1','[::1]','::1'])assert.equal(storyAudioUsesLocalServer(host),true);for(const host of['gift.example','localhost.evil.example','127.0.0.1.evil.example','localhost:3000',''])assert.equal(storyAudioUsesLocalServer(host),false);});
 test('cloud dictates only after click, reviews final words without interim/duplicate additions, then emits explicit edited Use',async()=>fixture(async state=>{
  assert.equal(state.calls.length,0);assert.equal(state.micCalls,0);assert.equal(state.recognitions.length,0);assert.match(state.html,/browser may send speech/i);assert.doesNotMatch(state.html,/Transcribed on this device/);assert.equal(state.element('upload'),undefined);
- state.element('record').click();await flush();const recognition=state.recognitions[0];assert.equal(recognition.starts,1);assert.equal(recognition.lang,'pt-BR');assert.equal(recognition.continuous,true);assert.equal(recognition.interimResults,true);
+ assert.equal(state.element('language').value,'en-US');state.element('record').click();await flush();const recognition=state.recognitions[0];assert.equal(recognition.starts,1);assert.equal(recognition.lang,'en-US');assert.equal(recognition.continuous,true);assert.equal(recognition.interimResults,true);
  recognition.result([['Interim words',false]]);assert.equal(state.element('text').value,'');recognition.result([['My first sentence.',true],['And a second.',true]]);recognition.result([['My first sentence.',true],['And a second.',true]]);assert.equal(state.transcripts.length,0);state.element('stop').click();await flush();assert.equal(state.element('text').value,'My first sentence. And a second.');assert.equal(state.element('review').hidden,false);
  state.element('text').value='My reviewed story.';state.element('text').dispatchEvent(new Event('input'));state.element('use').click();state.element('use').click();assert.deepEqual(state.transcripts,['My reviewed story.']);assert.equal(state.calls.length,0);assert.equal(state.micCalls,0);assert.equal(state.recorders.length,0);
-},{cloud:true,recognition:'standard'}));
-test('cloud prefixed recognition respects selected English and browser language without claiming autodetection',async()=>fixture(async state=>{
+},{cloud:true,recognition:'standard',browserLanguage:'pt-BR'}));
+test('cloud prefixed recognition respects explicit English and browser language without claiming autodetection',async()=>fixture(async state=>{
  assert.doesNotMatch(state.html,/Auto-detect/);state.element('language').value='en-US';state.element('record').click();await flush();assert.equal(state.recognitions[0].lang,'en-US');state.handle.stop();state.element('language').value='browser';state.element('record').click();await flush();assert.equal(state.recognitions[1].lang,'fr-FR');assert.equal(state.calls.length,0);
 },{cloud:true,recognition:'webkit'}));
+test('explicit Portuguese dictation preserves the user’s words while a new mount defaults to English on the same Portuguese browser',async()=>{
+ const settings={cloud:true,recognition:'standard',browserLanguage:'pt-BR'};
+ await fixture(async state=>{
+  assert.equal(state.element('language').value,'en-US');state.element('language').value='pt-BR';state.element('record').click();await flush();
+  const recognition=state.recognitions[0];assert.equal(recognition.lang,'pt-BR');recognition.result([['Minha própria memória.',true]]);recognition.onend();state.element('use').click();
+  assert.deepEqual(state.transcripts,['Minha própria memória.']);assert.equal(state.calls.length,0);
+ },settings);
+ await fixture(async state=>{
+  assert.equal(state.element('language').value,'en-US');state.element('record').click();await flush();assert.equal(state.recognitions[0].lang,'en-US');assert.equal(state.calls.length,0);
+ },settings);
+});
+test('local transcription defaults to English on a Portuguese browser and retains only explicit spoken-language choices',async()=>{
+ for(const selection of['en','pt','auto'])await fixture(async state=>{
+  assert.equal(state.element('language').value,'en');state.element('language').value=selection;await state.upload();state.element('transcribe').click();await flush();
+  assert.equal(JSON.parse(state.calls[1].options.body).language,selection);assert.equal(state.micCalls,0);assert.equal(state.transcripts.length,0);
+ },{browserLanguage:'pt-BR'});
+ await fixture(async state=>{
+  assert.equal(state.element('language').value,'en');await state.upload();state.element('transcribe').click();await flush();assert.equal(JSON.parse(state.calls[1].options.body).language,'en');
+ },{browserLanguage:'pt-BR'});
+});
+test('invalid browser-language and missing spoken-language selections fall back to English dictation',async()=>{
+ for(const browserLanguage of[null,'','../../pt-BR'])await fixture(async state=>{
+  state.element('language').value='browser';state.element('record').click();await flush();assert.equal(state.recognitions[0].lang,'en-US');
+ },{cloud:true,recognition:'standard',browserLanguage});
+ await fixture(async state=>{
+  state.element('language').value='';state.element('record').click();await flush();assert.equal(state.recognitions[0].lang,'en-US');
+ },{cloud:true,recognition:'standard',browserLanguage:'pt-BR'});
+});
 test('cloud cancellation aborts recognition, detaches callbacks and rejects late results from the old session',async()=>fixture(async state=>{
  state.element('record').click();await flush();const first=state.recognitions[0],late=first.onresult;first.result([['Cancelled words',true]]);state.element('cancel').click();assert.equal(first.aborts,1);assert.equal(first.onresult,null);assert.equal(first.onend,null);assert.equal(state.element('text').value,'');state.element('record').click();await flush();late({results:[Object.assign([{transcript:'Late cancelled text'}],{isFinal:true})]});const second=state.recognitions[1];second.result([['Current words',true]]);second.onend();assert.equal(state.element('text').value,'Current words');assert.equal(state.transcripts.length,0);assert.equal(state.calls.length,0);
 },{cloud:true,recognition:'standard'}));

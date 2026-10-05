@@ -15,7 +15,7 @@ const instant=await moduleURL('api/_lib/instant.ts',{'./rules.js':rules,'./provi
 const {createStoryAudioHandler}=await import(await moduleURL('api/story-audio.ts',{'./_lib/rules.js':rules,'./_lib/instant.js':instant,'./_lib/story-audio.js':audioURL}));
 const probe=async()=>({ready:true,protocol:a.AUDIO_PROTOCOL,modelVersion:a.AUDIO_MODEL_VERSION});
 const input=(extra={})=>({audioDataUrl:'data:audio/wav;base64,'+Buffer.from('RIFF0000WAVEsynthetic-fixture').toString('base64'),...extra});
-const response=request=>({id:request.id,result:{text:'This is a synthetic transcript.',language:'pt',duration:2,modelVersion:a.AUDIO_MODEL_VERSION,localOnly:true}});
+const response=request=>({id:request.id,result:{text:'This is a synthetic transcript.',language:request.language==='auto'?'pt':request.language,duration:2,modelVersion:a.AUDIO_MODEL_VERSION,localOnly:true}});
 const deferred=()=>{let resolve;const promise=new Promise(done=>resolve=done);return{promise,resolve};};
 globalThis.fetch=async()=>{throw Error('NO_NETWORK_IN_TESTS');};
 
@@ -29,7 +29,7 @@ test('input rejects MIME spoofing, bad magic, noncanonical base64, oversized byt
  for(const value of [input({audioDataUrl:'data:audio/wav;base64,'+Buffer.from('<html>not audio').toString('base64')}),input({audioDataUrl:'data:audio/wav;base64,AAAA='})])assert.throws(()=>a.parseAudioInput(value),e=>e.code==='AUDIO_CONTENT_INVALID');
  for(const mime of ['text/html','application/octet-stream','video/mp4'])assert.throws(()=>a.parseAudioInput(input({audioDataUrl:`data:${mime};base64,UklGRjAwMDBXQVZF`})),e=>e.code==='AUDIO_TYPE_INVALID');
  const oversized=Buffer.alloc(a.MAX_AUDIO_BYTES+1);oversized.write('RIFF');oversized.write('WAVE',8);assert.throws(()=>a.parseAudioInput(input({audioDataUrl:'data:audio/wav;base64,'+oversized.toString('base64')})),e=>e.code==='AUDIO_SIZE_LIMIT');
- assert.throws(()=>a.parseAudioInput(input({language:'xx'})),e=>e.code==='AUDIO_LANGUAGE_INVALID');assert.equal(a.parseAudioInput(input()).language,'pt');
+ assert.throws(()=>a.parseAudioInput(input({language:'xx'})),e=>e.code==='AUDIO_LANGUAGE_INVALID');assert.equal(a.parseAudioInput(input()).language,'en');
  const opus='data:audio/webm;codecs=opus;base64,'+Buffer.from([0x1a,0x45,0xdf,0xa3]).toString('base64');assert.equal(a.parseAudioInput(input({audioDataUrl:opus,language:'auto'})).audioDataUrl,opus.replace(';codecs=opus',''));
 });
 test('transcripts are bounded, local, reviewable and include actual decoded duration',async()=>{
@@ -46,7 +46,18 @@ test('one shared slot rejects duplicate/inflight calls and releases after cancel
  const controller=new AbortController(),first=service.transcribe(input(),controller.signal);
  await assert.rejects(service.transcribe(input()),e=>e.code==='AUDIO_BUSY');controller.abort();pending.resolve();await assert.rejects(first,e=>e.code==='AUDIO_CANCELLED');assert.equal(calls,1);
  const next=a.createStoryAudioAdapter({probe,run:async request=>({id:request.id,error:'AUDIO_NO_SPEECH'})});await assert.rejects(next.transcribe(input()),e=>e.code==='AUDIO_NO_SPEECH');
- const recovered=a.createStoryAudioAdapter({probe,run:async request=>response(request)});assert.equal((await recovered.transcribe(input())).language,'pt');
+ const recovered=a.createStoryAudioAdapter({probe,run:async request=>response(request)});assert.equal((await recovered.transcribe(input())).language,'en');
+});
+test('omitted audio language defaults to English while explicit spoken Portuguese and auto-detect remain supported',async()=>{
+ const received=[];const service=a.createStoryAudioAdapter({probe,run:async request=>{received.push(request.language);return response(request);}});
+ assert.deepEqual((await service.status()).languages,['en','pt','auto']);
+ assert.equal((await service.transcribe(input())).language,'en');
+ assert.equal((await service.transcribe(input({language:'pt'}))).language,'pt');
+ assert.equal((await service.transcribe(input({language:'auto'}))).language,'pt');
+ assert.deepEqual(received,['en','pt','auto']);
+ const unavailable=a.createStoryAudioAdapter({probe:async()=>({ready:false})});
+ assert.deepEqual((await unavailable.status()).languages,['en','pt','auto']);
+ assert.equal(a.audioError('AUDIO_LANGUAGE_INVALID').message,'Choose English, Portuguese or Auto-detect.');
 });
 function request(extra={}){return Object.assign(new EventEmitter(),{url:'/api/story-audio?action=transcribe',method:'POST',headers:{host:'127.0.0.1:4325',origin:'http://127.0.0.1:4325','sec-fetch-site':'same-origin','content-type':'application/json'},socket:{remoteAddress:'127.0.0.1'},body:JSON.stringify(input()),...extra});}
 function res(){return Object.assign(new EventEmitter(),{headers:{},writableEnded:false,destroyed:false,setHeader(key,value){this.headers[key]=value;},end(body){this.writableEnded=true;this.body=JSON.parse(body);}});}

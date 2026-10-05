@@ -899,11 +899,25 @@ test('interpreting a photo needs its own named permission and sends only a prepa
     state.photoConsent(); state.find('[data-assistant-analyze]').click(); await flush();
     assert.equal(state.assists.length, 1); const input = state.assists[0].input;
     assert.equal(input.photoConsent, true); assert.equal(input.location, undefined); assert.equal(input.locationConsent, undefined);
-    assert.equal(input.imageDataUrl, 'data:image/jpeg;base64,cHJlcGFyZWQgb3JpZ2luYWw='); assert.equal(input.language, 'pt');
-    assert.equal(state.creates.length, 0); assert.equal(state.field('story').value, 'Uma lembrança sugerida.');
+    assert.equal(input.imageDataUrl, 'data:image/jpeg;base64,cHJlcGFyZWQgb3JpZ2luYWw='); assert.equal(input.language, 'en');
+    assert.equal(state.creates.length, 0); assert.equal(state.field('story').value, 'A suggested memory.');
     assert.equal(state.find('[data-assistant-photo-description]').hidden, false); assert.match(state.find('[data-assistant-photo-description]').textContent, /An open square/);
     assert.equal(state.field('consent').checked, false, 'Interpreting a photo does not grant permission for 3D generation');
-  }, { language: 'pt-BR', photoAvailable: true, suggestion: { story: 'Uma lembrança sugerida.', photoAnalyzed: true, photoDescription: 'An open square in afternoon light.', provider: 'vercel' } });
+  }, { language: 'pt-BR', photoAvailable: true, suggestion: { story: 'A suggested memory.', photoAnalyzed: true, photoDescription: 'An open square in afternoon light.', provider: 'vercel' } });
+});
+
+test('a Portuguese browser requests English place suggestions and regeneration while preserving the user’s words and place name', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'], 'square.jpg', { type: 'image/jpeg' }));
+    state.edit('story', 'Minha memória escrita por mim.'); state.edit('assistantPlace', 'Praça Américo');
+    state.find('[data-assistant-suggest]').click(); await flush();
+    assert.equal(state.assists.length, 1); assert.equal(state.assists[0].input.language, 'en');
+    assert.equal(state.assists[0].input.placeName, 'Praça Américo');
+    assert.equal(state.field('story').value, 'Minha memória escrita por mim.');
+    state.find('[data-assistant-regenerate]').click(); await flush();
+    assert.equal(state.assists.length, 2); assert.ok(state.assists.every(({ input }) => input.language === 'en'));
+    assert.equal(state.field('story').value, 'Minha memória escrita por mim.'); assert.equal(state.creates.length, 0);
+  }, { language: 'pt-BR', suggestion: { story: 'A suggested memory.', photoAnalyzed: false, provider: 'template' } });
 });
 
 test('site or account refusals stop photo retries for this wizard while retaining photos, manual words, place lookup and gift creation', async () => {

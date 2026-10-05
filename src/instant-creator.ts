@@ -392,7 +392,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     const current = () => active() && !wizardBusy() && request === assistantEpoch && photoEpoch === sourceEpoch && !abort.signal.aborted;
     assistantBusy = true; assistantAvailability(); text('[data-assistant-status]', includePhoto ? 'Interpreting the photo and finding a starting point…' : 'Finding public place details and a starting point…');
     try {
-      const input: PlaceAssistantInput = { language: typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('pt') ? 'pt' : 'en' };
+      const input: PlaceAssistantInput = { language: 'en' };
       if (includePhoto && source) { input.imageDataUrl = await imageData(source, abort.signal, true); input.photoConsent = true; }
       if (lookup) { input.location = lookup; input.locationConsent = true; }
       if (placeName) input.placeName = placeName;

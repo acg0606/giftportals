@@ -4,7 +4,9 @@ export interface PlaceAssistantLocation { latitude:number; longitude:number; acc
 export interface PlaceAssistantInput {
  imageDataUrl?:string; photoConsent?:boolean;
  location?:PlaceAssistantLocation; locationConsent?:boolean;
- placeName?:string; language?:'pt'|'en';
+ placeName?:string;
+ /** Suggestions use English. Legacy Portuguese/locale hints remain accepted. */
+ language?:'en'|'en-US'|'pt'|'pt-BR';
 }
 export interface PlaceAssistantCandidate {
  id:string; label:string; latitude:number; longitude:number; distanceMeters:number;

@@ -8,11 +8,24 @@ const {createPlaceAssistantHandler,runtimeAssistantToken}=await load(resolve(her
 const photo='data:image/png;base64,'+Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]).toString('base64');
 const location={latitude:-23.610213,longitude:-46.640678,accuracyMeters:12,label:'São Paulo, Brasil'};
 const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
-const gatewayResult={title:'Um instante verde',story:'Um cantinho verde para guardar em uma lembrança e compartilhar.',worldPrompt:'Um lugar com árvores e luz suave para explorar.',photoDescription:'A imagem parece mostrar uma árvore sobre um fundo claro.'};
-const facts={query:{pages:[{pageid:123,title:'Praça sintética',extract:'Esta é uma descrição publicada do lugar sintético de teste, fornecida pelo serviço de fontes públicas.',coordinates:[{lat:location.latitude,lon:location.longitude}]}]}};
+const gatewayResult={title:'A green moment',story:'A green corner to keep as a memory and share.',worldPrompt:'A place with trees and soft light to explore.',photoDescription:'The image appears to show a tree against a light background.'};
+const facts={query:{pages:[{pageid:123,title:'Praça sintética',extract:'This is a published description of the fictional test place, supplied by the public source service.',coordinates:[{lat:location.latitude,lon:location.longitude}]}]}};
 const places={elements:[{type:'way',id:987,tags:{name:'Praça sintética',place:'square'},center:{lat:location.latitude,lon:location.longitude}},{type:'way',id:555,tags:{name:'Lugar distante',leisure:'park'},center:{lat:0,lon:0}},{type:'way',id:3,tags:{name:'Centro inválido'},center:{lat:Infinity,lon:0}}]};
 const noToken=()=>undefined;
 globalThis.fetch=async()=>{throw Error('NO_NETWORK_IN_TESTS');};
+
+test('default and legacy language hints normalize to English without changing supplied proper names',async()=>{
+ let calls=0;const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async()=>{calls++;throw Error('unexpected-network');}});
+ for(const language of [undefined,'pt','pt-BR','en','en-US']){
+  const parsed=a.parseAssistantInput({language,placeName:'Praça Américo Portugal Gouvêa'});
+  assert.equal(parsed.language,'en');assert.equal(parsed.placeName,'Praça Américo Portugal Gouvêa');
+  const template=a.assistantTemplate(parsed);assert.equal(template.title,'A memory of Praça Américo Portugal Gouvêa');
+  assert.match(template.story,/^This photo keeps/);assert.match(template.worldPrompt,/^A welcoming environment/);
+  const value=await service.suggest({language});
+  assert.equal(value.title,'A little moment to keep');assert.match(value.story,/^This photo keeps/);assert.match(value.worldPrompt,/^A welcoming environment/);
+ }
+ assert.equal(calls,0);
+});
 
 test('photo and coordinate consent are checked before every external call',async()=>{
  let calls=0;const service=a.createPlaceAssistant({fetch:async()=>{calls++;return json({});},gatewayToken:()=> 'synthetic-token'});
@@ -30,14 +43,14 @@ test('unconfigured text/image provider returns a reviewable template and never p
  assert.equal(service.status().photoAnalysisAvailable,false);
  const value=await service.suggest({imageDataUrl:photo,photoConsent:true,language:'pt'});
  assert.equal(value.provider,'template');assert.equal(value.photoAnalyzed,false);assert.equal(value.photoDescription,undefined);
- assert.ok(value.warnings.includes('PHOTO_ANALYSIS_NOT_CONFIGURED'));assert.ok(value.story.startsWith('Esta foto'));assert.equal(calls,0);
+ assert.ok(value.warnings.includes('PHOTO_ANALYSIS_NOT_CONFIGURED'));assert.ok(value.story.startsWith('This photo'));assert.equal(calls,0);
 });
 
 test('nearby square suggestions preserve uncertainty and sourced curiosity scope; coordinates/images never go to the AI provider as a location',async()=>{
  const calls=[];const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async(url,init)=>{calls.push([String(url),init]);return json(String(url).includes('overpass')?places:facts);}});
  const value=await service.suggest({imageDataUrl:photo,photoConsent:true,location,locationConsent:true,language:'pt'});
  assert.equal(value.places.length,1);assert.equal(value.places[0].label,'Praça sintética');assert.equal(value.places[0].approximate,true);assert.ok(value.warnings.includes('NEARBY_PLACE_REQUIRES_CONFIRMATION'));
- assert.equal(value.locationStatus,'matched');assert.equal(value.curiosities[0].scope,'nearby');assert.match(value.curiosities[0].sourceUrl,/^https:\/\/pt\.wikipedia\.org\//);
+ assert.equal(value.locationStatus,'matched');assert.equal(value.curiosities[0].scope,'nearby');assert.match(value.curiosities[0].sourceUrl,/^https:\/\/en\.wikipedia\.org\//);
  assert.ok(value.story.includes('São Paulo'));assert.ok(!value.story.includes('Praça sintética'));
  assert.equal(calls.length,2);assert.ok(calls.every(([url,init])=>!JSON.stringify(init).includes(photo)));
  await service.suggest({imageDataUrl:photo,photoConsent:true,location,locationConsent:true,language:'pt'});assert.equal(calls.length,2);
@@ -58,11 +71,37 @@ test('gateway requests use the verified vision model, bounded tokens, a fixed en
  let calls=0;const service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async(url,init)=>{
   calls++;assert.equal(String(url),'https://ai-gateway.vercel.sh/v1/chat/completions');assert.equal(init.redirect,'error');assert.equal(init.headers['ai-gateway-auth-method'],'oidc');
   const body=JSON.parse(init.body);assert.equal(body.model,'google/gemini-2.5-flash-lite');assert.equal(body.max_tokens,900);assert.equal(body.messages[0].content[1].image_url.url,photo);
-  assert.ok(body.messages[0].content[0].text.includes('do not identify people'));return json({choices:[{message:{content:JSON.stringify(gatewayResult)}}]});
+  const prompt=body.messages[0].content[0].text;assert.match(prompt,/^Write in English\./);assert.match(prompt,/Always use English for photoDescription, title, story and worldPrompt/);assert.ok(!prompt.includes('Brazilian Portuguese'));
+  assert.ok(prompt.includes('do not identify people'));return json({choices:[{message:{content:JSON.stringify(gatewayResult)}}]});
  }});
  const value=await service.suggest({imageDataUrl:photo,photoConsent:true});assert.equal(value.provider,'vercel');assert.equal(value.photoAnalyzed,true);assert.equal(value.photoDescription,gatewayResult.photoDescription);
  assert.deepEqual(value.curiosities,[]);assert.equal(Object.hasOwn(value,'key'),false);
  await service.suggest({imageDataUrl:photo,photoConsent:true});assert.equal(calls,1);
+});
+
+test('a legacy Portuguese request uses the English provider prompt and shares its generation with default and English hints',async()=>{
+ let calls=0;const service=a.createPlaceAssistant({gatewayToken:()=> 'synthetic-token',fetch:async(url,init)=>{
+  calls++;assert.equal(String(url),'https://ai-gateway.vercel.sh/v1/chat/completions');
+  const prompt=JSON.parse(init.body).messages[0].content[0].text;
+  assert.match(prompt,/^Write in English\./);assert.match(prompt,/regardless of the browser language/);assert.match(prompt,/Preserve proper names/);
+  return json({choices:[{message:{content:JSON.stringify(gatewayResult)}}]});
+ }});
+ for(const language of ['pt','pt-BR',undefined,'en','en-US']){
+  const value=await service.suggest({imageDataUrl:photo,photoConsent:true,language});
+  for(const key of ['title','story','worldPrompt','photoDescription'])assert.equal(value[key],gatewayResult[key]);
+  assert.equal(value.provider,'vercel');assert.equal(value.photoAnalyzed,true);
+ }
+ assert.equal(calls,1,'Changing a legacy browser language does not duplicate generation');
+});
+
+test('missing English source evidence does not fall back to Portuguese Wikipedia',async()=>{
+ const calls=[];const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async url=>{
+  const endpoint=new URL(url);calls.push(endpoint.hostname);assert.equal(endpoint.hostname,'en.wikipedia.org');
+  return json({query:{pages:[{missing:true,title:'Synthetic place'}]}});
+ }});
+ const value=await service.suggest({placeName:'Synthetic place',language:'pt-BR'});
+ assert.deepEqual(value.curiosities,[]);assert.ok(value.warnings.includes('NO_VERIFIED_PLACE_CURIOSITY'));
+ assert.deepEqual(calls,['en.wikipedia.org']);assert.match(value.story,/^This photo keeps/);
 });
 
 test('credit exhaustion, rate limits and malformed generative output degrade without retries or lost original input',async()=>{
@@ -109,7 +148,7 @@ test('different photos can be suggested concurrently and an identical in-flight 
 test('the named São Paulo square uses reviewed municipal evidence only after an exact user choice',async()=>{
  let calls=0;const service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async()=>{calls++;throw Error('unexpected-network');}});
  const value=await service.suggest({placeName:'Praça Américo Portugal Gouvêa',language:'pt'});
- assert.equal(calls,0);assert.equal(value.curiosities[0].scope,'place');assert.match(value.curiosities[0].sourceUrl,/^https:\/\/drive\.prefeitura\.sp\.gov\.br\//);assert.ok(value.curiosities[0].text.includes('mosaicos'));
+ assert.equal(calls,0);assert.equal(value.curiosities[0].scope,'place');assert.match(value.curiosities[0].sourceUrl,/^https:\/\/drive\.prefeitura\.sp\.gov\.br\//);assert.ok(value.curiosities[0].text.includes('mosaics'));assert.equal(value.curiosities[0].sourceTitle,'City of São Paulo — Vila Mariana council, minutes 103');
  assert.deepEqual(a.reviewedPlaceCuriosities('Outra Praça Américo Portugal Gouveia','pt'),[]);
  assert.deepEqual(a.reviewedPlaceCuriosities(undefined,'pt'),[]);
 });
