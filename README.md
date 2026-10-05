@@ -2,24 +2,34 @@
 
 Some gifts fit in your hand. Others take you to an entire world.
 
-Release 10.3.3 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs daylight studio, open their memories and discover the sender's words. The welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Demo people, journeys and stories are fictional.
+Release 11.1 of the memory gift app for Tripothon S1. Start with a photo, place and story to create a Tripo 3D keepsake and a World Labs world. Revisit completed keepsakes in an actual World Labs daylight studio, open their memories and discover the sender's words. The welcome uses TapNow artwork. Earlier postcard, map and memory-train experiences remain preserved. Built-in demo people, journeys and stories are fictional; owner-authorized public gifts preserve their original photographs and reviewed words.
 
 ## Build status
 
-This branch is the **version 11 preview** based on the submitted 10.3.3 release.
-It replaces the normal world chapters with a 30-second cinematic arrival,
-an automatic memory newspaper and optional collision walking. New souvenirs
-have a separate consented public cloud archive without account screens.
-Paris has a regenerated photographic Marble 1.1 world; Rio and public creation
-are awaiting the configured creator verification. Production remains 10.3.3.
-See the [current preview evidence and remaining checks](docs/VERSION-11-PREVIEW.md).
+Version 11 supplies a 30-second cinematic arrival, an automatic memory
+newspaper and optional collision walking. New souvenirs use a separate
+consented public cloud archive without account screens. Its completed Rio
+creation and the photographic Paris world are documented in the
+[version 11 evidence](docs/VERSION-11-PREVIEW.md).
+
+Release **11.1.0** adds two completed Praça Américo Portugal Gouvêa gifts to
+that public archive with the owner's explicit authorization. Both are already
+available through the production gallery without a login, using independent
+copies of their existing media and zero new provider generation. Anonymous
+readback verified all ten files and renewable media signatures; browser review
+verified both source photographs and memory newspapers. WebGL is disabled in
+the verification browser, so that review establishes fallback behavior rather
+than actual world rendering. The production deployment receipt is tracked in
+the release pull request and Vercel checks. See the [11.1 publication evidence
+and limits](docs/RELEASE-11.1-PUBLIC-EXAMPLES.md).
+
 The release notes below describe the submitted baseline and earlier increments.
 
 The 10.3.0 release implements the selected **Daylight atelier** desk for portrait phones, with a new full Marble 1.0 room, a larger interactive keepsake, cream/navy controls and measured tabletop positions. The three public keepsakes use smaller mobile texture derivatives with byte-identical geometry; their original GLBs remain the source for other views and print preparation. The room's 500k export is the primary on mobile, with a 100k failure fallback. The keepsake viewer now permits closer detail zoom based on each model's actual bounds, shared by buttons, keyboard, wheel and pinch. Guided walks use four to six chapters with closer views, observation pauses and a connected return, deriving every walking path from the original world's grounded collider. Mobile chapter controls remain separate from the toolbar; reduced motion offers still chapters. See [mobile desk evidence](docs/DAYLIGHT-MOBILE-DESK.md), [design QA](design-qa.md) and [release readiness](docs/RELEASE-10.3-READINESS.md).
 
 **Release 10.2.2** includes the reference-conditioned World Labs studio, completed Tripo keepsakes, TapNow visual direction, standard WebXR and print preparation. Physical PICO, HeyGears and Jupiter validation remain pending. Live creation uses private Supabase storage and the server's pinned image moderation models.
 
-Production: [giftportals.vercel.app](https://giftportals.vercel.app). Source: [acg0606/giftportals](https://github.com/acg0606/giftportals). Current evidence and exact limits are recorded in the [10.3 readiness audit](docs/RELEASE-10.3-READINESS.md); publication does not constitute a hackathon submission receipt.
+Production: [giftportals.vercel.app](https://giftportals.vercel.app). Source: [acg0606/giftportals](https://github.com/acg0606/giftportals). Current public-example evidence and exact limits are recorded in the [11.1 release notes](docs/RELEASE-11.1-PUBLIC-EXAMPLES.md); publication does not constitute a hackathon submission receipt. The [10.3 readiness audit](docs/RELEASE-10.3-READINESS.md) preserves the submitted baseline.
 
 Release 10.2 automatically saves completed creator gifts to the desk and My Memories on the same browser device, opens the keepsake directly, focuses creation on photos of places, and adds a detailed OpenStreetMap place view with a local fallback. Editable photo and story suggestions use optional Vercel AI Gateway interpretation; nearby places and sourced details help the author confirm the setting. A completed Tripo souvenir also saves and opens when its World Labs generation fails; the world view is marked unavailable. Reopening the collection uses read-only snapshots. Device references expire with the private gift and remain separate for each account. Release 10.2.1 removes application-imposed daily creation, lifetime credit and storage quotas, as well as assistant request quotas. Existing provider credits fund generation; provider failures have specific messages and preserve the current draft.
 
@@ -36,6 +46,8 @@ defaults, regardless of browser locale. See [product language instructions](AGEN
 
 ## Documentation
 
+- [Release 11.1 public examples](docs/RELEASE-11.1-PUBLIC-EXAMPLES.md): exact owner-authorized gifts, independent archive verification and zero generation.
+- [Version 11 evidence](docs/VERSION-11-PREVIEW.md): public archive contract, cinematic arrival and creator verification.
 - [Release 10.0.0 sponsor and publication audit](docs/V10-SPONSOR-AUDIT.md): actual Tripo, World Labs and TapNow assets, XR/print boundaries, environment availability and payload inspection.
 - [Release 10.0.0 art direction](docs/ART-DIRECTION-V10.md): current welcome and memory collection.
 - [Credits and prior-work disclosure](docs/CREDITS.md), [architecture](docs/ARCHITECTURE.md) and [deployment](docs/DEPLOYMENT.md).
