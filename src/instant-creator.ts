@@ -196,7 +196,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   host.dataset.photoIntent = intent;
   host.innerHTML = `<header class="instant-topline"><a href="#/home" class="instant-brand" aria-label="GiftPortals home"><img src="/assets/portal-dusk/brand-mark.png" alt=""/>GiftPortals</a><button type="button" class="instant-back" data-instant-home>Back</button></header>
     <main class="instant-layout">
-      <section class="instant-intro" aria-labelledby="instant-title"><span class="instant-eyebrow">A LITTLE THING. A WHOLE WORLD.</span><h1 id="instant-title"><span class="instant-title-gift" aria-hidden="true">${giftIcon}</span>What will you<br/>turn into a gift?</h1><p>A photo becomes a keepsake.<br/>Your story becomes a place they can step into.</p><div class="instant-art" aria-hidden="true"><img class="instant-art-bg" src="/assets/portal-dusk/welcome-bg.webp" alt=""/><img class="instant-art-object" src="/assets/portal-dusk/rio-keepsake.png" alt=""/></div><p class="instant-intro-foot">Made with Tripo + World Labs.</p></section>
+      <section class="instant-intro" aria-labelledby="instant-title"><span class="instant-eyebrow" data-instant-intro-eyebrow>A LITTLE THING. A WHOLE WORLD.</span><h1 id="instant-title"><span class="instant-title-gift" aria-hidden="true">${giftIcon}</span><span data-instant-intro-title>What will you<br/>turn into a gift?</span></h1><p data-instant-intro-copy>A photo becomes a keepsake.<br/>Your story becomes a place they can step into.</p><div class="instant-art" aria-hidden="true"><img class="instant-art-bg" src="/assets/portal-dusk/welcome-bg.webp" alt=""/><img class="instant-art-object" src="/assets/portal-dusk/rio-keepsake.png" alt=""/></div><p class="instant-intro-foot">Made with Tripo + World Labs.</p></section>
       <section class="instant-workspace" aria-label="Make your little world">
         <form data-instant-form novalidate>
           <nav class="instant-wizard-progress" aria-label="Gift creation steps"><ol>${INSTANT_WIZARD_STEPS.map((name, index) => `<li data-instant-step-marker="${name}"><span aria-hidden="true">${stepIcons[name]}</span><strong>${index + 1}. ${name === 'photo' ? 'Photo' : name === 'place' ? 'Place' : name === 'story' ? 'Story' : 'Review'}</strong></li>`).join('')}</ol><p data-instant-step-status role="status" aria-live="polite">Step 1 of 4 · Photo</p></nav>
@@ -219,8 +219,8 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
             <section class="instant-story instant-wizard-card instant-review" data-instant-step="review" hidden aria-labelledby="instant-review-heading"><div class="instant-section-heading"><span class="instant-step" aria-hidden="true">${giftIcon}</span><h2 id="instant-review-heading" tabindex="-1">Ready to make it real?</h2></div><p class="instant-card-copy">Check what will go into your gift. Nothing is created until you choose below.</p>
               <article class="instant-review-photo"><img data-instant-review-photo alt="The original photo for this gift"/><img data-instant-review-miniature alt="Approved miniature reference for the 3D souvenir" hidden/><div><span data-instant-review-intent></span><strong data-instant-review-source></strong><small data-instant-review-representation></small></div><button type="button" data-instant-edit-step="photo">Edit photo</button></article>
               <article class="instant-review-block"><div><h3>The place inside</h3><button type="button" data-instant-edit-step="place">Edit place</button></div><p data-instant-review-world></p><div class="instant-review-reference" data-instant-review-reference hidden><img data-instant-review-place-photo alt="The image guiding the world"/><span data-instant-review-place-name></span><button type="button" data-instant-review-place-remove hidden>Remove</button></div><small data-instant-review-location></small></article>
-              <article class="instant-review-block"><div><h3>Your words</h3><button type="button" data-instant-edit-step="story">Edit story</button></div><dl><dt>Gift name</dt><dd data-instant-review-title></dd><dt>From / To</dt><dd data-instant-review-names></dd><dt>Note on the gift</dt><dd data-instant-review-dedication></dd><dt>Story</dt><dd data-instant-review-story></dd></dl><div data-instant-review-curiosities hidden></div></article>
-              <label class="instant-consent"><input type="checkbox" name="consent" required/><span>I can use these photos and send the approved photos and my place description to Tripo and World Labs to create this gift.</span></label><label class="instant-consent" data-public-gallery-consent hidden><input type="checkbox" name="publicGalleryConsent" disabled/><span>Publish my generated landscape and its title in the public GiftPortals gallery. Anyone can explore them without an account. My original source photos, names and personal story remain private.</span></label><small class="instant-hint" data-instant-privacy>Intimate images and adult products cannot be used. Every photo is screened before 3D generation.${cloudCreator() ? ' Private photos and generated gifts expire after 7 days. Anyone with the gift link can open it during that time.' : ''}</small>
+              <article class="instant-review-block"><div><h3>Your words</h3><button type="button" data-instant-edit-step="story">Edit story</button></div><dl><dt data-instant-review-title-label>Gift name</dt><dd data-instant-review-title></dd><dt data-instant-review-names-label>From / To</dt><dd data-instant-review-names></dd><dt data-instant-review-note-label>Note on the gift</dt><dd data-instant-review-dedication></dd><dt data-instant-review-story-label>Story</dt><dd data-instant-review-story></dd></dl><div data-instant-review-curiosities hidden></div></article>
+              <label class="instant-consent"><input type="checkbox" name="consent" required/><span data-instant-provider-consent-copy>I can use these photos and send the approved photos and my place description to Tripo and World Labs to create this gift.</span></label><label class="instant-consent" data-public-gallery-consent hidden><input type="checkbox" name="publicGalleryConsent" disabled/><span>Publish my generated landscape and its title in the public GiftPortals gallery. Anyone can explore them without an account. My original source photos, names and personal story remain private.</span></label><small class="instant-hint" data-instant-privacy>Intimate images and adult products cannot be used. Every photo is screened before 3D generation.${cloudCreator() ? ' Private photos and generated gifts expire after 7 days. Anyone with the gift link can open it during that time.' : ''}</small>
             </section>
           </fieldset>
           <p class="instant-error" data-instant-error role="alert" hidden></p>
@@ -425,20 +425,20 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     }
   }
   function reviewGift() {
-    const canReview = Boolean(source);
+    const canReview = Boolean(source), publicLandscape = status?.publicGalleryEnabled === true;
     host.querySelectorAll<HTMLElement>('.instant-review-photo,.instant-review-block,.instant-review .instant-consent,.instant-review > .instant-hint').forEach(element => element.hidden = !canReview);
     publicationConsent();
-    text('#instant-review-heading', pendingReference && !source ? 'Checking your last gift.' : 'Ready to make it real?');
-    text('.instant-review > .instant-card-copy', pendingReference && !source ? 'Your previous creation may still be running. Check it before starting another gift.' : 'Check what will go into your gift. Nothing is created until you choose below.');
+    text('#instant-review-heading', pendingReference && !source ? publicLandscape ? 'Checking your last landscape.' : 'Checking your last gift.' : publicLandscape ? 'Ready to create your landscape?' : 'Ready to make it real?');
+    text('.instant-review > .instant-card-copy', pendingReference && !source ? publicLandscape ? 'Your previous creation may still be running. Check it before starting another landscape.' : 'Your previous creation may still be running. Check it before starting another gift.' : publicLandscape ? 'Review the photo and description guiding your world. Only the generated landscape and title will be public. Nothing is created until you choose below.' : 'Check what will go into your gift. Nothing is created until you choose below.');
     const chosenPhoto = host.querySelector<HTMLImageElement>('[data-instant-photo]')!;
     host.querySelector<HTMLImageElement>('[data-instant-review-photo]')!.src = chosenPhoto.src;
     text('[data-instant-review-source]', source instanceof File ? source.name || 'Your photo' : source?.title || 'Your photo');
-    text('[data-instant-review-intent]', 'A photo');
+    text('[data-instant-review-intent]', publicLandscape ? 'Landscape source photo · private' : 'A photo');
     const miniatureReference = source && !(source instanceof File) && source.objectImageRole === 'miniature-reference' ? source.objectImageUrl : undefined;
-    text('[data-instant-review-representation]', miniatureReference ? 'The matching miniature reference guides your 3D souvenir.' : 'Your photo inspires a small 3D souvenir and guides its world.');
+    text('[data-instant-review-representation]', publicLandscape ? 'Your photo guides a generated landscape that anyone can explore.' : miniatureReference ? 'The matching miniature reference guides your 3D souvenir.' : 'Your photo inspires a small 3D souvenir and guides its world.');
     const referencePreview = host.querySelector<HTMLImageElement>('[data-instant-review-miniature]')!;
-    referencePreview.hidden = !miniatureReference;
-    if (miniatureReference) referencePreview.src = miniatureReference; else referencePreview.removeAttribute('src');
+    referencePreview.hidden = publicLandscape || !miniatureReference;
+    if (miniatureReference && !publicLandscape) referencePreview.src = miniatureReference; else referencePreview.removeAttribute('src');
     text('[data-instant-review-world]', field('worldPrompt').value.trim());
     const referenceUrl = placePreviewUrl || chosenPhoto.src;
     host.querySelector<HTMLElement>('[data-instant-review-reference]')!.hidden = !referenceUrl;
@@ -474,7 +474,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     const back = host.querySelector<HTMLButtonElement>('[data-instant-step-back]')!, next = host.querySelector<HTMLButtonElement>('[data-instant-continue]')!;
     back.hidden = step === 'photo'; back.disabled = locked;
     next.hidden = step === 'review'; next.disabled = locked || !source;
-    next.innerHTML = `${step === 'story' ? `${giftIcon}Review my gift` : 'Continue'} <span aria-hidden="true">→</span>`;
+    next.innerHTML = `${step === 'story' ? `${giftIcon}${status?.publicGalleryEnabled === true ? 'Review my landscape' : 'Review my gift'}` : 'Continue'} <span aria-hidden="true">→</span>`;
     actions.hidden = step !== 'review';
     const recover = host.querySelector<HTMLButtonElement>('[data-instant-recover]')!;
     recover.hidden = !pendingReference; recover.disabled = confirmingJob || submitting;
@@ -516,6 +516,17 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   }
   function publicationConsent() {
     const enabled = status?.publicGalleryEnabled === true, checkbox = field('publicGalleryConsent') as HTMLInputElement;
+    text('[data-instant-intro-eyebrow]', enabled ? 'A PHOTO. A LANDSCAPE TO EXPLORE.' : 'A LITTLE THING. A WHOLE WORLD.');
+    host.querySelector<HTMLElement>('[data-instant-intro-title]')!.innerHTML = enabled ? 'Which place will<br/>you bring to life?' : 'What will you<br/>turn into a gift?';
+    host.querySelector<HTMLElement>('[data-instant-intro-copy]')!.innerHTML = enabled ? 'Turn a place you love into a landscape.<br/>Share its world for anyone to step inside.' : 'A photo becomes a keepsake.<br/>Your story becomes a place they can step into.';
+    text('[data-instant-photo-hint]', enabled ? 'Your photo guides a generated landscape to share and explore.' : 'Your photo becomes a little 3D souvenir and a world to explore.');
+    text('[data-instant-source-hint]', enabled ? 'Your source photo stays private. Its generated landscape can be shared.' : 'Your photo, made into a small 3D souvenir.');
+    text('[data-instant-provider-consent-copy]', enabled ? 'I can use these photos and send the approved photos and my place description to Tripo and World Labs for this landscape creation.' : 'I can use these photos and send the approved photos and my place description to Tripo and World Labs to create this gift.');
+    text('[data-instant-review-title-label]', enabled ? 'Landscape title · public' : 'Gift name');
+    text('[data-instant-review-names-label]', enabled ? 'From / To · private' : 'From / To');
+    text('[data-instant-review-note-label]', enabled ? 'Personal note · private' : 'Note on the gift');
+    text('[data-instant-review-story-label]', enabled ? 'Personal story · private' : 'Story');
+    if (!submitting && !readingSource) create.innerHTML = enabled ? `${giftIcon}Create my landscape <span aria-hidden="true">↗</span>` : makeGiftLabel;
     host.querySelector<HTMLElement>('[data-public-gallery-consent]')!.hidden = !enabled || !source;
     checkbox.disabled = !enabled; checkbox.required = enabled;
     if (!enabled) checkbox.checked = false;

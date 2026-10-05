@@ -4,7 +4,7 @@ import {EventEmitter} from 'node:events';
 import {resolve} from 'node:path';
 import {createTSLoader,here} from './cloud-instant-test-loader.mjs';
 const load=createTSLoader(),a=await load(resolve(here,'_lib/place-assistant.ts'));
-const {createPlaceAssistantHandler,runtimeAssistantToken}=await load(resolve(here,'place-assistant.ts'));
+const {createPlaceAssistantHandler,runtimeAssistantToken,assertAssistantOrigin}=await load(resolve(here,'place-assistant.ts'));
 const photo='data:image/png;base64,'+Buffer.from([137,80,78,71,13,10,26,10,0,0,0,0]).toString('base64');
 const location={latitude:-23.610213,longitude:-46.640678,accuracyMeters:12,label:'São Paulo, Brasil'};
 const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
@@ -206,6 +206,70 @@ test('overlapping requests retain their own runtime token after asynchronous pla
  const second=await service.suggest({imageDataUrl:photo,photoConsent:true},undefined,'synthetic-token-B');
  assert.equal(second.photoAnalyzed,true);releaseLookup();assert.equal((await first).photoAnalyzed,true);
  assert.deepEqual(used,['Bearer synthetic-token-B','Bearer synthetic-token-A']);assert.equal(service.status().photoAnalysisAvailable,false);
+});
+
+const previewHost='giftportals-preview-a-acg0606s-projects.vercel.app';
+const branchHost='giftportals-git-codex-public-keepsake-gallery-acg0606s-projects.vercel.app';
+const previewToken='synthetic_header.synthetic_payload.synthetic_signature';
+const previewEnv={VERCEL:'1',VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'codex/public-keepsake-gallery',ENABLE_PUBLIC_GALLERY:'true',
+ VERCEL_URL:previewHost,VERCEL_BRANCH_URL:branchHost,GIFTPORTALS_CLOUD_ORIGIN:'https://giftportals.vercel.app'};
+function assistantEnvironment(t,patch={}){
+ const saved=Object.fromEntries(Object.keys(previewEnv).map(name=>[name,process.env[name]]));
+ const apply=changes=>{for(const[name,value]of Object.entries({...previewEnv,...changes}))if(value===undefined)delete process.env[name];else process.env[name]=value;};
+ apply(patch);t.after(()=>{for(const[name,value]of Object.entries(saved))if(value===undefined)delete process.env[name];else process.env[name]=value;});return apply;
+}
+const previewHeaders=host=>({host,origin:`https://${host}`,'sec-fetch-site':'same-origin','content-type':'application/json','x-vercel-oidc-token':previewToken});
+
+test('the enabled exact preview branch supports both platform aliases with request-scoped OIDC and never returns credentials',async t=>{
+ assistantEnvironment(t);const tokens=[],service=a.createPlaceAssistant({gatewayToken:noToken,fetch:async()=>{throw Error('No provider calls in status test');}});
+ const handler=createPlaceAssistantHandler({status:service.status,suggest:async(_body,_signal,token)=>{tokens.push(token);return{provider:'vercel'};}});
+ for(const host of[previewHost,branchHost]){
+  const headers=previewHeaders(host);assert.doesNotThrow(()=>assertAssistantOrigin(request({headers})));
+  assert.equal(runtimeAssistantToken(request({headers})),previewToken);
+  const status=response();await handler(request({url:'/api/place-assistant?action=status',method:'GET',headers}),status);
+  assert.equal(status.statusCode,200);assert.equal(status.body.data.photoAnalysisAvailable,true);assert.equal(status.body.data.provider,'vercel');assert.ok(!JSON.stringify(status.body).includes(previewToken));
+  const result=response();await handler(request({headers}),result);assert.equal(result.statusCode,200);assert.equal(result.headers['Cache-Control'],'no-store');assert.ok(!JSON.stringify(result.body).includes(previewToken));
+ }
+ assert.deepEqual(tokens,[previewToken,previewToken]);assert.equal(service.status().photoAnalysisAvailable,false);
+});
+test('preview origin and OIDC access require Vercel runtime, preview environment, exact branch and enabled gallery flag',t=>{
+ const apply=assistantEnvironment(t);
+ for(const patch of[{VERCEL:undefined},{VERCEL:'0'},{VERCEL_ENV:'production'},{VERCEL_ENV:'development'},
+  {VERCEL_GIT_COMMIT_REF:'codex/public-keepsake-gallery-extra'},{VERCEL_GIT_COMMIT_REF:undefined},{ENABLE_PUBLIC_GALLERY:'false'},{ENABLE_PUBLIC_GALLERY:undefined}]){
+  apply(patch);const req=request({headers:previewHeaders(previewHost)});
+  assert.throws(()=>assertAssistantOrigin(req),error=>error.code==='ORIGIN_DENIED');assert.equal(runtimeAssistantToken(req),undefined);
+ }
+});
+test('preview origin trust rejects foreign deployments, forwarded-host spoofing and malformed platform hosts before service calls',async t=>{
+ const apply=assistantEnvironment(t);let calls=0;const handler=createPlaceAssistantHandler({status:()=>{calls++;return{};},suggest:async()=>{calls++;return{};}});
+ for(const host of['giftportals-other.vercel.app',previewHost+'.evil.example',previewHost+':443','evil.example']){
+  apply({});const headers={...previewHeaders(host),'x-forwarded-host':previewHost},out=response();
+  await handler(request({method:'GET',url:'/api/place-assistant?action=status',headers}),out);assert.equal(out.statusCode,403);assert.equal(runtimeAssistantToken(request({headers})),undefined);
+ }
+ for(const malformed of['https://'+previewHost,previewHost+'/path',previewHost+':443','user@'+previewHost,previewHost+'.evil.example','UPPERCASE.vercel.app']){
+  apply({VERCEL_URL:malformed,VERCEL_BRANCH_URL:undefined});const req=request({headers:previewHeaders(previewHost)});
+  assert.throws(()=>assertAssistantOrigin(req),error=>error.code==='ORIGIN_DENIED');assert.equal(runtimeAssistantToken(req),undefined);
+ }
+ assert.equal(calls,0);
+});
+test('preview keeps strict write Origin and cross-site checks while anonymous status needs no Origin header',async t=>{
+ assistantEnvironment(t);let calls=0;const handler=createPlaceAssistantHandler({status:()=>{calls++;return{available:true};},suggest:async()=>{calls++;return{};}});
+ const headers=previewHeaders(previewHost);delete headers.origin;
+ const status=response();await handler(request({method:'GET',url:'/api/place-assistant?action=status',headers}),status);assert.equal(status.statusCode,200);assert.equal(calls,1);
+ for(const patch of[{origin:undefined},{origin:'https://'+branchHost},{origin:'http://'+previewHost},{'sec-fetch-site':'cross-site'}]){
+  const out=response();await handler(request({headers:{...previewHeaders(previewHost),...patch}}),out);assert.equal(out.statusCode,403);assert.equal(out.body.error.code,'ORIGIN_DENIED');
+ }
+ assert.equal(calls,1);
+});
+test('production remains tied to its configured HTTPS origin and local requests retain loopback restrictions and ignore spoofed OIDC',t=>{
+ const apply=assistantEnvironment(t,{VERCEL_ENV:'production'});
+ const production=request({headers:previewHeaders('giftportals.vercel.app')});assert.doesNotThrow(()=>assertAssistantOrigin(production));assert.equal(runtimeAssistantToken(production),previewToken);
+ const preview=request({headers:previewHeaders(previewHost)});assert.throws(()=>assertAssistantOrigin(preview),error=>error.code==='ORIGIN_DENIED');assert.equal(runtimeAssistantToken(preview),undefined);
+ const local=request({headers:{...request().headers,'x-vercel-oidc-token':previewToken}});assert.doesNotThrow(()=>assertAssistantOrigin(local));assert.equal(runtimeAssistantToken(local),undefined);
+ assert.throws(()=>assertAssistantOrigin(request({socket:{remoteAddress:'192.168.0.5'}})),error=>error.code==='ORIGIN_DENIED');
+ assert.throws(()=>assertAssistantOrigin(request({headers:{...local.headers,'sec-fetch-site':'cross-site'}})),error=>error.code==='ORIGIN_DENIED');
+ apply({VERCEL_ENV:'production',GIFTPORTALS_CLOUD_ORIGIN:'https://giftportals.vercel.app/private-path'});
+ assert.throws(()=>assertAssistantOrigin(production),error=>error.code==='ORIGIN_DENIED');assert.equal(runtimeAssistantToken(production),undefined);
 });
 
 test('403 diagnostics distinguish model/account/auth denials without exposing the provider body or credentials',async()=>{

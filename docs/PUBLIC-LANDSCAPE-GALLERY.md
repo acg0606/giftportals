@@ -28,4 +28,12 @@ The automated checks cover consent, public projection, private path rejection, a
 
 The migration was applied to the existing project. Read-only, rolled-back database assertions passed for consent, moderation, expiry, canonical manifests, grants, RLS and private bucket access. All nine pre-existing private jobs remained ineligible for publication. An independent wrapper probe rejected private-job finalize/advance/read actions before storage or provider calls. The deployed Edge function returned successful, enabled gallery and generation status responses.
 
-A live generation and a separate visitor check are still required before calling the preview verified. Record their result in this document after completing them.
+The final owner-flow suite passed 155 affected frontend tests, and the backend suite passed 111. A later concurrent full-suite run found one existing print-test timing failure that passed independently; its three owner-flow fixture/loader failures were fixed and verified in the affected suite. The landscape-focused copy passed 64 wizard tests. The assistant's exact preview-origin/OIDC gates passed 22 tests and strict server typechecking.
+
+## Live generation proof
+
+On October 5, 2026, the mobile creator generated **Rio at dusk — shared landscape**, public ID `9210c4e8-f240-4321-9f40-a0e4eddb5b24`, from the original Rio catalog reference. Both declared images passed the deployed local vision policy through the protected preview callback. The standard generation completed and the landscape appeared automatically in a separate Chrome browser's public collection, with no app account or creator capability.
+
+Three public API reads confirmed the gallery entry, direct landscape read and refreshed media URLs. The response excluded the deliberately supplied private story, dedication and sender/recipient markers. The separately archived SPZ (7,935,896 bytes), panorama (3,553,855 bytes) and collider (1,056,004 bytes) all downloaded successfully and matched the SHA-256 hashes in their archive filenames. The original nine private jobs were not imported.
+
+The first validated preview deployment is `giftportals-92se12g1p-acg0606s-projects.vercel.app`, commit `3749057c93842321d2860182d253d157539cc9fb`. Its platform protection remains enabled; temporary access links and cookies stay outside this public document. Follow-up copy and assistant-origin changes reuse the same public archive rather than generating a replacement world.
