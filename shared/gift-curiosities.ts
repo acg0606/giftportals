@@ -6,6 +6,9 @@ export const CURIOSITY_REGIONS = [
  {id:'paris',label:'Paris, France',latitude:48.86,longitude:2.35},
  {id:'new-york',label:'New York, United States',latitude:40.71,longitude:-74.01},
  {id:'cairo',label:'Cairo, Egypt',latitude:30.04,longitude:31.24},
+ {id:'seoul',label:'Seoul, South Korea',latitude:37.5665,longitude:126.9780},
+ // Public reference viewpoint for the Geunjeongjeon photo, not device GPS.
+ {id:'gyeongbokgung-palace',label:'Gyeongbokgung Palace, Seoul, South Korea',latitude:37.578472,longitude:126.977337},
 ];
 // Reviewed primary museum, municipal and heritage sources. These facts describe a
 // category or place, never authenticate, date or appraise the photographed object.
