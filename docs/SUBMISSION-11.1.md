@@ -65,6 +65,6 @@ Owner-provided original photographs and approved words, published with the owner
 
 ## Narrated walkthrough and screenshots
 
-The new walkthrough records the actual version 11.1 browser interface and completed gifts. English AI narration uses Kokoro-82M ONNX af_heart (Apache-2.0 model; kokoro-onnx MIT). Caption glyphs are rasterized from Arial installed on the recording machine; no font file, cloned voice or music is distributed. Actual provider generation takes time and is not represented as instant.
+The current product walkthrough records the real creator flow and a completed Paris gift, with a longer souvenir reveal and brief world visit. It explains the architecture and credits the event partners, then presents local GLB/STL export for review in HeyGears Blueprint and a possible physical gift. English AI narration uses Kokoro-82M ONNX af_heart (Apache-2.0 model; kokoro-onnx MIT). Caption glyphs and editorial cards are rasterized from Arial installed on the recording machine; no font file, cloned voice or music is distributed. Actual provider generation takes time and is not represented as instant. [Approved product script and source history](PRODUCT-WALKTHROUGH.md).
 
 The stills show the current homepage, anonymous collection, delivered Tripo keepsakes, automatic World Labs arrival, memory newspaper, approved Praça memory and publication consent. Physical Blueprint preparation, printing and headset validation remain unverified.

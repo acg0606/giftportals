@@ -6,7 +6,7 @@ browser, inspect the object, read the author's story and explore the surrounding
 scene.
 
 - [Live application](https://giftportals.vercel.app)
-- [Current narrated English walkthrough — version 11.1](https://giftportals.vercel.app/media/giftportals-v11.1-narrated-walkthrough.mp4)
+- [Current narrated English product walkthrough](https://giftportals.vercel.app/media/giftportals-v11.1-narrated-walkthrough.mp4)
 - [Source repository](https://github.com/acg0606/giftportals)
 - [Credits and prior-work disclosure](CREDITS.md)
 
@@ -40,6 +40,14 @@ application footage and completed gifts, with English AI voice and captions.
 Generation is not presented as instantaneous. Full photo authors, source and
 license links, modified references, narration and prior-work details are in
 [Credits](CREDITS.md) and [photographic world receipts](V11-WORLD-GENERATION.md).
+
+The current presentation follows the approved product story through Paris,
+giving the creator flow and souvenir reveal more time than the brief world visit.
+It credits the actual providers, architecture and event partners, and introduces
+local GLB/STL preparation for review in HeyGears Blueprint as a possible path to a
+physical keepsake. No Blueprint import or physical print is claimed as validated.
+[Product script and provenance](PRODUCT-WALKTHROUGH.md). The previous release
+walkthrough is preserved at its own historical media URL.
 
 The [creator build log](https://andre-giftportals.kalmon4ever.chatgpt.site) is public
 at the owner's request. It preserves the historical social posts alongside the
