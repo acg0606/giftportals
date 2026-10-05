@@ -12,6 +12,7 @@ import './instant-creator.css';
 import './generated-gift.css';
 import './instant-shell.css';
 import './theme-v10.css';
+import './keepsake-sync.css';
 import type { CreateMemoryInput, GiftDTO, GiftViewDTO, JobDTO, MemoryDTO, SessionDTO, StatusDTO, UploadDTO, WorldDTO } from '../shared/contracts';
 import { api, ApiError, putFile, session, sessionGeneration, setSession } from './api-client';
 import { miniArt, portalArt } from './art';
@@ -34,7 +35,8 @@ import { giftIcon } from './gift-icon';
 import { createGiftWalkScenes, readGiftWorldSemantics } from './gift-walk-catalog';
 import { collectionIcon } from './collection-icon';
 import { createdSessionKeepsake } from './local-keepsakes';
-import { clearKeepsakeScope, forgetKeepsakeReference, instantJobStorageKey, readKeepsakeJob, rememberCreatedKeepsake, storedKeepsakeReferences, type KeepsakeStorage } from './keepsake-library';
+import { clearKeepsakeScope, forgetKeepsakeReference, instantJobStorageKey, mergeKeepsakeReferences, readKeepsakeJob, rememberCreatedKeepsake, storedKeepsakeReferences, type KeepsakeStorage } from './keepsake-library';
+import { createKeepsakeSync, parseGeneratedKeepsakeLink } from './keepsake-sync';
 import type { CollectionRoomItem } from './collection-types';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -52,6 +54,22 @@ const keepsakeReadAt = new Map<string, number>();
 const keepsakeScope = () => session() && !session()!.user.demo ? `owner:${session()!.user.id}` : 'anonymous';
 let activeKeepsakeScope = keepsakeScope();
 const keepsakeStorage = (): KeepsakeStorage | undefined => { try { return localStorage; } catch { try { return sessionStorage; } catch { return undefined; } } };
+const accountKeepsakeIds = new Set<string>();
+let accountSyncError = '';
+const accountSync = createKeepsakeSync({
+  api,
+  getIdentity: () => session() && !session()!.user.demo ? session()!.user.id : null,
+  getGeneration: sessionGeneration,
+  enabled: () => cloudStatus?.keepsakeSyncEnabled === true && !demoScope(),
+  onReferences: references => {
+    mergeKeepsakeReferences(keepsakeStorage(), keepsakeScope(), references);
+    for (const reference of references) {
+      accountKeepsakeIds.add(reference.id);
+      const item = sessionKeepsakes.get(`session:${reference.id}`);
+      if (item) sessionKeepsakes.set(item.id, { ...item, subtitle: 'Saved to your account · available across devices' });
+    }
+  },
+});
 let closeActiveDialog: (() => void) | null = null;
 let trailState: JourneyState | null = null;
 let trailScopeKey = '';
@@ -82,13 +100,20 @@ function rememberKeepsake(job: InstantJob) {
   if (demoScope() || session()?.user.demo) return;
   const reference = rememberCreatedKeepsake(keepsakeStorage(), keepsakeScope(), job);
   const item = createdSessionKeepsake(job);
-  if (item && reference) sessionKeepsakes.set(item.id, { ...item, mediaExpiresAt: reference.expiresAt });
+  if (item && reference) sessionKeepsakes.set(item.id, { ...item, mediaExpiresAt: reference.expiresAt, ...(accountKeepsakeIds.has(job.id) ? { subtitle: 'Saved to your account · available across devices' } : {}) });
   if (item && reference) keepsakeReadAt.set(item.id, Date.now());
+}
+function syncCreatedKeepsake(job: InstantJob) {
+  if (cloudStatus?.keepsakeSyncEnabled !== true || !session() || session()!.user.demo || demoScope() || !instantGiftReady(job)) return;
+  void accountSync.save({ id: job.id, token: job.token }).then(result => {
+    if (!result.ok && !result.stopped) toast('Your gift is saved on this device. Open Sync collection to retry saving it to your account.');
+  });
 }
 function resetKeepsakeSession() {
   const nextScope = keepsakeScope();
   if (activeKeepsakeScope.startsWith('owner:') && activeKeepsakeScope !== nextScope) clearKeepsakeScope(keepsakeStorage(), activeKeepsakeScope);
   activeKeepsakeScope = nextScope; sessionKeepsakes.clear(); keepsakeReadAt.clear();
+  accountKeepsakeIds.clear(); accountSyncError = '';
   // Old unscoped recovery keys have no account provenance. They must never
   // become an anonymous collection after someone signs out or switches users.
   try { sessionStorage.removeItem('giftportals.instant.job.v1'); sessionStorage.removeItem('giftportals.instant.pending.v1'); }
@@ -104,7 +129,15 @@ async function hydrateKeepsakes(epoch: number, signal: AbortSignal) {
   if (demoScope() || session()?.user.demo) return;
   const scope = keepsakeScope(), generation = sessionGeneration();
   const active = () => epoch === renderId && !signal.aborted && scope === keepsakeScope() && generation === sessionGeneration();
+  let accountReferences: { id: string; token: string }[] = [];
+  if (cloudStatus?.keepsakeSyncEnabled && scope.startsWith('owner:')) {
+    const result = await accountSync.list();
+    if (!active()) return;
+    accountSyncError = result.ok ? '' : result.error || 'Your account could not be reached. Gifts saved on this device are still available.';
+    if (result.ok) accountReferences = result.refs;
+  }
   const references = new Map(storedKeepsakeReferences(keepsakeStorage(), scope).map(value => [value.id, { id: value.id, token: value.token }]));
+  for (const reference of accountReferences) references.set(reference.id, reference);
   // v10 kept only the last creator capability. Recover it without adopting any
   // unrelated recipient link or attributing an anonymous gift to another account.
   try {
@@ -146,7 +179,7 @@ function notice() {
 }
 function header(active = '') {
   const href = (path: string) => `#/${scopedPath(path)}`;
-  return `<header class="site-header"><a class="brand" href="#/home" aria-label="GiftPortals home"><img class="brand-image" src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a class="${active === 'gallery' ? 'active' : ''}" href="${href('collection')}">Explore</a><a class="${active === 'world' ? 'active' : ''}" href="${href('world')}">My world</a><a class="${active === 'atlas' ? 'active' : ''}" href="${href('atlas')}">Atlas</a></nav><div class="header-actions">${session() ? `<button class="avatar-button" data-account title="Account and sign out">${esc(session()!.user.displayName.slice(0, 1))}</button>` : `<button class="quiet-button login-trigger" data-auth>Sign in</button>`}<button class="button button-small" data-create>${giftIcon}Make a gift</button></div></header>`;
+  return `<header class="site-header"><a class="brand" href="#/home" aria-label="GiftPortals home"><img class="brand-image" src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a class="${active === 'gallery' ? 'active' : ''}" href="${href('collection')}">Explore</a><a class="${active === 'world' ? 'active' : ''}" href="${href('world')}">My world</a><a class="${active === 'atlas' ? 'active' : ''}" href="${href('atlas')}">Atlas</a>${cloudStatus?.keepsakeSyncEnabled ? '<a href="#/sync">Sync collection</a>' : ''}</nav><div class="header-actions">${session() ? `<button class="avatar-button" data-account title="Account and sign out">${esc(session()!.user.displayName.slice(0, 1))}</button>` : `<button class="quiet-button login-trigger" data-auth>Sign in</button>`}<button class="button button-small" data-create>${giftIcon}Make a gift</button></div></header>`;
 }
 function footer() { return '<footer class="site-footer"><a class="brand footer-brand" href="#/home">GiftPortals</a><span>People. Places. Stories. Always with you.</span><span>Version 10.3.3 · Tripothon S1</span><a href="#/about">About & credits</a></footer>'; }
 function bindCommon() {
@@ -167,6 +200,7 @@ function home() {
   app.querySelector<HTMLImageElement>('.v10-welcome-art')?.addEventListener('error', event => {
     (event.currentTarget as HTMLImageElement).src = '/assets/portal-dusk/welcome-bg.webp';
   }, { once: true });
+  if (cloudStatus?.keepsakeSyncEnabled) app.querySelector('.v10-welcome-content')?.insertAdjacentHTML('beforeend', '<a class="v10-explore" href="#/sync"><span>Sync your collection across devices →</span></a>');
   bindCommon();
 }
 function rioGiftPage(epoch: number) {
@@ -208,10 +242,11 @@ function instantCreatorPage(epoch: number) {
     resumeCompletedJob: routeParams().get('resume') === 'world-retry',
     storageScope: keepsakeScope(),
     onHome: () => navigate('home'),
-    onGiftCompleted: job => { if (epoch === renderId && generation === sessionGeneration()) rememberKeepsake(job); },
+    onGiftCompleted: job => { if (epoch === renderId && generation === sessionGeneration()) { rememberKeepsake(job); syncCreatedKeepsake(job); } },
     onGiftReady: (job: InstantJob) => {
       if (epoch !== renderId || generation !== sessionGeneration() || !instantGiftReady(job)) return;
       rememberKeepsake(job);
+      syncCreatedKeepsake(job);
       navigate(`generated/${encodeURIComponent(job.id)}?key=${encodeURIComponent(job.token)}`);
     },
     onExploreExample: () => navigate('generated/rio-example'),
@@ -483,7 +518,7 @@ async function collectionPage(epoch: number) {
     const [{ mountCollectionRoom }, { publicCollectionItems, collectionItemsFromWorld }] = await Promise.all([import('./collection-room'), import('./collection-state')]);
     if (epoch !== renderId) return;
     const [current] = await Promise.all([
-      session() && !session()!.user.demo && !demoScope() ? ensureWorld() : Promise.resolve(null),
+      session() && !session()!.user.demo && !demoScope() ? ensureWorld().catch(() => null) : Promise.resolve(null),
       hydrateKeepsakes(epoch, abort.signal),
     ]);
     if (epoch !== renderId) return;
@@ -502,16 +537,74 @@ async function collectionPage(epoch: number) {
         const path = item.kind === 'memory' ? scopedPath(destination) : destination;
         navigate(`${path}${path.includes('?') ? '&' : '?'}from=room`);
       },
-      ...(personal ? { onManage: () => navigate(scopedPath('gallery?view=list')) } : {}),
+      ...(personal || cloudStatus?.keepsakeSyncEnabled ? { onManage: () => navigate(cloudStatus?.keepsakeSyncEnabled ? 'sync' : scopedPath('gallery?view=list')) } : {}),
     });
     cleanup = () => { abort.abort(); room.destroy(); };
   } catch (error) { if (epoch === renderId) missing(errorMessage(error)); }
 }
 
+async function keepsakeSyncPage(epoch: number) {
+  const abort = new AbortController(); cleanup = () => abort.abort();
+  if (!cloudStatus) {
+    app.innerHTML = '<main class="generated-loading" role="status">Checking collection sync…</main>';
+    try { cloudStatus = await api<StatusDTO>('status'); } catch { /* Show the recoverable unavailable state below. */ }
+    if (epoch !== renderId || abort.signal.aborted) return;
+  }
+  if (!cloudStatus?.keepsakeSyncEnabled) {
+    app.innerHTML = `${header()}<main class="narrow"><h1>Collection sync is unavailable.</h1><p>Your gifts saved on this device are still available.</p><a class="button" href="#/collection">Open your memory desk</a></main>${footer()}`; bindCommon(); return;
+  }
+  const actor = session();
+  if (!actor || actor.user.demo) {
+    app.innerHTML = `${header()}<main class="narrow keepsake-sync-page"><span class="eyebrow">COLLECTION SYNC PREVIEW</span><h1>Your little worlds, together.</h1><p>Sign in to the same account on your phone and computer to see your saved gifts on both.</p><button class="button" data-sync-signin>Sign in or create an account</button><p class="fine-print">Existing phone gifts can be added with their private gift links. Gift files keep their current seven-day lifetime.</p><a class="text-link" href="#/collection">Explore the memory desk →</a></main>${footer()}`;
+    bindCommon(); app.querySelector<HTMLButtonElement>('[data-sync-signin]')!.onclick = () => showAuth('sync'); return;
+  }
+  const generation = sessionGeneration(), actorId = actor.user.id;
+  const active = () => epoch === renderId && !abort.signal.aborted && generation === sessionGeneration() && actorId === session()?.user.id;
+  app.innerHTML = `${header()}<main class="narrow keepsake-sync-page"><span class="eyebrow">COLLECTION SYNC PREVIEW</span><h1>Your little worlds, together.</h1><p>Signed in as <strong>${esc(actor.user.displayName)}</strong>. Use this account on each device.</p><p class="sync-feedback" role="status" aria-live="polite" data-sync-status>Loading your saved gifts…</p><section class="sync-panel"><h2>Add an existing gift.</h2><p>Open a gift on your phone, copy its full link, and paste it here. The link includes the private key needed to open it.</p><form data-sync-link><label for="sync-gift-link">Private GiftPortals gift link</label><input id="sync-gift-link" name="link" type="url" autocomplete="off" spellcheck="false" placeholder="https://giftportals.vercel.app/#/generated/…" required/><button class="button" type="submit">Save to my account</button></form></section><section class="sync-panel"><h2>Gifts created in this browser.</h2><p>Choose this action to add this browser’s existing gifts to your account. New gifts created while signed in save automatically when generation is available.</p><button class="quiet-button" data-sync-device>Save this device’s gifts to my account</button></section><div class="sync-actions"><a class="button" href="#/collection">Open my memory desk →</a><button class="quiet-button" data-sync-refresh>Refresh collection</button></div><p class="fine-print">Sync saves the gift links to your account. It keeps the original expiry date and does not extend the current seven-day file lifetime. This preview cannot read the browser storage of the production site.</p></main>${footer()}`;
+  bindCommon();
+  const status = app.querySelector<HTMLElement>('[data-sync-status]')!;
+  const setStatus = (message: string) => { if (active()) status.textContent = message; };
+  const summary = () => accountSyncError || `${accountKeepsakeIds.size} ${accountKeepsakeIds.size === 1 ? 'gift' : 'gifts'} saved to your account. Open your memory desk to see them.`;
+  await hydrateKeepsakes(epoch, abort.signal); if (!active()) return; setStatus(summary());
+  const form = app.querySelector<HTMLFormElement>('[data-sync-link]')!;
+  form.onsubmit = async event => {
+    event.preventDefault(); if (!active()) return;
+    const input = form.elements.namedItem('link') as HTMLInputElement;
+    const reference = parseGeneratedKeepsakeLink(input.value, location.origin);
+    if (!reference) { setStatus('Paste a complete private GiftPortals gift link, including its key. The Rio example cannot be saved as a personal gift.'); return; }
+    const button = form.querySelector<HTMLButtonElement>('button')!; button.disabled = true; setStatus('Saving this gift to your account…');
+    const result = await accountSync.save(reference);
+    if (!active()) return;
+    if (result.ok) { input.value = ''; accountSyncError = ''; await hydrateKeepsakes(epoch, abort.signal); setStatus(summary()); }
+    else setStatus(result.error || 'This gift could not be saved. Check that its full link is correct and has not expired.');
+    if (active()) button.disabled = false;
+  };
+  const deviceButton = app.querySelector<HTMLButtonElement>('[data-sync-device]')!;
+  deviceButton.onclick = async () => {
+    if (!active()) return;
+    const references = [...storedKeepsakeReferences(keepsakeStorage(), 'anonymous'), ...storedKeepsakeReferences(keepsakeStorage(), keepsakeScope())];
+    if (!references.length) { setStatus('No unexpired gifts are saved in this preview browser. Use a gift link to add one from the production site.'); return; }
+    deviceButton.disabled = true; setStatus('Saving this device’s gifts to your account…');
+    const result = await accountSync.importBatch(references);
+    if (!active()) return;
+    setStatus(result.code === 'IMPORT_LIMIT' ? result.error || 'Save up to 100 gifts at a time. All device copies were kept.' : `${result.successCount} saved. ${result.failureCount ? `${result.failureCount} could not be saved; their device copies were kept.` : 'Your device copies were kept.'}`);
+    deviceButton.disabled = false;
+  };
+  app.querySelector<HTMLButtonElement>('[data-sync-refresh]')!.onclick = async event => {
+    if (!active()) return;
+    const button = event.currentTarget as HTMLButtonElement; button.disabled = true; setStatus('Refreshing your account collection…');
+    await hydrateKeepsakes(epoch, abort.signal); if (!active()) return; setStatus(summary()); button.disabled = false;
+  };
+}
+
 async function galleryList(epoch: number) {
   const abort = new AbortController(); cleanup = () => abort.abort();
   let current: WorldDTO;
-  try { [current] = await Promise.all([ensureWorld(), hydrateKeepsakes(epoch, abort.signal)]); } catch (error) { if (epoch === renderId) missing(errorMessage(error)); return; }
+  try { [current] = await Promise.all([ensureWorld().catch(error => {
+    const user = session()?.user;
+    if (!user || user.demo) throw error;
+    return { user, memories: [], sent: [], received: [], discoveries: [], jobs: [] } as WorldDTO;
+  }), hydrateKeepsakes(epoch, abort.signal)]); } catch (error) { if (epoch === renderId) missing(errorMessage(error)); return; }
   if (epoch !== renderId) return;
   const localItems = currentKeepsakes();
   const deviceCollection = !session() && !demoScope() && localItems.length > 0;
@@ -1016,6 +1109,7 @@ async function render() {
   else if (current === 'trail') await trailPage(epoch);
   else if (current === 'gallery') { if (routeParams().get('view') === 'list') await galleryList(epoch); else await collectionPage(epoch); }
   else if (current === 'collection') await collectionPage(epoch);
+  else if (current === 'sync') await keepsakeSyncPage(epoch);
   else if (current === 'atlas') await atlas(epoch);
   else if (current === 'create') createPage();
   else if (current === 'about') about();

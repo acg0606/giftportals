@@ -16,7 +16,11 @@ const cloudURL=await moduleURL('api/_lib/cloud.ts',{'./rules.js':rulesURL,'@supa
 const providersURL=await moduleURL('api/_lib/providers.ts',{'./rules.js':rulesURL}),p=await import(providersURL);
 const artStyleURL=await moduleURL('shared/gift-art-style.ts');
 const cloudRecipesURL=await moduleURL('api/_lib/cloud-instant-recipes.ts',{'../../shared/gift-art-style.js':artStyleURL});
-const handler=(await import(await moduleURL('api/giftportals.ts',{'./_lib/cloud.js':cloudURL,'./_lib/rules.js':rulesURL}))).default;
+const keepsakeSyncURL=await moduleURL('api/_lib/keepsake-sync.ts',{'./rules.js':rulesURL});
+const previewRelayURL=await moduleURL('api/_lib/keepsake-sync-preview-relay.ts',{'./rules.js':rulesURL});
+// The isolated sync suite covers capability reads; legacy tests must not make them.
+const syncRepositoryURL='data:text/javascript;base64,'+Buffer.from('export const createCloudInstantRepository=()=>{throw Error("SYNC_NOT_USED_IN_LEGACY_TESTS")};').toString('base64');
+const handler=(await import(await moduleURL('api/giftportals.ts',{'./_lib/cloud.js':cloudURL,'./_lib/rules.js':rulesURL,'./_lib/keepsake-sync.js':keepsakeSyncURL,'./_lib/keepsake-sync-preview-relay.js':previewRelayURL,'./_lib/cloud-instant-adapters.js':syncRepositoryURL}))).default;
 const tickHandler=(await import(await moduleURL('api/tick.ts',{'./_lib/cloud.js':cloudURL,'./_lib/rules.js':rulesURL,'./_lib/providers.js':providersURL,'./_lib/cloud-instant-recipes.js':cloudRecipesURL}))).default;
 // Tests never inherit usable provider or database credentials and never perform network I/O.
 for(const key of ['SUPABASE_URL','SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','CRON_SECRET','DEMO_SENDER_EMAIL','DEMO_SENDER_PASSWORD','DEMO_RECIPIENT_EMAIL','DEMO_RECIPIENT_PASSWORD','ENABLE_GENERATION','ENABLE_SIGNUP'])delete process.env[key];

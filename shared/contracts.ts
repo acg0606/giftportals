@@ -20,7 +20,7 @@ export interface UploadInput { memoryId: string; kind: 'gift-photo' | 'place-pho
 export interface UploadDTO { mediaId: string; path: string; signedUploadUrl: string; token: string }
 export interface CreateGiftInput { memoryId: string; message: string; recipientName?: string; allowLinkRead: boolean; allowClaim?:boolean }
 export interface GenerateInput { memoryId: string; provider: Provider; dedupeKey: string }
-export interface StatusDTO { storage: 'cloud'; configured: boolean; generationEnabled: boolean; providers: { tripo: boolean; worldlabs: boolean }; demoAvailable: boolean; signupEnabled: boolean }
+export interface StatusDTO { storage: 'cloud'; configured: boolean; generationEnabled: boolean; providers: { tripo: boolean; worldlabs: boolean }; demoAvailable: boolean; signupEnabled: boolean; keepsakeSyncEnabled?: boolean }
 
 // API: /api/giftportals?action=ACTION. Authenticated actions require
 // Authorization: Bearer SESSION.accessToken. JSON bodies contain these DTOs.

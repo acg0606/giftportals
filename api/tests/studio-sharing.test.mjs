@@ -11,6 +11,9 @@ async function actualModule(path, replacements = {}) {
   return `data:text/javascript;base64,${Buffer.from(js).toString('base64')}`;
 }
 const rulesURL = await actualModule('../_lib/rules.ts');
+const keepsakeSyncURL = await actualModule('../_lib/keepsake-sync.ts', { './rules.js': rulesURL });
+const previewRelayURL = await actualModule('../_lib/keepsake-sync-preview-relay.ts', { './rules.js': rulesURL });
+const syncRepositoryURL = `data:text/javascript;base64,${Buffer.from('export const createCloudInstantRepository=()=>{throw Error("SYNC_NOT_USED_IN_SHARING_TESTS")};').toString('base64')}`;
 const { AppError, giftHash } = await import(rulesURL);
 const slot = '__giftportalsStudioSharingSynthetic';
 const fakeCloud = `
@@ -25,6 +28,9 @@ export const authContext=async authorization=>{
 const handler = (await import(await actualModule('../giftportals.ts', {
   './_lib/rules.js': rulesURL,
   './_lib/cloud.js': `data:text/javascript;base64,${Buffer.from(fakeCloud).toString('base64')}`,
+  './_lib/keepsake-sync.js': keepsakeSyncURL,
+  './_lib/keepsake-sync-preview-relay.js': previewRelayURL,
+  './_lib/cloud-instant-adapters.js': syncRepositoryURL,
 }))).default;
 const owner = '00000000-0000-4000-a000-000000000001';
 const memory = '00000000-0000-4000-a000-000000000002';

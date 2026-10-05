@@ -3,12 +3,20 @@ import type { IncomingMessage,ServerResponse } from 'node:http';
 import { AppError,ensure,secretMatches } from './_lib/rules.js';
 import { createCloudInstantService,CLOUD_MAX_BODY_BYTES } from './_lib/cloud-instant-service.js';
 import { createCloudInstantRepository,createCloudProviderAdapter,createRemoteCloudModerator,cloudInstantConfigured } from './_lib/cloud-instant-adapters.js';
+import { tryKeepsakeSyncPreviewRelay } from './_lib/keepsake-sync-preview-relay.js';
 export const config={maxDuration:180};
 type Request=IncomingMessage&{body?:unknown};
 export const cloudInstantSettings=()=>({enabled:cloudInstantConfigured()&&process.env.ENABLE_CLOUD_GENERATION==='true',providers:{tripo:Boolean(process.env.TRIPO_API_KEY),worldlabs:Boolean(process.env.WORLD_LABS_API_KEY)},dedupeSecret:process.env.CLOUD_DEDUPE_SECRET||''});
 export const cloudInstantService=(deadline=Date.now()+165000)=>{const repository=createCloudInstantRepository(deadline);return createCloudInstantService({repository,providers:createCloudProviderAdapter(deadline),moderator:createRemoteCloudModerator(deadline,repository),settings:cloudInstantSettings});};
 export function assertCloudOrigin(req:Request){
-  const origin=process.env.GIFTPORTALS_CLOUD_ORIGIN;let url:URL|undefined;try{url=origin?new URL(origin):undefined;}catch{/* Closed. */}
+  let origin=process.env.GIFTPORTALS_CLOUD_ORIGIN;
+  // Only the isolated collection preview can read at its Vercel origin.
+  // Production keeps its configured origin and all existing access rules.
+  if(process.env.VERCEL_ENV==='preview'&&process.env.ENABLE_KEEPSAKE_SYNC==='true'){
+    const host=String(req.headers.host||'');
+    if([process.env.VERCEL_URL,process.env.VERCEL_BRANCH_URL].some(value=>typeof value==='string'&&/^[a-z0-9.-]+\.vercel\.app$/i.test(value)&&value===host))origin=`https://${host}`;
+  }
+  let url:URL|undefined;try{url=origin?new URL(origin):undefined;}catch{/* Closed. */}
   ensure(url?.protocol==='https:'&&!url.username&&!url.password&&url.pathname==='/'&&!url.search&&!url.hash,'CLOUD_NOT_CONFIGURED',503);
   ensure(req.headers.host===url.host,'ORIGIN_DENIED',403);
   if(req.headers.origin!==undefined)ensure(req.headers.origin===url.origin,'ORIGIN_DENIED',403);
@@ -37,6 +45,7 @@ export function createCloudInstantHandler(service?:ReturnType<typeof cloudInstan
   res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
   let action='unknown';
   try{
+    if(await tryKeepsakeSyncPreviewRelay(req,res,'instant-cloud'))return;
     const active=service||cloudInstantService(now()+165000),query=new URL(req.url||'/api/instant-cloud','https://localhost').searchParams;action=query.get('action')||'status';let data;
     if(action==='status'){ensure(req.method==='GET','METHOD_NOT_ALLOWED',405);data=await active.status();}
     else{assertCloudOrigin(req);if(action==='prepare'){ensure(req.method==='POST','METHOD_NOT_ALLOWED',405);data=await active.prepare(requestBody(req),anonymousOwner(req,res));}

@@ -46,6 +46,15 @@ export function storedKeepsakeReferences(storage: KeepsakeStorage | undefined, s
   return values;
 }
 
+/** Merge verified account references without replacing newer device entries. */
+export function mergeKeepsakeReferences(storage: KeepsakeStorage | undefined, scope: string, references: KeepsakeReference[]): void {
+  if (!storage) return;
+  const valid = readKeepsakeReferences(JSON.stringify(references));
+  const merged = new Map(storedKeepsakeReferences(storage, scope).map(reference => [reference.id, reference]));
+  for (const reference of valid) merged.set(reference.id, reference);
+  try { write(storage, scope, [...merged.values()]); } catch { /* Cloud sync remains usable when device storage is blocked. */ }
+}
+
 /** Save a delivered 3D keepsake, even when its world failed, preserving the server retention deadline. */
 export function rememberCreatedKeepsake(storage: KeepsakeStorage | undefined, scope: string, job: InstantJob, now = Date.now() / 1000): KeepsakeReference | undefined {
   if (!instantGiftReady(job)) return undefined;

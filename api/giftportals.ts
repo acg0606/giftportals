@@ -4,10 +4,13 @@ import type { Session } from '@supabase/supabase-js';
 import type { MemoryDTO,GiftDTO,JobDTO,SessionDTO,MediaDTO } from '../shared/contracts.js';
 import { cloud,cloudConfigured,authContext,unwrap,type Row } from './_lib/cloud.js';
 import { AppError,BUCKET,SIGNED_READ_SECONDS,ensure,text,password as inputPassword,uuid,giftHash,newGiftToken,uploadRules,hasMagic,assertWriteAllowed,assertMutableMemory,claimPermission,discoveryProjection } from './_lib/rules.js';
+import { createCloudInstantRepository } from './_lib/cloud-instant-adapters.js';
+import { createKeepsakeSyncStorage, keepsakeSyncSettings, runKeepsakeSyncRequest } from './_lib/keepsake-sync.js';
+import { tryKeepsakeSyncPreviewRelay } from './_lib/keepsake-sync-preview-relay.js';
 
 type Request=IncomingMessage&{body?:unknown};
 export const config={maxDuration:60};
-const METHODS:Record<string,string[]>={status:['GET'],demo:['GET'],gift:['GET'],'demo-login':['POST'],login:['POST'],signup:['POST'],refresh:['POST'],world:['GET'],memory:['POST','PATCH','DELETE'],restore:['POST'],upload:['POST'],'media-complete':['POST'],share:['POST'],claim:['POST'],revoke:['POST'],discovery:['POST','DELETE'],generate:['POST'],jobs:['GET'],retry:['POST']};
+const METHODS:Record<string,string[]>={status:['GET'],demo:['GET'],gift:['GET'],'demo-login':['POST'],login:['POST'],signup:['POST'],refresh:['POST'],world:['GET'],memory:['POST','PATCH','DELETE'],restore:['POST'],upload:['POST'],'media-complete':['POST'],share:['POST'],claim:['POST'],revoke:['POST'],discovery:['POST','DELETE'],generate:['POST'],jobs:['GET'],retry:['POST'],'keepsakes-list':['GET'],'keepsakes-save':['POST'],'keepsakes-remove':['POST']};
 function body(req:Request):Row{
  let value=req.body;if(typeof value==='string'){try{value=JSON.parse(value);}catch{throw new AppError('INVALID_JSON');}}
  ensure(value!==null&&typeof value==='object'&&!Array.isArray(value),'INVALID_BODY');
@@ -45,7 +48,7 @@ async function giftView(token:unknown,claimToken?:unknown){
 }
 async function run(req:Request,query:URLSearchParams){
  const action=query.get('action')||'status';ensure(METHODS[action]?.includes(req.method||'GET'),'METHOD_NOT_ALLOWED',405);
- if(action==='status')return{storage:'cloud',configured:cloudConfigured(),generationEnabled:process.env.ENABLE_GENERATION==='true',providers:{tripo:Boolean(process.env.TRIPO_API_KEY),worldlabs:Boolean(process.env.WORLD_LABS_API_KEY)},demoAvailable:Boolean(process.env.DEMO_SENDER_EMAIL&&process.env.DEMO_SENDER_PASSWORD&&process.env.DEMO_RECIPIENT_EMAIL&&process.env.DEMO_RECIPIENT_PASSWORD),signupEnabled:process.env.ENABLE_SIGNUP==='true'};
+ if(action==='status')return{storage:'cloud',configured:cloudConfigured(),generationEnabled:process.env.ENABLE_GENERATION==='true',providers:{tripo:Boolean(process.env.TRIPO_API_KEY),worldlabs:Boolean(process.env.WORLD_LABS_API_KEY)},demoAvailable:Boolean(process.env.DEMO_SENDER_EMAIL&&process.env.DEMO_SENDER_PASSWORD&&process.env.DEMO_RECIPIENT_EMAIL&&process.env.DEMO_RECIPIENT_PASSWORD),signupEnabled:process.env.ENABLE_SIGNUP==='true',keepsakeSyncEnabled:cloudConfigured()&&Boolean(keepsakeSyncSettings())};
  if(action==='demo'){
   const rows=unwrap(await cloud().from('gp_memories').select('*').eq('is_demo_public',true).is('deleted_at',null).order('created_at').limit(3)) as Row[];
   return Promise.all(rows.map(m=>memoryDTO(m)));
@@ -73,6 +76,11 @@ async function run(req:Request,query:URLSearchParams){
  }
  const ctx=await authContext(req.headers.authorization),s=ctx.service,uid=ctx.user.id;
  assertWriteAllowed(ctx.profile as {is_demo:boolean},action);
+ if(action.startsWith('keepsakes-')){
+  const settings=keepsakeSyncSettings();ensure(settings,'KEEPSAKE_SYNC_UNAVAILABLE',503,'Account sync is unavailable in this preview.');
+  ensure([...query.keys()].every(key=>key==='action'),'INVALID_BODY');
+  return runKeepsakeSyncRequest(action,req,{id:uid,demo:Boolean(ctx.profile.is_demo)},{settings,storage:createKeepsakeSyncStorage(s,settings.bucket),repository:createCloudInstantRepository(Date.now()+45000)},action==='keepsakes-list'?undefined:body(req));
+ }
  if(action==='world'){
   const [own,gifts,discoveries,jobs]=await Promise.all([
    (query.get('archived')==='true'?s:ctx.client).from('gp_memories').select('*').eq('owner_id',uid).order('created_at',{ascending:false}),
@@ -150,6 +158,6 @@ async function run(req:Request,query:URLSearchParams){
 }
 export default async function handler(req:Request,res:ServerResponse){
  res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');
- try{const query=new URL(req.url||'/api/giftportals','https://giftportals.invalid').searchParams;const data=await run(req,query);res.statusCode=200;res.end(JSON.stringify({ok:true,data}));}
+ try{if(await tryKeepsakeSyncPreviewRelay(req,res,'giftportals'))return;const query=new URL(req.url||'/api/giftportals','https://giftportals.invalid').searchParams;const data=await run(req,query);res.statusCode=200;res.end(JSON.stringify({ok:true,data}));}
  catch(error){const safe=error instanceof AppError?error:new AppError('SERVER_REQUEST_FAILED',500,'The cloud request failed. Please try again; your stored memories are preserved.');res.statusCode=safe.status;res.end(JSON.stringify({ok:false,error:{code:safe.code,message:safe.message}}));}
 }
