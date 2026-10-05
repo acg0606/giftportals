@@ -1,5 +1,9 @@
 # GiftPortals V11 — a clearer, livelier gift experience
 
+Historical local prototype evidence from October 2, 2026. The current October 5
+version 11 preview has a different scope and replaces the normal chapter
+experience; see [current preview evidence](VERSION-11-PREVIEW.md).
+
 The local journey still starts with a photo or an example, before account creation. V11 addresses the five visual and interaction issues observed in the recorded demo.
 
 | Feedback | Implemented experience |

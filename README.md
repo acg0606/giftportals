@@ -6,6 +6,15 @@ Release 10.3.3 of the memory gift app for Tripothon S1. Start with a photo, plac
 
 ## Build status
 
+This branch is the **version 11 preview** based on the submitted 10.3.3 release.
+It replaces the normal world chapters with a 30-second cinematic arrival,
+an automatic memory newspaper and optional collision walking. New souvenirs
+have a separate consented public cloud archive without account screens.
+Paris has a regenerated photographic Marble 1.1 world; Rio and public creation
+are awaiting the configured creator verification. Production remains 10.3.3.
+See the [current preview evidence and remaining checks](docs/VERSION-11-PREVIEW.md).
+The release notes below describe the submitted baseline and earlier increments.
+
 The 10.3.0 release implements the selected **Daylight atelier** desk for portrait phones, with a new full Marble 1.0 room, a larger interactive keepsake, cream/navy controls and measured tabletop positions. The three public keepsakes use smaller mobile texture derivatives with byte-identical geometry; their original GLBs remain the source for other views and print preparation. The room's 500k export is the primary on mobile, with a 100k failure fallback. The keepsake viewer now permits closer detail zoom based on each model's actual bounds, shared by buttons, keyboard, wheel and pinch. Guided walks use four to six chapters with closer views, observation pauses and a connected return, deriving every walking path from the original world's grounded collider. Mobile chapter controls remain separate from the toolbar; reduced motion offers still chapters. See [mobile desk evidence](docs/DAYLIGHT-MOBILE-DESK.md), [design QA](design-qa.md) and [release readiness](docs/RELEASE-10.3-READINESS.md).
 
 **Release 10.2.2** includes the reference-conditioned World Labs studio, completed Tripo keepsakes, TapNow visual direction, standard WebXR and print preparation. Physical PICO, HeyGears and Jupiter validation remain pending. Live creation uses private Supabase storage and the server's pinned image moderation models.

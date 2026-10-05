@@ -9,7 +9,7 @@ const id = '10000000-0000-4000-8000-000000000001', token = 'A'.repeat(43);
 const owner = `${'B'.repeat(43)}.${'C'.repeat(43)}`, protection = 'e30.eyJ0ZXN0Ijp0cnVlfQ.dGVzdA';
 const cookie = `__Host-gp_instant_owner=${owner}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=2592000`;
 const env = { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'codex/version-11', ENABLE_PUBLIC_GALLERY: 'true',
-  PUBLIC_GALLERY_PREVIEW_RELAY_URL: relay, PUBLIC_GALLERY_PREVIEW_RELAY_KEY: 'K'.repeat(43), SUPABASE_ANON_KEY: 'P'.repeat(43),
+  PUBLIC_GALLERY_PREVIEW_RELAY_URL: relay, PUBLIC_GALLERY_PREVIEW_RELAY_KEY: 'K'.repeat(43),
   VERCEL_URL: host, VERCEL_BRANCH_URL: 'giftportals-gallery-branch.vercel.app' };
 function request(action = 'status', extra = {}) {
   const { headers = {}, ...rest } = extra;
@@ -32,7 +32,7 @@ test('production, disabled and unconfigured previews never contact or forward cr
     assert.deepEqual(res.headers, {}); assert.equal(res.body, '');
   }
   for (const change of [{ VERCEL_GIT_COMMIT_REF: 'main' }, { PUBLIC_GALLERY_PREVIEW_RELAY_URL: 'https://evil.example/proxy' },
-    { PUBLIC_GALLERY_PREVIEW_RELAY_KEY: 'weak' }, { PUBLIC_GALLERY_PREVIEW_RELAY_KEY: 'K'.repeat(32) + '\r\nother: value' }, { SUPABASE_ANON_KEY: 'weak' }]) {
+    { PUBLIC_GALLERY_PREVIEW_RELAY_KEY: 'weak' }, { PUBLIC_GALLERY_PREVIEW_RELAY_KEY: 'K'.repeat(32) + '\r\nother: value' }]) {
     await reject(tryPublicGalleryPreviewRelay(request(), response(), 'instant-cloud', () => { throw new Error('Must not fetch'); }, { ...env, ...change }), 'PUBLIC_GALLERY_PREVIEW_UNAVAILABLE');
   }
 });
@@ -44,6 +44,8 @@ test('same-origin platform aliases alone select the fixed moderation callback', 
     assert.equal(captured.init.headers['X-GiftPortals-Preview-Callback'], `https://${selectedHost}/api/cloud-vision`);
     assert.equal(captured.url, `${relay}?action=status&service=instant-cloud`);
     assert.equal(captured.init.redirect, 'error'); assert.equal(captured.init.cache, 'no-store'); assert.ok(captured.init.signal instanceof AbortSignal);
+    assert.equal(captured.init.headers.apikey, undefined);
+    assert.equal(captured.init.headers['X-GiftPortals-Relay-Key'], env.PUBLIC_GALLERY_PREVIEW_RELAY_KEY);
     assert.equal(res.statusCode, 200); assert.equal(JSON.parse(res.body).data.publicGalleryEnabled, true);
   }
   assert.equal(PUBLIC_GALLERY_PREVIEW_TIMEOUT_MS, 145000);

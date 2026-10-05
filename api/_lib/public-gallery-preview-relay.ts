@@ -114,8 +114,7 @@ export async function tryPublicGalleryPreviewRelay(req: Request, res: Pick<Serve
   service: PreviewService, fetcher: typeof fetch = fetch, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   if (env.VERCEL_ENV !== 'preview' || env.ENABLE_PUBLIC_GALLERY !== 'true' || !env.PUBLIC_GALLERY_PREVIEW_RELAY_URL) return false;
   ensure(env.VERCEL_GIT_COMMIT_REF === previewBranch && env.PUBLIC_GALLERY_PREVIEW_RELAY_URL === relayUrl
-    && typeof env.PUBLIC_GALLERY_PREVIEW_RELAY_KEY === 'string' && /^[A-Za-z0-9._-]{32,256}$/.test(env.PUBLIC_GALLERY_PREVIEW_RELAY_KEY)
-    && typeof env.SUPABASE_ANON_KEY === 'string' && /^[A-Za-z0-9._-]{20,8192}$/.test(env.SUPABASE_ANON_KEY), 'PUBLIC_GALLERY_PREVIEW_UNAVAILABLE', 503);
+    && typeof env.PUBLIC_GALLERY_PREVIEW_RELAY_KEY === 'string' && /^[A-Za-z0-9._-]{32,256}$/.test(env.PUBLIC_GALLERY_PREVIEW_RELAY_KEY), 'PUBLIC_GALLERY_PREVIEW_UNAVAILABLE', 503);
   const origin = requestOrigin(req, env), url = new URL(req.url || '/', origin), query = url.searchParams;
   ensure(url.origin === origin && url.pathname === (service === 'instant-cloud' ? '/api/instant-cloud' : '/api/instant-gallery'), 'INVALID_BODY');
   const action = query.get('action') || (service === 'public-gallery' ? 'list' : 'status');
@@ -124,7 +123,6 @@ export async function tryPublicGalleryPreviewRelay(req: Request, res: Pick<Serve
   ensure(expected, 'PREVIEW_ACTION_UNAVAILABLE', 403, 'This action is unavailable in the souvenir preview.');
   ensure(req.method === expected, 'METHOD_NOT_ALLOWED', 405); checkedQuery(query, service, action);
   const headers: Record<string, string> = {
-    apikey: env.SUPABASE_ANON_KEY,
     'X-GiftPortals-Relay-Key': env.PUBLIC_GALLERY_PREVIEW_RELAY_KEY,
     'X-GiftPortals-Preview-Host': req.headers.host as string,
     'X-GiftPortals-Preview-Origin': typeof req.headers.origin === 'string' ? req.headers.origin : '',

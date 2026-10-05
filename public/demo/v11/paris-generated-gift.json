@@ -21,6 +21,8 @@
   "worldUrl": "/demo/v11/paris-world-500k.spz",
   "panoramaUrl": "/demo/v11/paris-panorama.png",
   "collisionUrl": "/demo/v11/paris-collider.glb",
+  "initialYaw": 0.339,
+  "initialPitch": 0.104,
   "photoIntent": "place",
   "objectRepresentation": "souvenir-miniature",
   "sourcePhotoUrl": "/assets/examples/v11/paris-scene.jpg",
