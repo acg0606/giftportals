@@ -59,7 +59,7 @@ async function fixture(action, settings = {}) {
   }
   const motion = new Motion();
   class Element extends EventTarget {
-    attributes = new Map(); children = []; parent = null;
+    attributes = new Map(); children = []; parent = null; captures = new Set(); captured = []; released = [];
     addEventListener(type, callback, options) { if (options?.signal) setMaxListeners(0, options.signal); super.addEventListener(type, callback, options); }
     setAttribute(name, value) { this.attributes.set(name, String(value)); }
     getAttribute(name) { return this.attributes.get(name) ?? null; }
@@ -68,8 +68,9 @@ async function fixture(action, settings = {}) {
     remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); this.parent = null; }
     getBoundingClientRect() { return { width: 900, height: 500, top: 0, bottom: 500, left: 0, right: 900 }; }
     focus() {}
-    hasPointerCapture() { return false; }
-    setPointerCapture() {}
+    hasPointerCapture(id) { return this.captures.has(id); }
+    setPointerCapture(id) { this.captures.add(id); this.captured.push(id); }
+    releasePointerCapture(id) { if (!this.captures.delete(id)) return; this.released.push(id); const event = new Event('lostpointercapture'); Object.assign(event, { pointerId: id }); this.dispatchEvent(event); }
     requestPointerLock() { doc.pointerLockElement = this; doc.dispatchEvent(new Event('pointerlockchange')); }
   }
   class Renderer {
@@ -153,6 +154,10 @@ async function fixture(action, settings = {}) {
 const keyboard = (target, type, key, repeat = false) => {
   const event = new Event(type, { cancelable: true }); Object.assign(event, { key, repeat }); target.dispatchEvent(event); return event;
 };
+const pointerEvent = (target, type, values = {}) => {
+  const event = new Event(type, { cancelable: true });
+  Object.assign(event, { pointerType: 'mouse', isPrimary: true, button: 0, pointerId: 1, clientX: 0, clientY: 0, ...values }); target.dispatchEvent(event); return event;
+};
 
 const gardenSettings = { firstPerson: { spawn: [0, 1.65, 0], eyeHeight: 1.65, metricScale: 1, groundOffset: 0, livingGarden: true }, collisionUrl: '/synthetic/collider.glb' };
 
@@ -174,6 +179,120 @@ test('destroy inside a walking chapter callback prevents a later render or callb
     state.onWalkingTour(tour=>{if(tour.index===1)state.viewer.destroy();});state.draw(12000);
     assert.equal(state.physicsInstances[0].destroys,1);assert.equal(renderer.frames.length,renders);assert.equal(state.cameraPoses.length,poses);assert.equal(state.frames.size,0);assert.equal(state.errors.length,0);assert.equal(renderer.disposed,true);
   },{...gardenSettings,guidedWalking:true,captureCamera:true});
+});
+
+test('a return corridor aligns the actual eye before translating, and manual pause resumes from its current yaw', async () => {
+  await fixture(async state => {
+    await state.decode(); state.draw(); state.viewer.startWalkingTour(); state.draw(); state.viewer.nextWalkingTour(); state.draw();
+    let frames = 0;
+    while (state.walkingTours.at(-1).stage !== 'observing' && frames++ < 300) state.draw(100);
+    assert.equal(state.walkingTours.at(-1).index, 1); assert.equal(state.walkingTours.at(-1).stage, 'observing');
+    state.viewer.nextWalkingTour(); state.draw(16); assert.equal(state.walkingTours.at(-1).index, 2);
+    state.viewer.nextWalkingTour(); state.draw(16); assert.equal(state.walkingTours.at(-1).index, 3); assert.equal(state.walkingTours.at(-1).stage, 'turning');
+    const endpoint = state.renderers[0].cameras.at(-1).position.clone(); let previousYaw = state.renderers[0].cameras.at(-1).rotation.y;
+    for (let index = 0; index < 6; index++) {
+      state.draw(100); const camera = state.renderers[0].cameras.at(-1);
+      assert.equal(camera.position.distanceTo(endpoint), 0); assert.ok(camera.rotation.y > previousYaw && camera.rotation.y - previousYaw <= .08 + 1e-9); previousYaw = camera.rotation.y;
+    }
+    state.viewer.look(-.2, 0); state.draw(16); assert.equal(state.walkingTours.at(-1).phase, 'paused');
+    const manualYaw = state.renderers[0].cameras.at(-1).rotation.y; assert.ok(Math.abs(manualYaw - previousYaw + .2) < 1e-9);
+    assert.equal(state.viewer.resumeWalkingTour(), true); state.draw(60000);
+    assert.equal(state.renderers[0].cameras.at(-1).rotation.y, manualYaw); assert.equal(state.renderers[0].cameras.at(-1).position.distanceTo(endpoint), 0);
+    frames = 0;
+    while (state.walkingTours.at(-1).stage === 'turning' && frames++ < 60) {
+      state.draw(100); const camera = state.renderers[0].cameras.at(-1);
+      if (state.walkingTours.at(-1).stage === 'turning') assert.equal(camera.position.distanceTo(endpoint), 0);
+    }
+    const aligned = state.renderers[0].cameras.at(-1);
+    assert.equal(state.walkingTours.at(-1).stage, 'walking'); assert.ok(aligned.position.distanceTo(endpoint) > 0 && aligned.position.distanceTo(endpoint) <= .055 + 1e-9);
+    assert.ok(Math.abs(Math.atan2(Math.sin(Math.PI - aligned.rotation.y), Math.cos(Math.PI - aligned.rotation.y))) <= .11, 'Translation begins only after the eye faces the return tangent');
+  }, { ...gardenSettings, guidedWalking: true });
+});
+
+test('a second touch looks while the movement pad stays held, independently of the first contact', async () => {
+  await fixture(async state => {
+    await state.decode(); state.draw(); state.viewer.setWalking(true); state.viewer.setMoveInput(0, 1); state.draw(16);
+    const before = state.renderers[0].cameras.at(-1).clone();
+    pointerEvent(state.host, 'pointerdown', { pointerType: 'touch', isPrimary: false, pointerId: 2, clientX: 200, clientY: 300 });
+    assert.equal(state.host.hasPointerCapture(2), true);
+    pointerEvent(state.host, 'pointermove', { pointerType: 'touch', isPrimary: true, pointerId: 1, clientX: 260, clientY: 310 });
+    pointerEvent(state.host, 'pointermove', { pointerType: 'touch', isPrimary: false, pointerId: 2, clientX: 260, clientY: 310 });
+    for (let index = 0; index < 20; index++) state.draw(16);
+    const after = state.renderers[0].cameras.at(-1);
+    assert.ok(Math.abs(after.rotation.y - before.rotation.y + .21) < 1e-9, 'Only the captured look finger contributes horizontal rotation');
+    assert.ok(Math.abs(after.rotation.x - before.rotation.x + .025) < 1e-9);
+    assert.ok(after.position.distanceTo(before.position) > .1, 'Looking does not release the held movement input');
+    pointerEvent(state.host, 'pointerup', { pointerType: 'touch', isPrimary: true, pointerId: 1 });
+    assert.equal(state.host.hasPointerCapture(2), true, 'Lifting the pad contact cannot release the look contact');
+    pointerEvent(state.host, 'pointerup', { pointerType: 'touch', isPrimary: false, pointerId: 2 });
+    assert.deepEqual(state.host.released, [2]); state.viewer.setMoveInput(0, 0);
+  }, { firstPerson: true, collisionUrl: '/synthetic/collider.glb' });
+});
+
+test('stationary touch taps and contact jitter keep the guided walk playing; real drag pauses and turns it', async () => {
+  await fixture(async state => {
+    await state.decode(); state.draw(); state.viewer.startWalkingTour(); state.draw();
+    pointerEvent(state.host, 'pointerdown', { pointerType: 'touch', pointerId: 3, clientX: 100, clientY: 100 });
+    pointerEvent(state.host, 'pointermove', { pointerType: 'touch', pointerId: 3, clientX: 101, clientY: 101 });
+    pointerEvent(state.host, 'pointerup', { pointerType: 'touch', pointerId: 3, clientX: 101, clientY: 101 }); state.draw(100);
+    assert.equal(state.walkingTours.at(-1).phase, 'playing');
+    const before = state.renderers[0].cameras.at(-1).clone();
+    pointerEvent(state.host, 'pointerdown', { pointerType: 'touch', pointerId: 4, clientX: 100, clientY: 100 });
+    pointerEvent(state.host, 'pointermove', { pointerType: 'touch', pointerId: 4, clientX: 120, clientY: 110 }); state.draw(16);
+    assert.equal(state.walkingTours.at(-1).phase, 'paused'); assert.equal(state.walkingTours.at(-1).reason, 'manual');
+    assert.ok(Math.abs(state.renderers[0].cameras.at(-1).rotation.y - before.rotation.y + .07) < 1e-9);
+    pointerEvent(state.host, 'pointercancel', { pointerType: 'touch', pointerId: 4 }); assert.equal(state.host.captures.size, 0);
+  }, { ...gardenSettings, guidedWalking: true });
+});
+
+test('blur, hidden, offscreen and disposal release look capture without stale movement or blocking the next drag', async () => {
+  await fixture(async state => {
+    await state.decode(); state.draw();
+    let id = 10;
+    for (const mode of ['blur', 'hidden', 'offscreen']) {
+      pointerEvent(state.host, 'pointerdown', { pointerType: 'touch', pointerId: id, clientX: 100, clientY: 100 });
+      assert.equal(state.host.hasPointerCapture(id), true);
+      if (mode === 'blur') state.window.dispatchEvent(new Event('blur'));
+      else if (mode === 'hidden') { state.document.visibilityState = 'hidden'; state.document.dispatchEvent(new Event('visibilitychange')); }
+      else state.visible(false);
+      assert.equal(state.host.hasPointerCapture(id), false);
+      const before = state.renderers[0].cameras.at(-1).rotation.y;
+      pointerEvent(state.host, 'pointermove', { pointerType: 'touch', pointerId: id, clientX: 180, clientY: 100 });
+      if (mode === 'hidden') { state.document.visibilityState = 'visible'; state.document.dispatchEvent(new Event('visibilitychange')); }
+      else if (mode === 'offscreen') state.visible(true);
+      state.draw(16); assert.equal(state.renderers[0].cameras.at(-1).rotation.y, before);
+      pointerEvent(state.host, 'pointerdown', { pointerType: 'touch', pointerId: id + 1, clientX: 100, clientY: 100 });
+      pointerEvent(state.host, 'pointermove', { pointerType: 'touch', pointerId: id + 1, clientX: 112, clientY: 100 }); state.draw(16);
+      assert.ok(Math.abs(state.renderers[0].cameras.at(-1).rotation.y - before + .042) < 1e-9);
+      pointerEvent(state.host, 'pointerup', { pointerType: 'touch', pointerId: id + 1 }); id += 2;
+    }
+    pointerEvent(state.host, 'pointerdown', { pointerType: 'touch', pointerId: id }); const renders = state.renderers[0].frames.length;
+    state.viewer.destroy(); assert.equal(state.host.captures.size, 0);
+    assert.equal(state.host.released.filter(value => value === id).length, 1);
+    pointerEvent(state.host, 'pointermove', { pointerType: 'touch', pointerId: id, clientX: 100 }); state.draw(1000);
+    assert.equal(state.renderers[0].frames.length, renders); assert.equal(state.frames.size, 0);
+  }, { firstPerson: true, collisionUrl: '/synthetic/collider.glb', observeVisibility: true });
+});
+
+test('mouse drag retains look behavior and ignores secondary buttons; a gesture callback can safely destroy its viewer', async () => {
+  await fixture(async state => {
+    await state.decode(); state.draw(); state.viewer.startTour(); state.draw();
+    pointerEvent(state.host, 'pointerdown', { button: 2 }); pointerEvent(state.host, 'pointermove', { button: 2, clientX: 50 });
+    assert.equal(state.host.captures.size, 0); assert.equal(state.tours.at(-1).phase, 'playing');
+    pointerEvent(state.host, 'pointerdown'); pointerEvent(state.host, 'pointermove', { clientX: 0 });
+    assert.equal(state.tours.at(-1).phase, 'playing', 'A stationary mouse contact is not a drag');
+    const before = state.renderers[0].cameras.at(-1).rotation.y;
+    pointerEvent(state.host, 'pointermove', { clientX: 10 }); state.draw(16);
+    assert.equal(state.tours.at(-1).phase, 'paused'); assert.ok(Math.abs(state.renderers[0].cameras.at(-1).rotation.y - before + .035) < 1e-9);
+    pointerEvent(state.host, 'pointerup'); assert.equal(state.host.captures.size, 0);
+  });
+  await fixture(async state => {
+    await state.decode(); state.draw(); state.viewer.startWalkingTour(); state.draw();
+    state.onWalkingTour(tour => { if (tour.phase === 'paused') state.viewer.destroy(); });
+    pointerEvent(state.host, 'pointerdown', { pointerType: 'touch', pointerId: 23 });
+    assert.doesNotThrow(() => pointerEvent(state.host, 'pointermove', { pointerType: 'touch', pointerId: 23, clientX: 8 }));
+    assert.equal(state.host.captures.size, 0); assert.equal(state.renderers[0].disposed, true); assert.equal(state.errors.length, 0); assert.equal(state.frames.size, 0);
+  }, { ...gardenSettings, guidedWalking: true });
 });
 
 test('walking preserves the provider scene without generating placeholder visitors or an idle animation loop', async () => {
@@ -475,7 +594,7 @@ test('manual look, movement, reset, walking, pointer and keyboard input pause a 
   await fixture(async state => {
     state.viewer.setAmbient(false); await state.decode(); state.draw();
     const actions = [() => state.viewer.look(.1, 0), () => state.viewer.move(.1, 0), () => state.viewer.forward(), () => state.viewer.reset(), () => state.viewer.setWalking(true),
-      () => { const event = new Event('pointerdown'); Object.assign(event, { isPrimary: true, button: 0, pointerId: 3, clientX: 1, clientY: 1 }); state.host.dispatchEvent(event); },
+      () => { pointerEvent(state.host, 'pointerdown', { pointerId: 3, clientX: 1, clientY: 1 }); pointerEvent(state.host, 'pointermove', { pointerId: 3, clientX: 11, clientY: 1 }); pointerEvent(state.host, 'pointerup', { pointerId: 3 }); },
       () => { const event = new Event('keydown'); Object.assign(event, { key: 'ArrowLeft' }); state.host.dispatchEvent(event); },
     ];
     for (const action of actions) {

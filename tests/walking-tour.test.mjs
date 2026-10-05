@@ -17,11 +17,11 @@ const distance=(a,b)=>Math.hypot(a[0]-b[0],a[2]-b[2]);
 
 test('connected real capsule paths yield a two-minute six-chapter approach/detail/return tour and restore spawn',async()=>{
  const root=floor(),controller=await create(root);
- try{const plan=deriveWalkingTour(controller,0);assert.ok(plan);assert.equal(plan.chapters.length,6);assert.ok(plan.estimatedDurationMs>=120000&&plan.estimatedDurationMs<130000);assert.ok(plan.distance>23&&plan.distance<25);assert.deepEqual(controller.reset(),controller.spawn);
+ try{const plan=deriveWalkingTour(controller,0);assert.ok(plan);assert.equal(plan.chapters.length,6);assert.ok(plan.estimatedDurationMs>=130000&&plan.estimatedDurationMs<150000);assert.ok(plan.distance>23&&plan.distance<25);assert.deepEqual(controller.reset(),controller.spawn);
   assert.deepEqual(plan.chapters.map(c=>c.title),['Take in the place','Into the scene','A closer look','Another perspective','Stay a little','Back at the beginning']);
   for(const chapter of plan.chapters){assert.ok(chapter.fov>=56&&chapter.fov<=75);assert.ok(chapter.dwellMs>=9000&&chapter.dwellMs<=18000);for(const p of chapter.path){assert.ok(p.every(Number.isFinite));assert.ok(distance(p,controller.spawn)<=6.05);}}
   let position=controller.reset(),session=createWalkingTourSession(plan),ticks=0;while(session.state().phase==='playing'&&ticks++<4000){const pose=session.step(50,position,controller.advance);assert.ok(pose.position.every(Number.isFinite));assert.ok(distance(position,pose.position)<=.028+.001);position=pose.position;}
-  assert.equal(session.state().phase,'completed');assert.ok(ticks*50>=120000&&ticks*50<135000);assert.ok(distance(position,controller.spawn)<.04);
+  assert.equal(session.state().phase,'completed');assert.ok(ticks*50>=130000&&ticks*50<155000);assert.ok(Math.abs(ticks*50-plan.estimatedDurationMs)<8000);assert.ok(distance(position,controller.spawn)<.04);
  }finally{controller.destroy();dispose(root);}
 });
 
@@ -47,15 +47,37 @@ test('visible low frame rates preserve observation duration while translated fra
  }finally{controller.destroy();dispose(root);}
 });
 
+test('near-180-degree returns turn consistently in place until the real eye is aligned',async()=>{
+ const root=floor(),controller=await create(root,[0,1.65,-1]);try{
+  for(const epsilon of[-.0000001,.0000001]){
+   const arrival=controller.reset(),path=[arrival,[epsilon,arrival[1],0]],plan={chapters:[{title:'Return',note:'',path,yaw:Math.PI,fov:72,dwellMs:1000}],distance:1,estimatedDurationMs:7000},session=createWalkingTourSession(plan);let position=arrival,yaw=0,calls=0,moving=false;
+   for(let frame=0;frame<100&&!moving;frame++){
+    const before=calls,pose=session.step(50,position,(...args)=>{calls++;return controller.advance(...args);},yaw);
+    if(pose.turning){assert.deepEqual(pose.position,position);assert.equal(calls,before);assert.ok(pose.yaw-yaw>0,'both sides of the yaw seam use the same turn direction');}
+    else if(pose.moving){assert.ok(Math.abs(pose.yaw-yaw)<=.1);moving=true;}
+    yaw+=Math.max(-.04,Math.min(.04,pose.yaw-yaw));position=pose.position;
+   }
+   assert.equal(moving,true);assert.ok(calls>0);assert.ok(yaw>3,'navigation starts after the turn, never while facing backwards');
+  }
+ }finally{controller.destroy();dispose(root);}
+});
+
+test('a slow frame spends its motion budget across multiple original waypoints with small collision substeps',()=>{
+ const path=Array.from({length:151},(_,i)=>[0,1.65,-i*.04]),plan={chapters:[{title:'Straight',note:'',path,yaw:0,fov:75,dwellMs:1000}],distance:6,estimatedDurationMs:12000};const runs=[];
+ for(const elapsed of[1000/60,1000/30,100]){const session=createWalkingTourSession(plan);let position=[0,1.65,0],calls=0;for(let ms=0;ms<1000-.001;ms+=elapsed){const pose=session.step(elapsed,position,(eye,delta,seconds)=>{calls++;assert.ok(Math.hypot(delta[0],delta[2])<=.55/60+.000001);assert.ok(seconds<=1/60+.000001);return {position:eye.map((v,i)=>v+delta[i]),grounded:true};},0);position=pose.position;}runs.push(-position[2]);assert.ok(calls>=60);}
+ for(const travelled of runs)assert.ok(Math.abs(travelled-.55)<.000001,'waypoint spacing does not change commanded speed at 10/30/60 fps');
+});
+
 for(const[id,gift]of[
  ['rio-example',{title:'Rio',worldUrl:'/demo/rio-world-500k.spz',collisionUrl:'/demo/rio-collider.glb'}],
  ['paris-example',{title:'Paris',worldUrl:'/demo/v13/paris-world.spz',collisionUrl:'/demo/v13/paris-collider.glb'}],
 ])test(`${id}: the actual matching transformed collider supplies only grounded continuous chapters`,async()=>{
  const scene=createGiftWalkScenes(id,gift)[0],bytes=await readFile(new URL('../public'+scene.collider,import.meta.url)),parsed=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
  const root=parsed.scene;root.rotation.x=Math.PI;root.scale.setScalar(scene.metricScale);root.position.y=scene.groundOffset;const controller=await create(root,scene.spawn);
- try{const plan=deriveWalkingTour(controller,scene.yaw);assert.ok(plan,`${id} supports a connected real walk`);assert.ok(plan.chapters.length>=4&&plan.chapters.length<=6);assert.ok(plan.estimatedDurationMs>=55000&&plan.estimatedDurationMs<135000);
+ try{const plan=deriveWalkingTour(controller,scene.yaw);assert.ok(plan,`${id} supports a connected real walk`);assert.ok(plan.chapters.length>=4&&plan.chapters.length<=6);assert.ok(plan.estimatedDurationMs>=55000&&plan.estimatedDurationMs<155000);
   assert.ok(plan.chapters.every(chapter=>chapter.path.every(p=>p.every(Number.isFinite)&&distance(p,scene.spawn)<=6.05)));assert.deepEqual(controller.reset(),controller.spawn);
-  const session=createWalkingTourSession(plan);let position=controller.reset(),ticks=0;while(session.state().phase==='playing'&&ticks++<5000){const pose=session.step(50,position,controller.advance);assert.ok(pose.position.every(Number.isFinite));position=pose.position;}
+  const session=createWalkingTourSession(plan);let position=controller.reset(),yaw=scene.yaw,ticks=0,turnFrames=0,straightYaw=[];while(session.state().phase==='playing'&&ticks++<12000){const before=session.state(),pose=session.step(1000/60,position,controller.advance,yaw);assert.ok(pose.position.every(Number.isFinite));if(pose.turning){turnFrames++;assert.deepEqual(pose.position,position,'alignment never translates the body');}const change=Math.max(-.8/60,Math.min(.8/60,pose.yaw-yaw));if(before.index===1&&pose.moving&&ticks/60>15)straightYaw.push(Math.abs(change)*180/Math.PI);yaw+=change;position=pose.position;}
   assert.equal(session.state().phase,'completed',`${id}: ${JSON.stringify(session.state())}`);assert.ok(distance(position,controller.spawn)<.06);
+  assert.ok(turnFrames>100,'real returns align before translating');straightYaw.sort((a,b)=>a-b);assert.ok(straightYaw.length>100);assert.ok(straightYaw[Math.floor(straightYaw.length*.99)]<.08,`${id}: stable route yaw excludes capsule correction jitter`);
  }finally{controller.destroy();dispose(root);}
 });
