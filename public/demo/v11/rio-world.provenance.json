@@ -1,0 +1,49 @@
+{
+  "version": 11,
+  "scene": "rio",
+  "publicGalleryId": "cbb27b09-92ea-41d9-a54a-e93b4438bd7a",
+  "source": "actual-public-v11-archive",
+  "provider": "worldlabs",
+  "model": "marble-1.1",
+  "operationId": "a9d58ba9-7cad-4d12-a85e-c4ca9dedea7d",
+  "worldId": "733321b1-778a-4e11-8b08-d533ddd925bf",
+  "createdAt": "2026-10-05T12:59:05.081357+00:00",
+  "completedAt": "2026-10-05T13:13:09.424725+00:00",
+  "actualCredits": 1580,
+  "worldSemantics": {
+    "metricScaleFactor": 1.8634413,
+    "groundPlaneOffset": 1.1909301
+  },
+  "reference": "/assets/examples/v11/rio-scene.jpg",
+  "sourceAttribution": {
+    "author": "Donatas Dabravolskas",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Botafogo_Beach_and_the_Sugarloaf_Mountain.jpg",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "changes": "Wikimedia resized reference photograph; generated three-dimensional world and inferred unseen surroundings."
+  },
+  "assets": [
+    {
+      "suffix": "spz",
+      "path": "public/demo/v11/rio-world-500k.spz",
+      "bytes": 8084593,
+      "sha256": "f1c80f0fa1ce1d47c65499d5efe075415116cc2dd7acdd1820e8265d17126405",
+      "points": 500000
+    },
+    {
+      "suffix": "pano",
+      "path": "public/demo/v11/rio-panorama.png",
+      "bytes": 9926394,
+      "sha256": "aa2862fa47cc70cdc5d2ea7c4e485865e7b0eed85cf47fbaf5bb26c551ebfdda"
+    },
+    {
+      "suffix": "collider",
+      "path": "public/demo/v11/rio-collider.glb",
+      "bytes": 2061216,
+      "sha256": "e9aabad7f1916f717c6364bceaecbf319b7ed3f4343931b2ee19f3d921a3a0d6"
+    }
+  ],
+  "defaultQuality": "500k",
+  "fullResolution": "Retained as a bounded local operator artifact; not loaded by the default mobile view.",
+  "tripo": "Existing submitted miniature model and miniature reference are reused unchanged; no Tripo request was made by this export."
+}

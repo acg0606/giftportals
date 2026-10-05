@@ -58,6 +58,24 @@ export function instantReadyGiftHref(example: Pick<InstantExample, 'id' | 'ready
   return route && example?.readyGiftUrl === route ? route : undefined;
 }
 
+/** Supabase rotates the media token while keeping an immutable GLB path. Only
+ * this project's canonical model paths have token-independent identities;
+ * every other URL retains its complete query and provider semantics. */
+export function instantModelPreviewIdentity(job: Pick<InstantJob, 'id' | 'assets'>): string {
+  const value = job.assets.modelUrl || '';
+  if (!value || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(job.id) || /[\s\\]/.test(value)) return value;
+  try {
+    const url = new URL(value), prefix = `/storage/v1/object/sign/`;
+    if (url.protocol !== 'https:' || url.hostname !== 'oqmzwznadfuxybtstzzz.supabase.co' || url.port || url.username || url.password || url.hash
+      || url.searchParams.getAll('token').length !== 1 || [...url.searchParams.keys()].some(key => key !== 'token')) return value;
+    const token = url.searchParams.get('token')!;
+    if (token.length > 8192 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) return value;
+    const generated = new RegExp(`^${prefix}gp-instant-generated/${job.id}/generated/[a-f0-9]{64}\\.glb$`);
+    const archived = new RegExp(`^${prefix}gp-instant-souvenirs/${job.id}/souvenir/model-[a-f0-9]{64}\\.glb$`);
+    return generated.test(url.pathname) || archived.test(url.pathname) ? `${url.origin}${url.pathname}` : value;
+  } catch { return value; }
+}
+
 const esc = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
 const legacyStorageKey = 'giftportals.instant.job.v1';
 const legacyPendingStorageKey = 'giftportals.instant.pending.v1';
@@ -583,8 +601,9 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     const job = currentJob;
     if (!active() || !job || !instantModelReady(job) || !job.assets.modelUrl) return;
     if (previewOpen) { previewViewer?.reset(); return; }
-    const attempt = ++previewAttempt, modelUrl = job.assets.modelUrl;
-    const current = () => active() && previewOpen && previewAttempt === attempt && currentJob?.id === job.id && currentJob?.assets.modelUrl === modelUrl;
+    const attempt = ++previewAttempt, modelUrl = job.assets.modelUrl, modelIdentity = instantModelPreviewIdentity(job);
+    const current = () => active() && previewOpen && previewAttempt === attempt && currentJob?.id === job.id
+      && currentJob.token === job.token && instantModelPreviewIdentity(currentJob) === modelIdentity;
     const canvas = transformation.modelHost;
     const load = host.querySelector<HTMLElement>('[data-instant-preview-load]')!;
     previewOpen = true; load.hidden = false; load.textContent = 'Opening your 3D keepsake…';
@@ -763,7 +782,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     storyAudio?.stop(); pendingReference = null; confirmingJob = false;
     if (currentJob && (currentJob.id !== job.id || currentJob.token !== job.token || currentJob.worldlabs.taskId !== job.worldlabs.taskId || !canCheckWorld(job))) cancelWorldDiagnostics();
     if (currentJob && (currentJob.id !== job.id || currentJob.token !== job.token)) cancelWorldRetry();
-    if (currentJob && (currentJob.id !== job.id || currentJob.assets.modelUrl !== job.assets.modelUrl)) { closeModelPreview(); attemptedModel = ''; }
+    if (currentJob && (currentJob.id !== job.id || currentJob.token !== job.token || instantModelPreviewIdentity(currentJob) !== instantModelPreviewIdentity(job))) { closeModelPreview(); attemptedModel = ''; }
     currentJob = job; remember(job); form.hidden = true; progress.hidden = false; unavailable.hidden = true;
     updateWorldRetry(job);
     const uploadPending = job.uploadState === 'pending';
@@ -778,6 +797,9 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     text('#instant-progress-heading', uploadPending ? 'Finish uploading your photos.' : job.state === 'failed' ? 'This gift needs attention.' : instantGiftReady(job) && !worldReady ? 'Your keepsake is ready.' : instantGiftReady(job) && !modelReady ? 'Your world is ready.' : 'A little world, just for them.');
     host.querySelector<HTMLButtonElement>('[data-instant-resume-upload]')!.disabled = recoveringUpload || !service.resumeUpload;
     const visual = giftTransformationState(job);
+    // This controller only compares the model address to retain its revealed
+    // state; the renderer below still receives the current signed media URL.
+    if (visual.modelReady) visual.modelUrl = instantModelPreviewIdentity(job);
     progress.dataset.jobState = job.state;
     transformation.update(visual);
     host.querySelector<HTMLElement>('[data-instant-model-preview]')!.hidden = !modelReady;
@@ -800,7 +822,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     text('[data-instant-job-status]', uploadPending ? 'Generation will start after your photos finish uploading.' : ready ? worldReady ? modelReady ? 'Your photo became a keepsake. Your story has a world to live in.' : 'Your world is ready. The 3D keepsake is unavailable; your photo and story remain here.' : worldStillCreating ? 'Your 3D keepsake is ready. Your world is being created again; your photo and story remain available.' : 'Your 3D keepsake is ready. The world is unavailable; your photo and story remain here.' : instantFailureMessage(job) || (visual.phase === 'interrupted' ? worldStillCreating ? 'The keepsake needs attention. Your little world is still being created.' : 'This gift is unfinished. Your photo is safe; one or more parts need attention.' : 'Both parts are being made from your photo and your place.'));
     text('[data-instant-job-note]', uploadPending ? 'Your photos are never saved in browser storage. This browser keeps only the reference to your gift.' : ready ? worldReady ? modelReady ? 'Open it, turn the keepsake, then step into the place inside.' : 'Step inside your world and read your story.' : 'Open it, turn the keepsake, and read your story.' : finished ? 'No automatic retry is started. You can keep these details and choose a different gift.' : 'Creating a world can take a few minutes. Returning to this creator in this browser restores the job.');
     if (finished || uploadPending) { clearTimeout(pollTimer); pollTimer = undefined; }
-    const modelKey = `${job.id}:${job.assets.modelUrl}`;
+    const modelKey = `${job.id}:${instantModelPreviewIdentity(job)}`;
     if (modelReady && !previewOpen && attemptedModel !== modelKey) { attemptedModel = modelKey; void openModelPreview(); }
     const deliveryKey = `${job.id}:${instantWorldReady(job) ? 'world' : 'keepsake'}`;
     if (ready && !reportedComplete.has(deliveryKey)) {

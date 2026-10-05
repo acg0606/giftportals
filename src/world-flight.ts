@@ -137,14 +137,20 @@ export function createBoundedWorldFlight(bounds: WorldFlightBounds, spawn: World
   for (const fraction of [1, .65, .35, 0]) {
     const side = room * .48 * fraction, behind = room * .45 * fraction;
     const pose = (sideways: number, back: number, height: number, fov: number): WorldFlightPose => ({ position: spawn.map((value, axis) => value + right[axis] * sideways - forward[axis] * back + (axis === 1 ? height : 0)) as unknown as WorldFlightVector, target, fov });
-    const path = [pose(-side, behind, rise, 74), pose(-side * .55, behind * .25, rise * .8, 72), pose(side * .6, 0, rise * .48, 70), pose(side, -behind * .2, rise * .22, 68), end];
-    let previous = path[0].position, valid = clear(previous, previous);
-    for (let i = 1; valid && i <= 240; i++) {
-      const current = sampleWorldFlight(path, i / 240).position;
-      valid = current.every((value, axis) => value >= bounds.min[axis] + inset && value <= bounds.max[axis] - inset) && clear(previous, current);
-      previous = current;
+    // A local roof can be much lower than the entire reconstructed scene.
+    // Try lower arcs before dropping lateral travel; every candidate still
+    // requires the same full corridor clearance and measured scene bounds.
+    for (const heightFraction of [1, .65, .35, .25, .15]) {
+      const height = rise * heightFraction; if (height < .2 * scale) continue;
+      const path = [pose(-side, behind, height, 74), pose(-side * .55, behind * .25, height * .8, 72), pose(side * .6, 0, height * .48, 70), pose(side, -behind * .2, height * .22, 68), end];
+      let previous = path[0].position, valid = clear(previous, previous);
+      for (let i = 1; valid && i <= 240; i++) {
+        const current = sampleWorldFlight(path, i / 240).position;
+        valid = current.every((value, axis) => value >= bounds.min[axis] + inset && value <= bounds.max[axis] - inset) && clear(previous, current);
+        previous = current;
+      }
+      if (valid) return path;
     }
-    if (valid) return path;
   }
 }
 

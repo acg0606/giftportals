@@ -80,7 +80,7 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
   let pointer: { id: number; x: number; y: number; startX: number; startY: number; threshold: number; dragging: boolean } | undefined;
   let renderer: THREE.WebGLRenderer | undefined, splats: SplatMesh | undefined, spark: SparkRenderer | undefined;
   let resizeObserver: ResizeObserver | undefined, stopVisibility: (() => void) | undefined;
-  let gate: ReturnType<typeof createFrameGate> | undefined, deadline: ReturnType<typeof setTimeout> | undefined;
+  let gate: ReturnType<typeof createFrameGate> | undefined, deadline: ReturnType<typeof setTimeout> | undefined, collisionDeadline: ReturnType<typeof setTimeout> | undefined;
   let collider: THREE.Object3D | undefined, navigation: ReturnType<typeof createGroundNavigation>, walking = false;
   let physics: Awaited<ReturnType<typeof createFirstPersonPhysics>> | undefined;
   let walkingViewpoints: readonly WalkingViewpoint[] = [];
@@ -93,9 +93,10 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
   const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : undefined;
   let reduced = motion?.matches ?? false, lastAmbient = -Infinity;
   let panorama: THREE.Texture | undefined, panoramaBitmap: ImageBitmap | undefined, lastCameraReport = -Infinity, cameraReportPending = false;
-  let interactionEnabled = !options.cinematicArrival, collisionSettled = !options.collisionUrl;
+  let interactionEnabled = !options.cinematicArrival, collisionSettled = !options.collisionUrl, collisionExpired = false;
   let cinematic: ReturnType<typeof createWorldCinematicSession> | undefined, cinematicFrame: number | undefined, cinematicSignature = '';
-  const events = new AbortController(), download = new AbortController(), oldTabIndex = host.getAttribute('tabindex');
+  const events = new AbortController(), download = new AbortController(), collisionDownload = new AbortController(), oldTabIndex = host.getAttribute('tabindex');
+  const collisionCancelled = () => dead || collisionExpired || collisionDownload.signal.aborted;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#09252d');
   const camera = new THREE.PerspectiveCamera(75, 1, .08, 150);
@@ -374,7 +375,7 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
     if (dead) return; dead = true; walking = false;
     tourPhase = 'idle'; tourFrame = null; focusFlight = undefined;
     cinematic = undefined; cinematicFrame = undefined;
-    clearTimeout(deadline); download.abort(); events.abort(); releasePointer();
+    clearTimeout(deadline); clearTimeout(collisionDeadline); download.abort(); collisionDownload.abort(); events.abort(); releasePointer();
     stopInput(); if (options.firstPerson && document.pointerLockElement === host) document.exitPointerLock?.(); physics?.destroy(); physics = undefined; walkingViewpoints = []; walkingTour = undefined; walkingTourPlan = undefined; walkingTourFrame = undefined;
     motion?.removeEventListener('change', motionChanged);
     gate?.destroy(); stopVisibility?.(); resizeObserver?.disconnect();
@@ -498,28 +499,42 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
         if (dead || bitmap.width > 6144 || bitmap.height > 3072) { bitmap.close(); return; }
         panoramaBitmap = bitmap; panorama = new THREE.Texture(bitmap); panorama.mapping = THREE.EquirectangularReflectionMapping;
         panorama.colorSpace = THREE.SRGBColorSpace; panorama.needsUpdate = true;
-        scene.background = panorama; scene.backgroundRotation.y = bounded(options.panoramaYaw, 0, -Math.PI, Math.PI); gate?.request();
+        // World Labs places the source view at the panorama's horizontal center.
+        // Three samples -Z at u=.25 and applies inverse background rotation;
+        // a positive quarter-turn aligns that center with the SPZ's -Z front.
+        scene.background = panorama; scene.backgroundRotation.y = Math.PI / 2 + bounded(options.panoramaYaw, 0, -Math.PI, Math.PI); gate?.request();
       }).catch(() => { /* Keep the actual SPZ and solid sky if optional backing fails. */ });
     }
     if(options.collisionUrl){
       // Optional physics asset failure must never hide an otherwise valid world.
+      // Its preparation has a separate deadline: decoding the SPZ must not leave
+      // cinematic arrival waiting forever for an optional collider or initializer.
+      collisionDeadline = setTimeout(() => {
+        if (dead || collisionSettled) return;
+        collisionExpired = true; collisionDownload.abort(); collisionSettled = true;
+        walking = false; stopInput(); physics?.destroy(); physics = undefined; locomotion = undefined; navigation = undefined;
+        if (collider) { disposeCollider(collider); collider = undefined; }
+        options.onWalkingChange?.({ available: false, enabled: false });
+        if (!dead && options.firstPerson) options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false });
+        if (!dead) maybeStartCinematic();
+      }, VIEWER_LOAD_TIMEOUT);
       void Promise.resolve().then(async()=>{
         const collision=viewerAssetUrl(options.collisionUrl!,location.origin);
-        const bytes=await fetchViewerBytes(collision.href,download.signal);
-        if(dead)return undefined;
+        const bytes=await fetchViewerBytes(collision.href,collisionDownload.signal);
+        if(collisionCancelled())return undefined;
         return new GLTFLoader().parseAsync(bytes.buffer,new URL('.',collision).href);
       }).then(gltf=>{
         if(!gltf)return;
-        if(dead){disposeCollider(gltf.scene);return;}
+        if(collisionCancelled()){disposeCollider(gltf.scene);return;}
         collider=gltf.scene;collider.rotation.x=Math.PI;
         collider.traverse(item=>{if(item instanceof THREE.Mesh)for(const material of Array.isArray(item.material)?item.material:[item.material])material.side=THREE.DoubleSide;});
         if (options.firstPerson) {
           collider.scale.setScalar(metricScale); collider.position.y = groundOffset;
           return import('./first-person-physics').then(async ({ createFirstPersonPhysics }) => {
-            if (dead) return;
+            if (collisionCancelled()) return;
             let spawn = options.firstPerson!.spawn;
             if (options.firstPerson!.autoCalibrate || !spawn) {
-              const { findWalkSpawn } = await import('./walk-calibration'); if (dead) return;
+              const { findWalkSpawn } = await import('./walk-calibration'); if (collisionCancelled()) return;
               spawn = findWalkSpawn(collider!, spawn || [0, groundOffset, 0], options.firstPerson!.eyeHeight, options.firstPerson!.radius ?? .2);
               // Some artistic exports put zero on the floor rather than at
               // the provider camera. Only then retry one eye-height higher;
@@ -528,26 +543,26 @@ export function mountGeneratedWorld(host: HTMLElement, url: string, options: Gen
             }
             if (!spawn) throw new Error('WALK_SPAWN_UNAVAILABLE');
             const controller = await createFirstPersonPhysics(collider!, { ...options.firstPerson!, spawn });
-            if (dead) { controller.destroy(); return; }
+            if (collisionCancelled()) { controller.destroy(); return; }
             physics = controller; locomotion = createFirstPersonMotion(controller.spawn, { walkSpeed: options.firstPerson?.walkSpeed || 1.6, sprintSpeed: 2.7, acceleration: 9, damping: 13, strideLength: 1.2, headSway: .009, maxHorizontalCorrection: .02 });
             if (options.onWalkingTour) { walkingTourPlan = deriveWalkingTour(controller, initialYaw); walkingTourState(); }
-            if (dead) return;
+            if (collisionCancelled()) return;
             if (options.firstPerson?.autoCalibrate) {
-              const { deriveWalkingViewpoints } = await import('./walking-viewpoints'); if (dead) return;
+              const { deriveWalkingViewpoints } = await import('./walking-viewpoints'); if (collisionCancelled()) return;
               walkingViewpoints = deriveWalkingViewpoints(controller, initialYaw);
             }
             options.onGardenState?.({ actors: 0, playing: false, positions: [] });
-            if (dead) return;
+            if (collisionCancelled()) return;
             camera.position.set(...controller.spawn); origin.copy(camera.position); viewAnchor.copy(camera.position); cameraReportPending = true;
             options.onWalkingChange?.({ available: true, enabled: false }); if (dead) return;
             options.onFirstPersonState?.({ ready: true, active: false, locked: false, moving: false, distance: 0, grounded: true }); if (dead) return; gate?.request();
             if (!dead && walkingViewpoints.length) options.onWalkingViewpoints?.(walkingViewpoints.map(point => ({ ...point, position: [...point.position] as [number, number, number] })));
-          }).catch(() => { if (!dead) { options.onWalkingChange?.({ available: false, enabled: false }); if (!dead) options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false }); } });
+          }).catch(() => { if (!collisionCancelled()) { options.onWalkingChange?.({ available: false, enabled: false }); if (!dead) options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false }); } });
           return;
         }
         collider.traverse(item=>{if(item instanceof THREE.Mesh)for(const material of Array.isArray(item.material)?item.material:[item.material])material.side=THREE.DoubleSide;});
         navigation=createGroundNavigation(collider,origin);options.onWalkingChange?.({available:Boolean(navigation),enabled:false});
-      }).catch(()=>{if(!dead) { options.onWalkingChange?.({available:false,enabled:false}); if (!dead && options.firstPerson) options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false }); }}).finally(() => { if (!dead) { collisionSettled = true; maybeStartCinematic(); } });
+      }).catch(()=>{if(!collisionCancelled()) { options.onWalkingChange?.({available:false,enabled:false}); if (!dead && options.firstPerson) options.onFirstPersonState?.({ ready: false, active: false, locked: false, moving: false, distance: 0, grounded: false }); }}).finally(() => { clearTimeout(collisionDeadline); if (!dead) { collisionSettled = true; maybeStartCinematic(); } });
     }else options.onWalkingChange?.({available:false,enabled:false});
   } catch { fail('3D rendering is unavailable on this device. Your image and story remain available.'); }
   return { destroy, reset, look, forward: () => move(0,1), backward: () => move(0,-1), move, elevate, setWalking, get walkingAvailable(){return Boolean(physics||navigation)&&!dead;},setAmbient,startTour,pauseTour,resumeTour,stopTour,nextTour,focusPoint,setMoveInput,lockPointer,setWalkingViewpoint,startWalkingTour,pauseWalkingTour,resumeWalkingTour,stopWalkingTour,nextWalkingTour,setInteractionEnabled,skipCinematic };

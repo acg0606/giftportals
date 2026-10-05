@@ -271,7 +271,7 @@ async function qualityReferenceCapturePage(epoch: number) {
 }
 async function readGeneratedGift(id: string, signal: AbortSignal): Promise<GeneratedGiftData> {
   if (routeParams().get('public') === '1') return readPublicGift(id, signal);
-  const examples: Record<string, string> = { 'rio-example': '/demo/rio-generated-gift.json', 'paris-example': '/demo/v11/paris-generated-gift.json', 'antikythera-example': '/demo/v13/antikythera-generated-gift.json' };
+  const examples: Record<string, string> = { 'rio-example': '/demo/v11/rio-generated-gift.json', 'paris-example': '/demo/v11/paris-generated-gift.json', 'antikythera-example': '/demo/v13/antikythera-generated-gift.json' };
   if (Object.hasOwn(examples, id)) {
     const response = await fetch(examples[id], { signal });
     if (!response.ok) throw new Error('This example could not open. Return to your collection and try again.');

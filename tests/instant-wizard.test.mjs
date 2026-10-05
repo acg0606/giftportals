@@ -42,6 +42,7 @@ const stubs = {
 async function moduleUrl(path) {
   if (modules.has(path.href)) return modules.get(path.href);
   let source = compile(await readFile(path, 'utf8'));
+  if (path.pathname.endsWith('/instant-creator.ts')) source = source.replaceAll("await import('./scene')", 'await globalThis.__instantWizard.scene()');
   for (const match of [...source.matchAll(/from\s*(['"])(\.{1,2}\/[^'"]+)\1/g)]) {
     const name = match[2];
     const url = stubs[name] ? urlOf(stubs[name]) : await moduleUrl(new URL(name.endsWith('.ts') ? name : `${name.replace(/\.js$/, '')}.ts`, path));
@@ -49,7 +50,7 @@ async function moduleUrl(path) {
   }
   const url = urlOf(source); modules.set(path.href, url); return url;
 }
-const { mountInstantCreator, instantCreatorService } = await import(await moduleUrl(new URL('../src/instant-creator.ts', import.meta.url)));
+const { mountInstantCreator, instantCreatorService, instantModelPreviewIdentity } = await import(await moduleUrl(new URL('../src/instant-creator.ts', import.meta.url)));
 const { PUBLIC_GALLERY_CONSENT_VERSION } = await import(await moduleUrl(new URL('../shared/instant-gallery.ts', import.meta.url)));
 const { createCloudInstantService } = await import(await moduleUrl(new URL('../src/cloud-instant-service.ts', import.meta.url)));
 const keepsakeLibrary = await import(await moduleUrl(new URL('../src/keepsake-library.ts', import.meta.url)));
@@ -58,7 +59,7 @@ const missing = () => Object.assign(new Error('No previous job'), { code: 'JOB_U
 async function fixture(action, settings = {}) {
   const names = ['window', 'document', 'HTMLInputElement', 'HTMLTextAreaElement', 'sessionStorage', 'URL', 'FileReader', 'fetch', 'createImageBitmap', 'matchMedia', 'navigator', '__instantWizard'];
   const previous = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const state = { current: true, creates: [], jobs: [], diagnostics: [], retries: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
+  const state = { current: true, creates: [], jobs: [], diagnostics: [], retries: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], modelImports: 0, modelViewers: [], pendingModelImports: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
   class Element extends EventTarget {
     constructor(tag = 'div', attrs = {}) {
       super(); this.tagName = tag; this.attrs = attrs; this.children = []; this.dataset = {}; this.value = attrs.value || ''; this.name = attrs.name || ''; this.type = attrs.type || ''; this.hidden = 'hidden' in attrs; this.disabled = 'disabled' in attrs; this.checked = 'checked' in attrs; this.open = false; this.isConnected = true; this.scrollLeft = 0; this.scrollWidth = 720; this.clientWidth = 350; this.scrollTop = 0; this.validityMessage = ''; this.style = {};
@@ -117,15 +118,31 @@ async function fixture(action, settings = {}) {
     context: (host, options) => { state.contextOptions = options; return { getContext: () => state.context, getLookupLocation: () => state.lookup, setSuggestedPlace(label) { state.selectedPlaces.push(label); state.context.placeLabel = label; options.onChange(state.context); }, destroy() {} }; },
     curiosities: (host, options) => { state.curioOptions = options; state.ids = []; return { reset() { options.onDecision(undefined); state.ids = []; }, preset(value) { state.seed = value.story; }, refreshRegion() {}, selectedIds: () => state.ids, destroy() {} }; },
     audio: (host, options) => { state.audioHost = host; state.audioOptions = options; return { stop() { state.audioStops++; }, destroy() { state.audioDestroyed++; } }; },
+    scene: () => {
+      state.modelImports++;
+      if (!settings.previewScene) return Promise.reject(new Error('GPU renderer unavailable in this independent fixture'));
+      const module = { mountMemoryScene: (canvas, options) => {
+        const viewer = { canvas, options, destroyCount: 0, resetCount: 0, autoRotate: [], wireframe: [],
+          destroy() { this.destroyCount++; }, reset() { this.resetCount++; },
+          setAutoRotate(value) { this.autoRotate.push(value); }, setWireframe(value) { this.wireframe.push(value); } };
+        state.modelViewers.push(viewer); return viewer;
+      } };
+      return settings.previewScene === 'deferred' ? new Promise(resolve => state.pendingModelImports.push(() => resolve(module))) : Promise.resolve(module);
+    },
     transformation: (host, options) => {
-      let destroyed = false;
+      let destroyed = false, current;
       const modelHost = new Element('div', { class: 'gift-transformation-model', 'data-transform-model': '' });
       modelHost.hidden = false; modelHost.inert = true;
       modelHost.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 350, bottom: 330, width: 350, height: 330 });
       host.append(modelHost); state.modelHost = modelHost;
       return {
         modelHost,
-        update(value) { if (!destroyed && options.isCurrent()) state.transformations.push(structuredClone(value)); },
+        update(value) {
+          if (destroyed || !options.isCurrent()) return;
+          // Match the real presentation controller's changed-model reveal gate.
+          if (current?.jobId !== value.jobId || current?.modelUrl !== value.modelUrl || !value.modelReady) modelHost.inert = true;
+          current = structuredClone(value); state.transformations.push(current);
+        },
         setModelVisible(value) { if (!destroyed && options.isCurrent()) { modelHost.inert = !value; state.modelVisibility.push(value); } },
         pulse() { if (!destroyed && options.isCurrent()) state.transformationPulses++; },
         destroy() { if (destroyed) return; destroyed = true; state.transformationDestroyed++; host.replaceChildren(); },
@@ -491,6 +508,74 @@ test('a delivered partial souvenir registers once and opens while its failed wor
     storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
     jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: state.jobs.length === 1 ? 'processing' : 'partial', tripo: { state: 'completed' }, worldlabs: { state: state.jobs.length === 1 ? 'processing' : 'failed', errorCode: state.jobs.length === 1 ? undefined : 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
   });
+});
+
+const previewReference = { id: '00000000-0000-4000-8000-000000000019', token: 'x'.repeat(43) };
+const previewHash = 'a'.repeat(64);
+const previewSigned = (version, hash = previewHash, bucket = 'gp-instant-generated', recordId = previewReference.id) => `https://oqmzwznadfuxybtstzzz.supabase.co/storage/v1/object/sign/${bucket}/${recordId}/${bucket === 'gp-instant-generated' ? `generated/${hash}` : `souvenir/model-${hash}`}.glb?token=fixture.payload.signature${version}`;
+const previewSettings = (extra = {}) => ({
+  previewScene: true, storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(previewReference)]],
+  jobHandler: (_reference, state) => ({ ...state.job, ...previewReference, state: 'processing', tripo: { state: 'completed' }, worldlabs: { state: 'processing' }, assets: { photoUrl: '/photo', modelUrl: previewSigned(state.jobs.length) } }),
+  ...extra,
+});
+
+test('renewing the same canonical model signature preserves a revealed viewer while the world continues processing', async () => {
+  await fixture(async state => {
+    assert.equal(state.modelViewers.length, 1); const viewer = state.modelViewers[0]; viewer.options.onReady();
+    const visibilityBefore = [...state.modelVisibility], rotationBefore = [...viewer.autoRotate];
+    assert.equal(state.modelHost.inert, false); assert.equal(state.find('[data-instant-preview-load]').hidden, true);
+    for (let i = 0; i < 3; i++) { state.scheduled.at(-1).callback(); await flush(); }
+    assert.equal(state.jobs.length, 4); assert.equal(state.modelImports, 1); assert.equal(state.modelViewers.length, 1);
+    assert.equal(viewer.destroyCount, 0); assert.equal(viewer.resetCount, 0); assert.deepEqual(viewer.autoRotate, rotationBefore);
+    assert.deepEqual(state.modelVisibility, visibilityBefore); assert.equal(state.modelHost.inert, false);
+    assert.equal(state.find('[data-instant-preview-load]').hidden, true);
+    assert.ok(state.transformations.every(value => value.modelUrl === previewSigned(1).split('?')[0]));
+    assert.equal(viewer.options.modelUrl, previewSigned(1), 'The GPU receives the actual signed URL, not its presentation identity');
+    assert.equal(state.creates.length, 0); assert.equal(state.retries.length, 0);
+  }, previewSettings());
+});
+
+test('same-model renewal keeps a pending import and its readiness callback current; a real hash change replaces the viewer', async () => {
+  await fixture(async state => {
+    assert.equal(state.pendingModelImports.length, 1); state.scheduled.at(-1).callback(); await flush();
+    assert.equal(state.modelImports, 1); state.pendingModelImports[0](); await flush();
+    assert.equal(state.modelViewers.length, 1); const original = state.modelViewers[0]; original.options.onReady();
+    assert.equal(state.modelHost.inert, false); assert.equal(state.find('[data-instant-preview-load]').hidden, true);
+    state.replaceModel = true; state.scheduled.at(-1).callback(); await flush();
+    assert.equal(original.destroyCount, 1); assert.equal(state.modelImports, 2); assert.equal(state.modelHost.inert, true);
+    original.options.onReady(); assert.equal(state.modelHost.inert, true, 'A stale renderer cannot reveal the replacement asset');
+    state.pendingModelImports[1](); await flush(); state.modelViewers[1].options.onReady();
+    assert.equal(state.modelHost.inert, false); assert.equal(state.modelViewers[1].options.modelUrl, previewSigned(state.jobs.length,'b'.repeat(64)));
+    assert.equal(state.creates.length, 0); assert.equal(state.retries.length, 0);
+  }, previewSettings({ previewScene: 'deferred', jobHandler: (_reference, state) => ({ ...state.job, ...previewReference, state: 'processing', tripo: { state: 'completed' }, worldlabs: { state: 'processing' }, assets: { photoUrl: '/photo', modelUrl: previewSigned(state.jobs.length,state.replaceModel ? 'b'.repeat(64) : previewHash) } }) }));
+});
+
+test('a provider URL query change replaces the revealed model instead of assuming token-independent semantics', async () => {
+  await fixture(async state => {
+    const original = state.modelViewers[0]; original.options.onReady(); assert.equal(state.modelHost.inert, false);
+    state.scheduled.at(-1).callback(); await flush();
+    assert.equal(original.destroyCount, 1); assert.equal(state.modelImports, 2); assert.equal(state.modelHost.inert, true);
+    original.options.onReady(); assert.equal(state.modelHost.inert, true);
+    const replacement = state.modelViewers[1]; assert.equal(replacement.options.modelUrl, 'https://provider.example/model.glb?version=2');
+    replacement.options.onReady(); assert.equal(state.modelHost.inert, false);
+    assert.equal(state.creates.length, 0); assert.equal(state.retries.length, 0);
+  }, previewSettings({ jobHandler: (_reference, state) => ({ ...state.job, ...previewReference, state: 'processing', tripo: { state: 'completed' }, worldlabs: { state: 'processing' }, assets: { photoUrl: '/photo', modelUrl: `https://provider.example/model.glb?version=${state.jobs.length}` } }) }));
+});
+
+test('model preview identity ignores only one signed token on this project canonical model paths, retaining arbitrary URL semantics', () => {
+  const identity = address => instantModelPreviewIdentity({ ...previewReference, assets: { photoUrl: '/photo', modelUrl: address } });
+  assert.equal(identity(previewSigned(1)),identity(previewSigned(2)));
+  assert.equal(identity(previewSigned(1,previewHash,'gp-instant-souvenirs')),identity(previewSigned(2,previewHash,'gp-instant-souvenirs')));
+  assert.notEqual(identity(previewSigned(1)),identity(previewSigned(1,'b'.repeat(64))));
+  assert.notEqual(identity(previewSigned(1)),identity(previewSigned(1,previewHash,'gp-instant-souvenirs')));
+  for (const change of [
+    url => url.replace('oqmzwznadfuxybtstzzz','another-project'), url => url.replace('https:','http:'),
+    url => url.replace('gp-instant-generated','gp-instant-private'), url => url.replace('/generated/','/moderation/'),
+    url => url.replace(previewReference.id,'00000000-0000-4000-8000-000000000020'),
+    url => `${url}&width=500`, url => `${url}&download=alternate.glb`, url => `${url}&token=second.signature.value`, url => `${url}#variant`,
+    url => url.replace('token=fixture.payload.signature','token=opaque'),
+  ]) assert.notEqual(identity(change(previewSigned(1))),identity(change(previewSigned(2))), 'Noncanonical URLs preserve their full changing query');
+  for (const address of ['/model.glb?version=1','https://provider.example/model.glb?version=1',previewSigned(1).replace('.glb?','.png?')])assert.equal(identity(address),address);
 });
 
 test('a partial world registers and opens after model failure while a nonterminal first creation stays pending, without resubmission', async () => {
