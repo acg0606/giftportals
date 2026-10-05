@@ -50,6 +50,7 @@ async function moduleUrl(path) {
   const url = urlOf(source); modules.set(path.href, url); return url;
 }
 const { mountInstantCreator, instantCreatorService } = await import(await moduleUrl(new URL('../src/instant-creator.ts', import.meta.url)));
+const keepsakeLibrary = await import(await moduleUrl(new URL('../src/keepsake-library.ts', import.meta.url)));
 const flush = async () => { for (let i = 0; i < 5; i++) await setImmediate(); };
 const missing = () => Object.assign(new Error('No previous job'), { code: 'JOB_UNAVAILABLE' });
 async function fixture(action, settings = {}) {
@@ -141,7 +142,7 @@ async function fixture(action, settings = {}) {
     status: async () => ({ available: true, photoAnalysisAvailable: Boolean(settings.photoAvailable), provider: settings.photoAvailable ? 'vercel' : 'template', imageConsentLabel: 'Vercel AI Gateway · Google Gemini 2.5 Flash Lite', locationAvailable: true, privacy: { photoSentOnlyWithConsent: true, coordinatesSentOnlyWithConsent: true } }),
     suggest: async (input, signal) => { state.assists.push({ input, signal }); return settings.assistHandler ? settings.assistHandler(input, signal, state) : state.suggestion; },
   };
-  state.host = new Element(); state.handle = mountInstantCreator(state.host, { isCurrent: () => state.current, onHome() {}, onGiftReady(job) { state.opened.push(job); }, onGiftCompleted(job) { state.completed.push(job); }, storageScope: settings.storageScope, service, assistantService });
+  state.host = new Element(); state.handle = mountInstantCreator(state.host, { isCurrent: () => state.current, onHome() {}, onGiftReady(job) { state.opened.push(job); }, onGiftCompleted(job) { state.completed.push(job); settings.onGiftCompleted?.(job); }, storageScope: settings.storageScope, resumeCompletedJob: settings.resumeCompletedJob, service, assistantService });
   state.find = selector => { const element = state.host.querySelector(selector); assert.ok(element, `Missing fixture element ${selector}`); return element; };
   state.field = name => state.find('[data-instant-form]').elements.namedItem(name);
   state.edit = (name, value) => { const input = state.field(name); input.value = value; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
@@ -178,6 +179,141 @@ test('actual wizard keeps one card active; selecting a photo stays put; Enter re
     assert.equal(state.completed[0].id, state.job.id); assert.equal(state.opened.length, 0);
     assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
   });
+});
+
+test('a fresh Make entry retires only delivered creator recovery and keeps old and new gifts in the library', async () => {
+  for (const terminal of ['completed', 'partial']) for (const scope of ['anonymous', 'owner:andre']) {
+    const reference = { id: `delivered-${terminal}`, token: 'x'.repeat(43) };
+    const scopedKey = keepsakeLibrary.instantJobStorageKey(scope);
+    const localValues = new Map();
+    const localStore = { getItem: key => localValues.get(key) ?? null, setItem: (key, value) => localValues.set(key, value), removeItem: key => localValues.delete(key) };
+    const expiry = Math.floor(Date.now() / 1000) + 600;
+    await fixture(async state => {
+      assert.deepEqual(state.jobs, [reference]); assert.equal(state.stage(), 'photo');
+      assert.equal(state.find('[data-instant-form]').hidden, false); assert.equal(state.find('[data-instant-progress]').hidden, true);
+      assert.equal(state.find('[data-instant-inputs]').disabled, false); assert.equal(state.storage.has(scopedKey), false);
+      assert.equal(state.storage.get('giftportals.instant.job.v2:owner%3Asomeone-else'), 'untouched-owner-reference');
+      assert.equal(state.creates.length, 0); assert.equal(state.opened.length, 0); assert.deepEqual(state.scheduled, []);
+      assert.equal(state.completed.length, 1);
+      assert.deepEqual(keepsakeLibrary.storedKeepsakeReferences(localStore, scope), [{ ...reference, expiresAt: expiry }]);
+      state.job = { ...state.job, id: 'new-delivered-gift', token: 'y'.repeat(43), mediaExpiresAt: expiry };
+      state.upload(new File(['new pixels'], 'new.jpg', { type: 'image/jpeg' }));
+      state.next(); state.next(); state.next(); state.consent(); state.submit(); await flush();
+      assert.equal(state.creates.length, 1); assert.equal(state.completed.length, 2); assert.equal(state.opened.length, 0);
+      assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
+      const references = keepsakeLibrary.storedKeepsakeReferences(localStore, scope);
+      assert.deepEqual(references.map(item => item.id), [reference.id, 'new-delivered-gift']);
+      assert.ok(references.every(item => item.expiresAt === expiry));
+      assert.equal(keepsakeLibrary.storedKeepsakeReferences(localStore, scope === 'anonymous' ? 'owner:andre' : 'anonymous').length, 0);
+      state.find('[data-instant-open]').click(); assert.equal(state.opened[0].id, 'new-delivered-gift');
+    }, {
+      storageScope: scope,
+      storage: [[scopedKey, JSON.stringify(reference)], ['giftportals.instant.job.v2:owner%3Asomeone-else', 'untouched-owner-reference']],
+      onGiftCompleted: job => keepsakeLibrary.rememberCreatedKeepsake(localStore, scope, job),
+      jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: terminal, mediaExpiresAt: expiry,
+        worldlabs: { state: terminal === 'completed' ? 'completed' : 'failed' },
+        assets: { photoUrl: '/photo', modelUrl: '/model', ...(terminal === 'completed' ? { worldUrl: '/world' } : {}) } }),
+    });
+  }
+});
+
+test('a fresh entry keeps pending worlds and ready retry souvenirs in progress until this session delivers them', async () => {
+  const reference = { id: 'still-processing-gift', token: 'x'.repeat(43) };
+  for (const variant of ['both-processing', 'model-ready', 'world-retry']) await fixture(async state => {
+    assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
+    assert.equal(state.find('[data-instant-progress]').dataset.jobState, 'processing');
+    assert.equal(state.scheduled.length, 1); assert.equal(state.creates.length, 0); assert.equal(state.opened.length, 0);
+    assert.equal(JSON.parse(state.storage.get('giftportals.instant.job.v2:anonymous')).id, reference.id);
+    assert.equal(state.completed.length, variant === 'world-retry' ? 1 : 0);
+    state.scheduled[0].callback(); await flush();
+    assert.equal(state.find('[data-instant-progress]').dataset.jobState, 'completed');
+    assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.equal(state.opened.length, 0); assert.equal(state.creates.length, 0);
+    assert.equal(state.completed.at(-1).id, reference.id);
+  }, {
+    storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
+    jobHandler: (_reference, state) => state.jobs.length > 1 ? { ...state.job, ...reference } : { ...state.job, ...reference, state: 'processing',
+      tripo: { state: variant === 'both-processing' ? 'processing' : 'completed' }, worldlabs: { state: 'processing' },
+      ...(variant === 'world-retry' ? { worldRetry: { available: false, attempts: 1 } } : {}),
+      assets: { photoUrl: '/photo', ...(variant === 'both-processing' ? {} : { modelUrl: '/model' }) } },
+  });
+});
+
+test('a lost create response recovered by its pending dedupe reference stays on its delivered result', async () => {
+  const pending = { dedupeKey: 'unconfirmed-create', requestToken: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.deepEqual(state.jobs, [{ dedupeKey: pending.dedupeKey, token: pending.requestToken }]);
+    assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.equal(state.completed.length, 1);
+    assert.equal(state.creates.length, 0); assert.equal(state.opened.length, 0); assert.deepEqual(state.scheduled, []);
+    assert.equal(state.storage.has('giftportals.instant.pending.v2:anonymous'), false);
+    assert.equal(JSON.parse(state.storage.get('giftportals.instant.job.v2:anonymous')).id, 'recovered-create');
+  }, {
+    storage: [['giftportals.instant.pending.v2:anonymous', JSON.stringify(pending)]],
+    jobHandler: (_reference, state) => ({ ...state.job, id: 'recovered-create', token: pending.requestToken }),
+  });
+});
+
+test('explicit world recovery can show a completed result without restarting creation or auto-opening it', async () => {
+  const reference = { id: 'explicit-world-recovery', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.equal(state.completed.length, 1);
+    assert.equal(state.storage.has('giftportals.instant.job.v2:anonymous'), true);
+    assert.equal(state.creates.length, 0); assert.equal(state.opened.length, 0);
+  }, { resumeCompletedJob: true, storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]], jobHandler: (_reference, state) => ({ ...state.job, ...reference }) });
+});
+
+test('only a world retry marker matching both job id and capability can retain a delivered result on fresh entry', async () => {
+  const reference = { id: 'delivered-with-retry-marker', token: 'x'.repeat(43) };
+  for (const mismatch of ['id', 'token']) await fixture(async state => {
+    assert.equal(state.stage(), 'photo'); assert.equal(state.find('[data-instant-progress]').hidden, true);
+    assert.equal(state.completed.length, 1); assert.equal(state.retries.length, 0); assert.equal(state.creates.length, 0);
+    assert.equal(state.storage.has('giftportals.instant.job.v2:anonymous'), false);
+  }, {
+    storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)],
+      ['giftportals.instant.job.v2:anonymous:world-retry', JSON.stringify({ ...reference, retryKey: 'other-attempt', [mismatch]: mismatch === 'id' ? 'other-gift' : 'y'.repeat(43) })]],
+    jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: 'partial', worldlabs: { state: 'failed' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
+  });
+});
+
+test('a transient restored-job read stays locked, then confirmed delivery returns a fresh entry to Photo', async () => {
+  const reference = { id: 'restore-after-network-error', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.equal(state.stage(), 'review'); assert.equal(state.find('[data-instant-inputs]').disabled, true);
+    assert.equal(state.storage.has('giftportals.instant.job.v2:anonymous'), true); assert.equal(state.completed.length, 0);
+    state.find('[data-instant-recover]').click(); await flush();
+    assert.equal(state.jobs.length, 2); assert.equal(state.stage(), 'photo'); assert.equal(state.find('[data-instant-progress]').hidden, true);
+    assert.equal(state.storage.has('giftportals.instant.job.v2:anonymous'), false); assert.equal(state.completed.length, 1);
+    assert.equal(state.creates.length, 0); assert.equal(state.opened.length, 0);
+  }, { storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]], jobHandler: (_reference, state) => state.jobs.length === 1 ? Promise.reject(new TypeError('Network unavailable')) : { ...state.job, ...reference } });
+});
+
+test('a confirmed missing old job cannot discard the completed result recovered after a new lost POST', async () => {
+  const reference = { id: 'missing-old-gift', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.equal(state.stage(), 'photo'); assert.equal(state.find('[data-instant-inputs]').disabled, false);
+    assert.equal(state.jobs.length, 1); assert.equal(state.storage.has('giftportals.instant.job.v2:anonymous'), false);
+    state.upload(new File(['new pixels'], 'new.jpg', { type: 'image/jpeg' }));
+    state.next(); state.next(); state.next(); state.consent(); state.submit(); await flush();
+    assert.equal(state.creates.length, 1); assert.equal(state.jobs.length, 2); assert.ok(state.jobs[1].dedupeKey);
+    assert.equal(state.jobs[1].token, state.creates[0].requestToken);
+    assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.equal(state.completed.length, 1); assert.equal(state.opened.length, 0);
+    state.find('[data-instant-open]').click(); assert.equal(state.opened[0].id, 'new-recovered-gift');
+  }, {
+    storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]], createError: new TypeError('Lost create response'),
+    jobHandler: (_reference, state) => state.jobs.length === 1 ? Promise.reject(missing()) : { ...state.job, id: 'new-recovered-gift', token: state.creates[0].requestToken },
+  });
+});
+
+test('malformed creator references cannot restore a result or adopt another owner on a new entry', async () => {
+  for (const value of ['{', '{}', JSON.stringify({ id: 'invalid-reference', token: 'short' })]) await fixture(async state => {
+    assert.equal(state.stage(), 'photo'); assert.equal(state.find('[data-instant-form]').hidden, false);
+    assert.equal(state.find('[data-instant-progress]').hidden, true); assert.equal(state.find('[data-instant-inputs]').disabled, false);
+    assert.equal(state.jobs.length, 0); assert.equal(state.creates.length, 0); assert.equal(state.completed.length, 0); assert.equal(state.opened.length, 0);
+    assert.equal(state.storage.get('giftportals.instant.job.v2:owner%3Asomeone-else'), 'untouched');
+  }, { storage: [['giftportals.instant.job.v2:anonymous', value], ['giftportals.instant.pending.v2:anonymous', value], ['giftportals.instant.job.v2:owner%3Asomeone-else', 'untouched']] });
 });
 
 test('legacy daily counters and internal budgets do not gate an available creator or cap repeated explicit creations', async () => {
@@ -283,12 +419,14 @@ test('a delivered partial souvenir registers once and opens while its failed wor
   });
 });
 
-test('reopening a partial souvenir restores its usable keepsake without generating or claiming a world', async () => {
+test('a new Make entry saves a restored partial souvenir and opens Photo instead of the previous result', async () => {
   const reference = { id: 'restored-partial-souvenir', token: 'x'.repeat(43) };
   await fixture(async state => {
-    assert.equal(state.completed.length, 1);assert.equal(state.find('[data-instant-open]').hidden, false);assert.deepEqual(state.scheduled, []);
-    state.find('[data-instant-open]').click();assert.equal(state.opened[0].id, reference.id);assert.equal(state.creates.length, 0);
-    assert.match(state.find('[data-instant-job-status]').textContent, /world is unavailable/);
+    assert.equal(state.completed.length, 1); assert.equal(state.completed[0].id, reference.id);
+    assert.equal(state.stage(), 'photo'); assert.equal(state.find('[data-instant-form]').hidden, false);
+    assert.equal(state.find('[data-instant-progress]').hidden, true); assert.equal(state.find('[data-instant-inputs]').disabled, false);
+    assert.deepEqual(state.scheduled, []); assert.equal(state.opened.length, 0); assert.equal(state.creates.length, 0);
+    assert.equal(state.storage.has('giftportals.instant.job.v2:anonymous'), false);
   }, {
     storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
     jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: 'partial', tripo: { state: 'completed' }, worldlabs: { state: 'failed', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
@@ -298,6 +436,7 @@ test('reopening a partial souvenir restores its usable keepsake without generati
 const diagnosticReference = { id: 'diagnostic-existing-gift', token: 'private_diagnostic_capability_1234567890' };
 const diagnosticReceipt = (extra = {}) => ({ done: true, errorPresent: true, errorShape: 'object', errorEmpty: false, errorCode: 'INTERNAL', reason: 'provider-internal', reasonText: 'Predefined receipt text.', ...extra });
 const diagnosticSettings = (extra = {}) => ({
+  resumeCompletedJob: true,
   storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(diagnosticReference)]],
   jobHandler: (_reference, state) => ({ ...state.job, ...diagnosticReference, state: 'partial', title: 'Our saved souvenir', story: 'Our saved memory.', tripo: { state: 'completed' }, worldlabs: { state: 'failed', taskId: 'recorded-world-task', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
   diagnosticsHandler: () => diagnosticReceipt(),
@@ -307,6 +446,7 @@ const diagnosticSettings = (extra = {}) => ({
 const retryStorageKey = 'giftportals.instant.job.v2:anonymous:world-retry';
 const retryJob = (state, extra = {}) => ({ ...state.job, ...diagnosticReference, state: 'partial', title: 'Our saved souvenir', story: 'Our saved memory.', tripo: { state: 'completed', taskId: 'existing-souvenir' }, worldlabs: { state: 'failed', taskId: 'failed-world-task', errorCode: 'PROVIDER_GENERATION_FAILED' }, worldRetry: { available: true, attempts: 0 }, assets: { photoUrl: '/photo', modelUrl: '/model' }, ...extra });
 const retrySettings = (extra = {}) => ({
+  resumeCompletedJob: true,
   storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(diagnosticReference)]],
   jobHandler: (_reference, state) => retryJob(state),
   retryHandler: (_reference, _retryKey, _signal, state) => retryJob(state, { state: 'processing', worldlabs: { state: 'processing', taskId: 'new-world-task' }, worldRetry: { available: false, attempts: 1 } }),
@@ -349,7 +489,7 @@ test('reloading an uncertain retry makes no paid request and recovers the saved 
   await fixture(async state => {
     assert.equal(state.retries.length, 0); assert.equal(state.find('[data-instant-world-retry-button]').textContent, 'Check world retry');
     state.find('[data-instant-world-retry-button]').click(); await flush(); assert.equal(state.retries[0].retryKey, pending.retryKey); assert.equal(state.creates.length, 0);
-  }, retrySettings({ storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(diagnosticReference)], [retryStorageKey, JSON.stringify(pending)]] }));
+  }, retrySettings({ resumeCompletedJob: false, storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(diagnosticReference)], [retryStorageKey, JSON.stringify(pending)]] }));
   for (const raw of [null, '{}', JSON.stringify({ ...pending, id: undefined }), JSON.stringify({ ...pending, retryKey: '../invalid' }), JSON.stringify({ ...pending, token: 'short' })]) assert.equal(wizard.readInstantWorldRetryReference(raw), null);
 });
 
@@ -481,7 +621,8 @@ test('anonymous legacy references migrate once without giving an account another
   await fixture(async state => {
     assert.deepEqual(state.jobs, [reference]); assert.equal(state.completed.length, 1);
     assert.equal(state.storage.has('giftportals.instant.job.v1'), false);
-    assert.equal(state.storage.get('giftportals.instant.job.v2:anonymous'), serialized);
+    assert.equal(state.storage.has('giftportals.instant.job.v2:anonymous'), false);
+    assert.equal(state.stage(), 'photo'); assert.equal(state.opened.length, 0);
   }, { storage: [['giftportals.instant.job.v1', serialized]], jobHandler: (_reference, state) => ({ ...state.job, ...reference }) });
   await fixture(async state => {
     assert.equal(state.jobs.length, 0); assert.equal(state.stage(), 'photo');
@@ -498,6 +639,7 @@ test('an account restores only its scoped creator reference and ignores another 
   await fixture(async state => {
     assert.deepEqual(state.jobs, [reference]); assert.equal(state.completed.length, 1);
     assert.equal(state.completed[0].id, reference.id); assert.equal(state.creates.length, 0);
+    assert.equal(state.stage(), 'photo'); assert.equal(state.storage.has('giftportals.instant.job.v2:owner%3Aandre'), false);
     assert.ok(state.storage.has('giftportals.instant.pending.v2:anonymous'));
   }, {
     storageScope: 'owner:andre', storage: [['giftportals.instant.job.v2:owner%3Aandre', JSON.stringify(reference)], ['giftportals.instant.pending.v2:anonymous', JSON.stringify({ dedupeKey: 'other-job', requestToken: 'y'.repeat(43) })]],

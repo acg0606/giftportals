@@ -35,6 +35,8 @@ export interface InstantCreatorOptions {
   onGiftCompleted?(job: InstantJob): void;
   onExploreExample?(): void;
   storageScope?: string;
+  /** An explicit world retry may return to its delivered result instead of a new gift. */
+  resumeCompletedJob?: boolean;
   service?: InstantCreatorService;
   assistantService?: PlaceAssistantService;
 }
@@ -176,6 +178,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   let storyAudio: ReturnType<typeof mountStoryAudio> | undefined;
   let step: InstantWizardStep = 'photo', confirmingJob = false, recoveringUpload = false;
   let pendingReference: InstantJobReference | null = null;
+  let freshFromRestoredJob = false;
   const editedWords = new Set<string>();
   const assistantWords = new Map<string, string>();
   const automaticPlaceWords = new Map<string, string>();
@@ -631,11 +634,22 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     try {
       const job = await service.job(reference, events.signal);
       if (!active() || pendingReference !== reference) return;
+      if (freshFromRestoredJob && job.uploadState !== 'pending' && instantJobFinished(job) && instantGiftReady(job) && !matchingWorldRetry(job)) {
+        // Make starts a new gift after delivery. Save the old gift to the desk
+        // before retiring only its creator recovery reference.
+        options.onGiftCompleted?.(job);
+        if (!active() || pendingReference !== reference) return;
+        try { sessionStorage.removeItem(storageKey); } catch { /* A later entry can confirm this delivered job again. */ }
+        pendingReference = null; freshFromRestoredJob = false; inputs.disabled = false;
+        step = 'photo'; changeKey(); showError();
+        return;
+      }
+      freshFromRestoredJob = false;
       showJob(job); schedulePoll();
     } catch (cause) {
       if (!active() || pendingReference !== reference) return;
       if (instantJobConfirmedMissing(cause)) {
-        pendingReference = null; inputs.disabled = false;
+        pendingReference = null; freshFromRestoredJob = false; inputs.disabled = false;
         try { sessionStorage.removeItem(storageKey); } catch { /* This session can still continue. */ }
         changeKey(); if (!source) step = 'photo';
         showError(originalMessage || 'No previous creation was found. You can continue with your gift.');
@@ -972,6 +986,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   let reference: InstantJobReference | null = null;
   try { reference = readInstantJobReference(sessionStorage.getItem(storageKey)) || readInstantPendingReference(sessionStorage.getItem(pendingStorageKey)); } catch { /* Browser storage may be unavailable. */ }
   if (reference) {
+    freshFromRestoredJob = 'id' in reference && !options.resumeCompletedJob;
     pendingReference = reference; step = 'review'; inputs.disabled = true; void confirmPending();
   }
   return { destroy() { if (dead) return; dead = true; cancelWorldDiagnostics(); cancelWorldRetry(); assistantEpoch++; assistantAbort?.abort(); storyAudio?.stop(); storyAudio?.destroy(); cameraAttempt++; cameraDialog?.destroy(); cameraDialog = undefined; events.abort(); clearTimeout(pollTimer); closeModelPreview(); transformation.destroy(); releasePreview(); if (placePreviewUrl) URL.revokeObjectURL(placePreviewUrl); giftCuriosities?.destroy();giftContext.destroy(); host.replaceChildren(); } };
