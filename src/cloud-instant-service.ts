@@ -1,6 +1,7 @@
 import type { InstantCreateInput, InstantJob, InstantStatus } from './instant-creator-state';
 import type { InstantCreatorService, InstantJobReference, InstantUploadImages } from './instant-creator';
 import type { CloudImageDeclaration, CloudImageId, CloudPrepareInput, CloudPreparedJob, CloudUploadPlan, CloudWorldDiagnostics, WorldDiagnosticErrorCode, WorldDiagnosticReason } from '../shared/cloud-instant';
+import { PUBLIC_GALLERY_CONSENT_VERSION } from '../shared/instant-gallery';
 
 export function cloudCreatorOrigin(hostname: string): boolean {
   return Boolean(hostname) && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname.toLowerCase());
@@ -155,6 +156,7 @@ export function createCloudInstantService(fetcher: typeof fetch = fetch): Instan
     async create(input: InstantCreateInput, signal: AbortSignal) {
       if (!verifiedStatus) await status(signal);
       if (!verifiedStatus?.available || input.consent !== true) throw new Error('Live creation is not ready yet. Your photo stays with you.');
+      if (verifiedStatus.publicGalleryEnabled === true && (input.publicGalleryConsent !== true || input.publicGalleryConsentVersion !== PUBLIC_GALLERY_CONSENT_VERSION)) throw new Error('Confirm publication of the generated landscape and title before creating it. Your source photos and personal story stay private.');
       const data: Images = {};
       data.original = await cloudImageBytes(input.imageDataUrl);
       if (input.objectImageDataUrl) data.object = await cloudImageBytes(input.objectImageDataUrl);

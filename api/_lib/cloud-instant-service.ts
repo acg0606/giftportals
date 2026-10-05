@@ -5,6 +5,7 @@ import { selectedCuriosities } from '../../shared/gift-curiosities.js';
 import type { CloudPrepareInput, CloudInstantJobDTO, CloudPreparedJob, CloudUploadPlan, CloudWorldDiagnostics, WorldDiagnosticErrorCode } from '../../shared/cloud-instant.js';
 import type { CloudInstantRepository, CloudJob, CloudStoredAsset, CloudSafetyImage, CloudSafetyReport, CloudStageName } from './cloud-instant-types.js';
 import { cloudSouvenirPrompt, cloudWorldPrompt, WORLD_ART_PROMPT_VERSION, SOUVENIR_ART_PROMPT_VERSION } from './cloud-instant-recipes.js';
+import { PUBLIC_GALLERY_CONSENT_VERSION } from '../../shared/instant-gallery.js';
 
 export const CLOUD_MAX_BODY_BYTES = 16_384;
 export const CLOUD_MAX_IMAGE_BYTES = 6 * 1024 * 1024;
@@ -62,6 +63,11 @@ export function cloudWorldRetryEligible(job:CloudJob,now=Date.now()):boolean {
 }
 export function cloudInputDocument(input: CloudPrepareInput) {
   ensure(input && typeof input === 'object' && input.consent === true, 'GENERATION_CONSENT_REQUIRED');
+  const publicGalleryConsent = input.publicGalleryConsent !== undefined || input.publicGalleryConsentVersion !== undefined;
+  if (publicGalleryConsent) {
+    ensure(input.publicGalleryConsent === true && input.publicGalleryConsentVersion === PUBLIC_GALLERY_CONSENT_VERSION, 'PUBLIC_GALLERY_CONSENT_REQUIRED');
+    ensure(input.photoIntent === 'place', 'PUBLIC_GALLERY_LANDSCAPE_REQUIRED');
+  }
   ensure(input.photoIntent === 'place' || input.photoIntent === 'object', 'PHOTO_INTENT_INVALID');
   ensure(input.images && typeof input.images === 'object' && !Array.isArray(input.images) && input.images.original, 'IMAGE_CONTENT_INVALID');
   ensure(Object.keys(input.images).every(id => ['original','object','world'].includes(id)), 'IMAGE_CONTENT_INVALID');
@@ -84,6 +90,7 @@ export function cloudInputDocument(input: CloudPrepareInput) {
   const needsReference = input.photoIntent === 'place' && !input.images.object;
   const worldImage = Boolean(input.images.world || input.photoIntent === 'place');
   return { ...clean, photoIntent:input.photoIntent, images, needsReference,
+    ...(publicGalleryConsent ? { publicGalleryConsent:true as const, publicGalleryConsentVersion:PUBLIC_GALLERY_CONSENT_VERSION } : {}),
     objectRepresentation: input.photoIntent === 'place' ? 'souvenir-miniature' as const : input.images.object ? 'derived-object' as const : 'original-object' as const,
     ...(curiosities.length ? {curiosityIds:curiosities.map(value=>value.id)} : {}), ...(example ? {exampleId:example.id} : {}),
     generation:{tripo:{model:'v3.1-20260211',face_limit:30000,texture:true,pbr:true,texture_quality:'detailed',geometry_quality:'detailed',orientation:'align_image'},
@@ -108,6 +115,7 @@ export interface CloudServiceDependencies {
   repository:CloudInstantRepository;providers:CloudProviderAdapter;
   moderator:{configured:boolean;screen(images:CloudSafetyImage[]):Promise<CloudSafetyReport>};
   settings:()=>{enabled:boolean;providers:{tripo:boolean;worldlabs:boolean};dedupeSecret:string};now?:()=>number;
+  gallery?: { enabled(): boolean; reconcile(job: CloudJob): Promise<boolean> };
 }
 export function createCloudInstantService(deps:CloudServiceDependencies) {
   const repo=deps.repository,now=deps.now||Date.now;
@@ -118,6 +126,11 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
   const approvedInputs=async(job:CloudJob)=>{
     const images:CloudSafetyImage[]=[];for(const input of job.document.images){const asset=job.assets[input.id];ensure(asset,'IMAGE_CONTENT_INVALID');images.push({id:input.id,mime:asset.mime,sha256:asset.sha256,bytes:await verifiedBytes(asset),source:asset});}return images;
   };
+  const archivePublicLandscape = async (job: CloudJob) => {
+    if (!deps.gallery?.enabled() || !job.document.publicGalleryConsent || !['completed','partial'].includes(job.state)) return;
+    try { await deps.gallery.reconcile(job); }
+    catch { console.error(JSON.stringify({event:'cloud_public_landscape_archive_pending'})); }
+  };
   async function dto(job:CloudJob,token:string,ownerHash?:string):Promise<CloudInstantJobDTO> {
     const document=job.document,read=async(key:string)=>job.assets[key]?repo.signRead(job.assets[key]):undefined;
     const approved=document.photoSafety?.decision==='allow'&&document.photoSafety.results.length>0&&document.photoSafety.results.every(result=>result.decision==='allow'&&result.category==='ordinary');
@@ -127,15 +140,18 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     const available=approved&&cloudWorldRetryEligible(job,now())&&Boolean(ownerHash)&&await repo.worldRetryOwner(job.id,giftHash(token),ownerHash!);
     return {storage:'cloud',uploadState:job.state==='awaiting_upload'?'pending':'finalized',...(job.state==='awaiting_upload'?{uploads:await missingUploads(job)}:{}),id:job.id,token,state:['completed','partial','failed'].includes(job.state)?job.state as 'completed'|'partial'|'failed':['submission_uncertain','expired'].includes(job.state)?'failed':'processing',
       title:document.title,worldPrompt:document.worldPrompt,story:document.story,dedication:document.dedication,senderName:document.senderName,recipientName:document.recipientName,photoIntent:document.photoIntent,objectRepresentation:document.objectRepresentation,
+      ...(document.publicGalleryConsent===true && document.publicGalleryConsentVersion===PUBLIC_GALLERY_CONSENT_VERSION
+        ? {publicGalleryConsent:true as const,publicGalleryConsentVersion:PUBLIC_GALLERY_CONSENT_VERSION} : {}),
       createdAt:job.created_at,updatedAt:job.updated_at,...(job.expires_at && Number.isFinite(Date.parse(job.expires_at)) ? {mediaExpiresAt:Date.parse(job.expires_at)/1000} : {}),tripo:stage('tripo'),worldlabs:stage('worldlabs'),...(document.needsReference?{tripoReference:stage('tripo-reference')}:{ }),assets:{photoUrl:photoUrl||'',modelUrl,worldUrl,panoramaUrl,tripoInputUrl,colliderUrl},
       worldRetry:{available,attempts:document.worldRetry?.attempt||0},generation:{...document.generation,worldlabs:{...document.generation.worldlabs,...document.worldRetry?.recipeOverride,worldSemantics:validSemantics,splatQuality:document.splatQuality,colliderStatus:document.colliderStatus}},curiosities:selectedCuriosities(document.curiosityIds),};
   }
   const status=async()=>{
     const config=deps.settings();let budget:Record<string,unknown>={},canCreate=false;try{({budget,canCreate}=await repo.status());}catch{/* Unconfigured database is a closed creation gate. */}
-    return {storage:'cloud' as const,uploadMode:'signed-direct' as const,localOnly:false,available:config.enabled&&config.providers.tripo&&config.providers.worldlabs&&deps.moderator.configured&&canCreate,generationEnabled:config.enabled,providers:config.providers,maxImageBytes:CLOUD_MAX_IMAGE_BYTES,examples:INSTANT_EXAMPLES.map(value=>({...value})),budget:{...budget,canCreate},safety:{available:deps.moderator.configured,localOnly:false,protocol:'giftportals-cloud-vision-v1'}};
+    return {storage:'cloud' as const,uploadMode:'signed-direct' as const,localOnly:false,available:config.enabled&&config.providers.tripo&&config.providers.worldlabs&&deps.moderator.configured&&canCreate,generationEnabled:config.enabled,providers:config.providers,maxImageBytes:CLOUD_MAX_IMAGE_BYTES,examples:INSTANT_EXAMPLES.map(value=>({...value})),budget:{...budget,canCreate},safety:{available:deps.moderator.configured,localOnly:false,protocol:'giftportals-cloud-vision-v1'},publicGalleryEnabled:Boolean(deps.gallery?.enabled())};
   };
   const prepare=async(input:CloudPrepareInput,ownerHash:string):Promise<CloudPreparedJob>=>{
     const config=assertEnabled(),token=input.requestToken,tokenHash=giftHash(token),document=cloudInputDocument(input);
+    if (document.publicGalleryConsent) ensure(deps.gallery?.enabled(), 'PUBLIC_GALLERY_UNAVAILABLE', 503);
     const values={id:randomUUID(),tokenHash,requestKeyHash:cloudRequestHash(token,input.dedupeKey,config.dedupeSecret),inputHash:hash(JSON.stringify(document)),ownerHash,document,storageBytes:document.images.reduce((n,image)=>n+image.bytes,0)};
     let result;
     try{result=await repo.prepare(values);}
@@ -157,7 +173,10 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     const assets=inputAssets(job);for(const asset of Object.values(assets))await verifiedBytes(asset);
     return dto(await repo.finalize(job.id,giftHash(token),assets),token,ownerHash);
   };
-  const get=async(reference:{id?:string;dedupeKey?:string;token:string;ownerHash?:string})=>dto(reference.id?await repo.get(uuid(reference.id),giftHash(reference.token)):await repo.lookup(cloudRequestHash(reference.token,reference.dedupeKey,deps.settings().dedupeSecret),giftHash(reference.token)),reference.token,reference.ownerHash);
+  const get=async(reference:{id?:string;dedupeKey?:string;token:string;ownerHash?:string})=>{
+    const job=reference.id?await repo.get(uuid(reference.id),giftHash(reference.token)):await repo.lookup(cloudRequestHash(reference.token,reference.dedupeKey,deps.settings().dedupeSecret),giftHash(reference.token));
+    await archivePublicLandscape(job); return dto(job,reference.token,reference.ownerHash);
+  };
   const retryWorld=async(id:string,token:string,retryKey:string,ownerHash:string)=>{
     const config=deps.settings();ensure(config.enabled&&config.providers.worldlabs&&deps.moderator.configured,'GENERATION_PAUSED',503);
     const validated=await repo.get(uuid(id),giftHash(token));
@@ -187,7 +206,10 @@ export function createCloudInstantService(deps:CloudServiceDependencies) {
     const stages=[job.stages.tripo||(job.document.stageFailures?.tripo?{state:'failed'}:undefined),job.stages.worldlabs||(job.document.stageFailures?.worldlabs?{state:'failed'}:undefined)];if(stages.every(stage=>stage?.state==='completed'))return 'completed';
     if(stages.every(stage=>stage&&['completed','failed'].includes(stage.state)))return stages.every(stage=>stage?.state==='failed')?'failed':'partial';return 'processing';
   };
-  const save=(job:CloudJob,state=outcome(job))=>repo.update(job,{state,document:job.document,stages:job.stages,assets:job.assets,releaseLease:true});
+  const save=async(job:CloudJob,state=outcome(job))=>{
+    const updated=await repo.update(job,{state,document:job.document,stages:job.stages,assets:job.assets,releaseLease:true});
+    await archivePublicLandscape(updated); return updated;
+  };
   async function tick(workerId:string,id?:string) {
     const config=deps.settings();if(!config.enabled||!deps.moderator.configured)return {processed:false,reason:'paused'};
     let job=await repo.claim(workerId,id);if(!job)return {processed:false};let selected:CloudStageName|undefined;

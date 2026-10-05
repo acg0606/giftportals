@@ -6,9 +6,17 @@ import ts from 'typescript';
 const compilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext };
 const catalog = ts.transpileModule(await readFile(new URL('../shared/instant-examples.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText;
 const catalogUrl = `data:text/javascript;base64,${Buffer.from(catalog).toString('base64')}`;
-const compiled = ts.transpileModule(await readFile(new URL('../src/instant-creator-state.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText.replaceAll("'../shared/instant-examples'", JSON.stringify(catalogUrl));
-const { validateInstantPhoto, instantFailureMessage, instantGiftReady, instantJobFinished, instantModelReady, instantProviderLabel, instantWorldReady, readInstantJobReference, readInstantPendingReference, instantImagePlan, instantIntentExamples, instantPostcardLayout, addInstantSpark, INSTANT_EXAMPLES } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const gallery = ts.transpileModule(await readFile(new URL('../shared/instant-gallery.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText;
+const galleryUrl = `data:text/javascript;base64,${Buffer.from(gallery).toString('base64')}`;
+const { PUBLIC_GALLERY_CONSENT_VERSION } = await import(galleryUrl);
+const compiled = ts.transpileModule(await readFile(new URL('../src/instant-creator-state.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText.replaceAll("'../shared/instant-examples'", JSON.stringify(catalogUrl)).replaceAll("'../shared/instant-gallery'", JSON.stringify(galleryUrl));
+const { validateInstantPhoto, instantFailureMessage, instantGiftReady, instantJobFinished, instantModelReady, instantProviderLabel, instantWorldReady, instantPublicLandscapeJob, readInstantJobReference, readInstantPendingReference, instantImagePlan, instantIntentExamples, instantPostcardLayout, addInstantSpark, INSTANT_EXAMPLES } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const complete = { state: 'completed', tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb', worldUrl: '/place.spz' } };
+
+test('public landscape ownership requires the saved affirmative consent and current shared version', () => {
+  for (const consent of [{}, { publicGalleryConsent: true }, { publicGalleryConsentVersion: PUBLIC_GALLERY_CONSENT_VERSION }, { publicGalleryConsent: true, publicGalleryConsentVersion: 'older-version' }, { publicGalleryConsent: false, publicGalleryConsentVersion: PUBLIC_GALLERY_CONSENT_VERSION }]) assert.equal(instantPublicLandscapeJob({ ...complete, ...consent }), false);
+  assert.equal(instantPublicLandscapeJob({ ...complete, publicGalleryConsent: true, publicGalleryConsentVersion: PUBLIC_GALLERY_CONSENT_VERSION }), true);
+});
 
 test('a usable gift requires a terminal creation and a real completed keepsake; a photo or world cannot substitute for its model', () => {
   assert.equal(instantGiftReady(complete), true);

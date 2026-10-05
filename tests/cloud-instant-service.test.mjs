@@ -6,10 +6,13 @@ import test from 'node:test';
 import ts from 'typescript';
 
 // Real base64 decoding and WebCrypto hashing, synthetic HTTP only. The loader
-// erases shared/creator type imports rather than mounting the creator or DOM.
+// erases creator type imports and loads the real shared consent contract without a DOM.
 const source = await readFile(new URL('../src/cloud-instant-service.ts', import.meta.url), 'utf8');
-const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
-assert.equal(/^import\s/m.test(compiled), false);
+const compilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext };
+const gallery = ts.transpileModule(await readFile(new URL('../shared/instant-gallery.ts', import.meta.url), 'utf8'), { compilerOptions }).outputText;
+const galleryUrl = `data:text/javascript;base64,${Buffer.from(gallery).toString('base64')}`;
+const compiled = ts.transpileModule(source, { compilerOptions }).outputText.replaceAll("'../shared/instant-gallery'", JSON.stringify(galleryUrl));
+assert.equal(/from\s+['"]\.\.?\//m.test(compiled), false);
 const { cloudCreatorOrigin, cloudImageBytes, createCloudInstantService, worldDiagnosticsMessage } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const photo = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5XcAAAAASUVORK5CYII=', 'base64');
 const image = `data:image/png;base64,${photo.toString('base64')}`;
@@ -55,6 +58,16 @@ function harness(options = {}) {
 test('cloud origin selection preserves localhost and enables normal remote hosts', () => {
   for (const host of ['', 'localhost', 'LOCALHOST', '127.0.0.1', '::1', '[::1]']) assert.equal(cloudCreatorOrigin(host), false);
   for (const host of ['giftportals.vercel.app', 'gifts.example']) assert.equal(cloudCreatorOrigin(host), true);
+});
+
+test('public enabled preparation requires both publication flags before reading or uploading photos', async () => {
+  for(const fields of [{},{publicGalleryConsent:true},{publicGalleryConsent:true,publicGalleryConsentVersion:'old-version'}]) {
+    const transport=harness({status:{...status,publicGalleryEnabled:true}});
+    await assert.rejects(transport.service.create(input(fields),new AbortController().signal),/Confirm publication/);assert.deepEqual(transport.actions(),['status']);
+  }
+  const transport=harness({status:{...status,publicGalleryEnabled:true}});
+  await transport.service.create(input({publicGalleryConsent:true,publicGalleryConsentVersion:'giftportals-public-gallery-v1'}),new AbortController().signal);
+  const prepared=transport.calls.find(call=>call.action==='prepare');assert.equal(prepared.json.publicGalleryConsent,true);assert.equal(prepared.json.publicGalleryConsentVersion,'giftportals-public-gallery-v1');
 });
 
 test('world-only retry posts its original capability and exact idempotency key without new gift or image uploads', async () => {

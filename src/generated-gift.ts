@@ -10,6 +10,7 @@ import type { InstantObjectRepresentation } from '../shared/instant-examples';
 
 export interface GeneratedGiftTouchpoint extends GeneratedWorldPoint { title: string; text: string; sourceTitle?: string; sourceUrl?: string }
 export interface GeneratedGiftData {
+  publicLandscape?: boolean;
   title: string; senderName: string; recipientName?: string; dedication?: string; story: string;
   originalUrl?: string; keepsakeImageUrl?: string; modelUrl?: string; panoramaUrl?: string; worldUrl?: string;
   mediaExpiresAt?: number; touchpoints?: readonly GeneratedGiftTouchpoint[];

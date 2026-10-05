@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { createTSLoader,here } from './cloud-instant-test-loader.mjs';
 const stub=`export const cloudInstantConfigured=()=>false;export const createCloudInstantRepository=()=>({});export const createCloudProviderAdapter=()=>({});export const createRemoteCloudModerator=()=>({configured:false});`;
-const load=createTSLoader(new Map([[resolve(here,'_lib/cloud-instant-adapters.ts'),stub]]));
+const load=createTSLoader(new Map([[resolve(here,'_lib/cloud-instant-adapters.ts'),stub],[resolve(here,'instant-gallery.ts'),`export const instantGalleryService=()=>({enabled:()=>false,reconcile:async()=>false});`]]));
 const {createCloudInstantHandler,cloudInstantRequestFailureMetadata}=await load(resolve(here,'instant-cloud.ts'));
 const {AppError}=await load(resolve(here,'_lib/rules.ts'));
 const {createCloudTickHandler}=await load(resolve(here,'instant-cloud-tick.ts'));

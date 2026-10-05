@@ -5,6 +5,8 @@ export interface CloudPrepareInput {
   title: string; worldPrompt: string; story: string; dedication: string; senderName: string; recipientName: string;
   photoIntent: 'object' | 'place'; objectImageRole?: 'miniature-reference'; curiosityIds?: string[]; exampleId?: string;
   dedupeKey: string; requestToken: string; consent: true;
+  publicGalleryConsent?: true;
+  publicGalleryConsentVersion?: typeof import('./instant-gallery.js').PUBLIC_GALLERY_CONSENT_VERSION;
   images: { original: CloudImageDeclaration; object?: CloudImageDeclaration; world?: CloudImageDeclaration };
 }
 export interface CloudUploadPlan extends CloudImageDeclaration { id: CloudImageId; url: string; method: 'PUT'; headers: { 'Content-Type': string } }
@@ -18,6 +20,8 @@ export interface CloudInstantJobDTO {
   title: string; worldPrompt: string; story: string; dedication: string; senderName: string; recipientName: string;
   photoIntent: 'object' | 'place'; objectRepresentation: 'original-object' | 'derived-object' | 'souvenir-miniature';
   createdAt: string; updatedAt: string; tripo: CloudStageDTO; worldlabs: CloudStageDTO; tripoReference?: CloudStageDTO;
+  publicGalleryConsent?: true;
+  publicGalleryConsentVersion?: typeof import('./instant-gallery.js').PUBLIC_GALLERY_CONSENT_VERSION;
   mediaExpiresAt?: number;
   worldRetry?: { available: boolean; attempts: number };
   assets: { photoUrl: string; modelUrl?: string; worldUrl?: string; panoramaUrl?: string; tripoInputUrl?: string; colliderUrl?: string };

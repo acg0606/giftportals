@@ -149,6 +149,7 @@ async function fixture(action, settings = {}) {
   state.submit = () => state.find('[data-instant-form]').dispatchEvent(new Event('submit', { cancelable: true }));
   state.upload = (file, place = false) => { const input = state.find(place ? '[data-instant-place-file]' : '[data-instant-upload-file]'); input.files = [file]; input.dispatchEvent(new Event('change')); };
   state.consent = () => { const input = state.field('consent'); input.checked = true; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
+  state.publicConsent = () => { const input = state.field('publicGalleryConsent'); input.checked = true; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
   state.photoConsent = (checked = true) => { const input = state.field('photoAnalysisConsent'); input.checked = checked; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
   state.next = () => state.find('[data-instant-continue]').click();
   state.stage = () => state.host.dataset.instantStep;
@@ -179,6 +180,51 @@ test('actual wizard keeps one card active; selecting a photo stays put; Enter re
     assert.equal(state.completed[0].id, state.job.id); assert.equal(state.opened.length, 0);
     assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
   });
+});
+
+test('enabled public landscapes require separate reviewed publication consent and send both versioned flags', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'],'coast.jpg',{type:'image/jpeg'}));state.next();state.next();state.next();
+    assert.equal(state.stage(),'review');assert.equal(state.find('[data-public-gallery-consent]').hidden,false);assert.equal(state.field('publicGalleryConsent').checked,false);
+    assert.match(state.host.innerHTML,/generated landscape and its title/);assert.match(state.host.innerHTML,/original source photos, names and personal story remain private/);
+    state.consent();state.submit();await flush();assert.equal(state.creates.length,0);assert.match(state.find('[data-instant-error]').textContent,/Confirm publication/);
+    state.publicConsent();state.submit();await flush();assert.equal(state.creates.length,1);assert.equal(state.creates[0].publicGalleryConsent,true);assert.equal(state.creates[0].publicGalleryConsentVersion,'giftportals-public-gallery-v1');
+  },{status:{publicGalleryEnabled:true}});
+});
+
+test('disabled publication keeps private creation unchanged and edits invalidate previously reviewed public consent', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'],'private.jpg',{type:'image/jpeg'}));state.next();state.next();state.next();
+    assert.equal(state.find('[data-public-gallery-consent]').hidden,true);assert.equal(state.field('publicGalleryConsent').disabled,true);
+    state.consent();state.submit();await flush();assert.equal(state.creates.length,1);assert.equal(Object.hasOwn(state.creates[0],'publicGalleryConsent'),false);assert.equal(Object.hasOwn(state.creates[0],'publicGalleryConsentVersion'),false);
+  });
+  await fixture(async state => {
+    state.upload(new File(['pixels'],'public.jpg',{type:'image/jpeg'}));state.next();state.next();state.next();state.consent();state.publicConsent();
+    state.edit('title','A revised public title');assert.equal(state.field('publicGalleryConsent').checked,false);assert.equal(state.field('consent').checked,false);state.submit();await flush();assert.equal(state.creates.length,0);
+  },{status:{publicGalleryEnabled:true}});
+});
+
+test('restored public consented results show only the landscape and failed worlds never fall back to the paid miniature', async () => {
+  const consent={publicGalleryConsent:true,publicGalleryConsentVersion:'giftportals-public-gallery-v1'},token='owner-capability-abcdefghijklmnopqrstuv',reference=JSON.stringify({id:'actual-job',token});
+  await fixture(async state=>{
+    assert.equal(state.find('[data-instant-model-preview]').hidden,true);assert.equal(state.find('[data-instant-transformation]').hidden,true);assert.equal(state.find('[data-instant-provider="tripo"]').hidden,true);
+    assert.equal(state.find('[data-instant-open]').hidden,false);assert.match(state.find('[data-instant-open]').innerHTML,/Explore your landscape/);
+    state.find('[data-instant-open]').click();assert.equal(state.opened.length,1);assert.equal(state.modelVisibility.includes(true),false);
+  },{resumeCompletedJob:true,status:{publicGalleryEnabled:true},storage:[['giftportals.instant.job.v2:anonymous',reference]],jobHandler:(_ref,state)=>({...state.job,token,...consent,tripo:{state:'failed'},state:'partial'})});
+  await fixture(async state=>{
+    assert.equal(state.find('[data-instant-model-preview]').hidden,true);assert.equal(state.find('[data-instant-open]').hidden,true);assert.match(state.find('[data-instant-job-status]').textContent,/landscape could not be completed/);assert.equal(state.modelVisibility.includes(true),false);
+  },{resumeCompletedJob:true,status:{publicGalleryEnabled:true},storage:[['giftportals.instant.job.v2:anonymous',reference]],jobHandler:(_ref,state)=>({...state.job,token,...consent,worldlabs:{state:'failed'},state:'partial'})});
+  await fixture(async state=>{
+    assert.equal(state.stage(),'photo');assert.equal(state.find('[data-instant-progress]').hidden,true);
+  },{status:{publicGalleryEnabled:true},storage:[['giftportals.instant.job.v2:anonymous',reference]],jobHandler:(_ref,state)=>({...state.job,token,...consent,tripo:{state:'failed'},state:'partial'})});
+});
+
+test('an old nonconsented restored result keeps its private miniature flow even when new public creation is enabled', async () => {
+  const token='owner-capability-abcdefghijklmnopqrstuv';
+  await fixture(async state=>{
+    assert.equal(state.find('[data-instant-model-preview]').hidden,false);assert.equal(state.find('[data-instant-transformation]').hidden,false);assert.match(state.find('[data-instant-open]').innerHTML,/Open your gift/);
+    state.find('[data-instant-open]').click();assert.equal(state.opened.length,1);assert.equal(state.opened[0].publicGalleryConsent,undefined);
+  },{resumeCompletedJob:true,status:{publicGalleryEnabled:true},storage:[['giftportals.instant.job.v2:anonymous',JSON.stringify({id:'actual-job',token})]],jobHandler:(_ref,state)=>({...state.job,token})});
 });
 
 test('a fresh Make entry retires only delivered creator recovery and keeps old and new gifts in the library', async () => {

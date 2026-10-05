@@ -1,4 +1,4 @@
-import { INSTANT_EXAMPLES, instantFailureMessage, instantGiftReady, instantImagePlan, instantIntentExamples, instantJobFinished, instantModelReady, instantProviderLabel, instantWorldReady, readInstantJobReference, readInstantPendingReference, validateInstantPhoto, type InstantCreateInput, type InstantExample, type InstantJob, type InstantPhotoIntent, type InstantStatus } from './instant-creator-state';
+import { INSTANT_EXAMPLES, instantFailureMessage, instantGiftReady, instantImagePlan, instantIntentExamples, instantJobFinished, instantModelReady, instantProviderLabel, instantPublicLandscapeJob, instantWorldReady, readInstantJobReference, readInstantPendingReference, validateInstantPhoto, type InstantCreateInput, type InstantExample, type InstantJob, type InstantPhotoIntent, type InstantStatus } from './instant-creator-state';
 import { mountGiftTransformation } from './gift-transformation';
 import { giftTransformationState } from './gift-transformation-state';
 import { mountGiftContext } from './gift-context';
@@ -15,6 +15,7 @@ import { worldDiagnosticsMessage } from './cloud-instant-service';
 import { instantJobStorageKey, instantPendingStorageKey } from './local-keepsakes';
 import { assistantSourceUrl, assistantWarningCopy, placeAssistantService, type PlaceAssistantService } from './place-assistant-client';
 import type { PlaceAssistantInput, PlaceAssistantStatus, PlaceAssistantSuggestion } from '../shared/place-assistant';
+import { PUBLIC_GALLERY_CONSENT_VERSION } from '../shared/instant-gallery';
 
 export type { InstantCreateInput, InstantJob, InstantStatus } from './instant-creator-state';
 export type InstantJobReference = { id: string; token: string } | { dedupeKey: string; token: string };
@@ -219,7 +220,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
               <article class="instant-review-photo"><img data-instant-review-photo alt="The original photo for this gift"/><img data-instant-review-miniature alt="Approved miniature reference for the 3D souvenir" hidden/><div><span data-instant-review-intent></span><strong data-instant-review-source></strong><small data-instant-review-representation></small></div><button type="button" data-instant-edit-step="photo">Edit photo</button></article>
               <article class="instant-review-block"><div><h3>The place inside</h3><button type="button" data-instant-edit-step="place">Edit place</button></div><p data-instant-review-world></p><div class="instant-review-reference" data-instant-review-reference hidden><img data-instant-review-place-photo alt="The image guiding the world"/><span data-instant-review-place-name></span><button type="button" data-instant-review-place-remove hidden>Remove</button></div><small data-instant-review-location></small></article>
               <article class="instant-review-block"><div><h3>Your words</h3><button type="button" data-instant-edit-step="story">Edit story</button></div><dl><dt>Gift name</dt><dd data-instant-review-title></dd><dt>From / To</dt><dd data-instant-review-names></dd><dt>Note on the gift</dt><dd data-instant-review-dedication></dd><dt>Story</dt><dd data-instant-review-story></dd></dl><div data-instant-review-curiosities hidden></div></article>
-              <label class="instant-consent"><input type="checkbox" name="consent" required/><span>I can use these photos and send the approved photos and my place description to Tripo and World Labs to create this gift.</span></label><small class="instant-hint">Intimate images and adult products cannot be used. Every photo is screened before 3D generation.${cloudCreator() ? ' Private photos and generated gifts expire after 7 days. Anyone with the gift link can open it during that time.' : ''}</small>
+              <label class="instant-consent"><input type="checkbox" name="consent" required/><span>I can use these photos and send the approved photos and my place description to Tripo and World Labs to create this gift.</span></label><label class="instant-consent" data-public-gallery-consent hidden><input type="checkbox" name="publicGalleryConsent" disabled/><span>Publish my generated landscape and its title in the public GiftPortals gallery. Anyone can explore them without an account. My original source photos, names and personal story remain private.</span></label><small class="instant-hint" data-instant-privacy>Intimate images and adult products cannot be used. Every photo is screened before 3D generation.${cloudCreator() ? ' Private photos and generated gifts expire after 7 days. Anyone with the gift link can open it during that time.' : ''}</small>
             </section>
           </fieldset>
           <p class="instant-error" data-instant-error role="alert" hidden></p>
@@ -287,6 +288,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   function changeKey() {
     if (pendingReference) return;
     dedupeKey = ''; requestToken = ''; (field('consent') as HTMLInputElement).checked = false;
+    (field('publicGalleryConsent') as HTMLInputElement).checked = false;
     try { sessionStorage.removeItem(pendingStorageKey); } catch { /* Open editing remains available. */ }
     // Optional controllers finish their own selection/context mutation after
     // invoking callbacks. Review reads the final values at the next microtask.
@@ -425,6 +427,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   function reviewGift() {
     const canReview = Boolean(source);
     host.querySelectorAll<HTMLElement>('.instant-review-photo,.instant-review-block,.instant-review .instant-consent,.instant-review > .instant-hint').forEach(element => element.hidden = !canReview);
+    publicationConsent();
     text('#instant-review-heading', pendingReference && !source ? 'Checking your last gift.' : 'Ready to make it real?');
     text('.instant-review > .instant-card-copy', pendingReference && !source ? 'Your previous creation may still be running. Check it before starting another gift.' : 'Check what will go into your gift. Nothing is created until you choose below.');
     const chosenPhoto = host.querySelector<HTMLImageElement>('[data-instant-photo]')!;
@@ -502,6 +505,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     goToStep(instantWizardDestination(step, 1, Boolean(source)));
   }
   function availability() {
+    publicationConsent();
     const pause = creationPause;
     create.disabled = wizardBusy() || readingSource || statusChecking || step !== 'review' || !source || !status?.available || Boolean(pause) || photoDecision==='block' || photoDecision==='review';
     text('[data-instant-availability]', pendingReference ? 'Confirming the last creation before starting another gift.' : pause || (statusChecking ? 'Checking availability…' : photoDecision==='block'||photoDecision==='review' ? 'Choose another photo before creating your gift.' : status?.safety && !status.safety.available ? 'Photo checking is unavailable. Creation will wait until it is ready.' : status?.available ? 'Photos are screened before Tripo + World Labs. No account needed.' : 'Live creation is currently unavailable.'));
@@ -509,6 +513,13 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     host.querySelector<HTMLButtonElement>('[data-instant-status-retry]')!.disabled = statusChecking;
     unavailable.hidden = Boolean(status?.available && !pause) || Boolean(currentJob);
     renderWizard();
+  }
+  function publicationConsent() {
+    const enabled = status?.publicGalleryEnabled === true, checkbox = field('publicGalleryConsent') as HTMLInputElement;
+    host.querySelector<HTMLElement>('[data-public-gallery-consent]')!.hidden = !enabled || !source;
+    checkbox.disabled = !enabled; checkbox.required = enabled;
+    if (!enabled) checkbox.checked = false;
+    text('[data-instant-privacy]', 'Intimate images and adult products cannot be used. Every photo is screened before 3D generation.' + (enabled ? ' Only the generated landscape and title are published. Original source photos, names and personal story stay private.' : cloudCreator() ? ' Private photos and generated gifts expire after 7 days. Anyone with the gift link can open it during that time.' : ''));
   }
   function updateExamples() {
     const list = host.querySelector<HTMLElement>('[data-instant-examples]')!;
@@ -634,7 +645,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     try {
       const job = await service.job(reference, events.signal);
       if (!active() || pendingReference !== reference) return;
-      if (freshFromRestoredJob && job.uploadState !== 'pending' && instantJobFinished(job) && instantGiftReady(job) && !matchingWorldRetry(job)) {
+      if (freshFromRestoredJob && job.uploadState !== 'pending' && instantJobFinished(job) && (instantPublicLandscapeJob(job) ? instantWorldReady(job) : instantGiftReady(job)) && !matchingWorldRetry(job)) {
         // Make starts a new gift after delivery. Save the old gift to the desk
         // before retiring only its creator recovery reference.
         options.onGiftCompleted?.(job);
@@ -754,36 +765,42 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     updateWorldRetry(job);
     const uploadPending = job.uploadState === 'pending';
     host.querySelector<HTMLElement>('[data-instant-upload-recovery]')!.hidden = !uploadPending;
-    host.querySelector<HTMLElement>('[data-instant-transformation]')!.hidden = uploadPending;
+    const publicLandscape = instantPublicLandscapeJob(job), worldReady = instantWorldReady(job);
+    host.querySelector<HTMLElement>('[data-instant-transformation]')!.hidden = uploadPending || publicLandscape;
     host.querySelector<HTMLElement>('[data-instant-provider-progress]')!.hidden = uploadPending;
     for (const id of ['original', 'object', 'world'] as const) {
       host.querySelector<HTMLElement>(`[data-instant-resume-field="${id}"]`)!.hidden = !uploadPending || !job.uploads?.some(upload => upload.id === id);
       if (!uploadPending) host.querySelector<HTMLInputElement>(`[data-instant-resume-file="${id}"]`)!.value = '';
     }
-    text('#instant-progress-heading', uploadPending ? 'Finish uploading your photos.' : job.state === 'failed' ? 'This gift needs attention.' : instantGiftReady(job) && !instantWorldReady(job) ? 'Your keepsake is ready.' : 'A little world, just for them.');
+    text('#instant-progress-heading', uploadPending ? 'Finish uploading your photos.' : publicLandscape ? worldReady ? 'Your landscape is ready.' : job.worldlabs.state === 'failed' ? 'This landscape needs attention.' : 'Creating your landscape.' : job.state === 'failed' ? 'This gift needs attention.' : instantGiftReady(job) && !worldReady ? 'Your keepsake is ready.' : 'A little world, just for them.');
     host.querySelector<HTMLButtonElement>('[data-instant-resume-upload]')!.disabled = recoveringUpload || !service.resumeUpload;
-    const modelReady = instantModelReady(job), visual = giftTransformationState(job);
+    const modelReady = !publicLandscape && instantModelReady(job), visual = giftTransformationState(job);
     progress.dataset.jobState = job.state;
     transformation.update(visual);
     host.querySelector<HTMLElement>('[data-instant-model-preview]')!.hidden = !modelReady;
     if (!modelReady && previewOpen) closeModelPreview();
     for (const provider of ['tripo', 'worldlabs'] as const) {
+      host.querySelector<HTMLElement>(`[data-instant-provider="${provider}"]`)!.hidden = uploadPending || publicLandscape && provider === 'tripo';
       // Older failed jobs may lack stage failures. An unstarted provider cannot
       // still be waiting when the gift has already reached its terminal state.
       const providerState = job.state === 'failed' && job[provider].state === 'pending' && !job[provider].taskId ? 'failed' : job[provider].state;
       host.querySelector<HTMLElement>(`[data-instant-provider="${provider}"]`)!.dataset.state = providerState;
       text(`[data-instant-${provider}-label]`, instantProviderLabel(provider, providerState, provider === 'tripo' ? job.tripoReference?.state : undefined, job[provider].errorCode || (provider === 'tripo' ? job.tripoReference?.errorCode : undefined)));
     }
-    const ready = !uploadPending && instantGiftReady(job), finished = !uploadPending && instantJobFinished(job);
-    const worldReady = instantWorldReady(job), open = host.querySelector<HTMLButtonElement>('[data-instant-open]')!;
+    const ready = !uploadPending && (publicLandscape ? worldReady : instantGiftReady(job)), finished = !uploadPending && instantJobFinished(job);
+    const open = host.querySelector<HTMLButtonElement>('[data-instant-open]')!;
     open.hidden = !ready;
-    open.innerHTML = `${giftIcon}${ready && !worldReady ? 'Open your keepsake' : 'Open your gift'} <span aria-hidden="true">↗</span>`;
+    open.innerHTML = `${giftIcon}${publicLandscape ? 'Explore your landscape' : ready && !worldReady ? 'Open your keepsake' : 'Open your gift'} <span aria-hidden="true">↗</span>`;
     host.querySelector<HTMLButtonElement>('[data-instant-edit]')!.hidden = !finished;
     host.querySelector<HTMLButtonElement>('[data-instant-recheck]')!.hidden = true;
     host.querySelector<HTMLButtonElement>('[data-instant-world-diagnostics]')!.hidden = !canCheckWorld(job);
     const worldStillCreating = !finished && (job.worldlabs.state === 'pending' || job.worldlabs.state === 'processing');
     text('[data-instant-job-status]', uploadPending ? 'Generation will start after your photos finish uploading.' : ready ? worldReady ? 'Your photo became a keepsake. Your story has a world to live in.' : worldStillCreating ? 'Your 3D keepsake is ready. Your world is being created again; your photo and story remain available.' : 'Your 3D keepsake is ready. The world is unavailable; your photo and story remain here.' : instantFailureMessage(job) || (visual.phase === 'interrupted' ? worldStillCreating ? 'The keepsake needs attention. Your little world is still being created.' : 'This gift is unfinished. Your photo is safe; one or more parts need attention.' : 'Both parts are being made from your photo and your place.'));
     text('[data-instant-job-note]', uploadPending ? 'Your photos are never saved in browser storage. This browser keeps only the reference to your gift.' : ready ? worldReady ? 'Open it, turn the keepsake, then step into the place inside.' : 'Open it, turn the keepsake, and read your story.' : finished ? 'No automatic retry is started. You can keep these details and choose a different gift.' : 'Creating a world can take a few minutes. Returning to this creator in this browser restores the job.');
+    if (publicLandscape && !uploadPending) {
+      text('[data-instant-job-status]', worldReady ? 'Your generated landscape is ready to explore.' : job.worldlabs.state === 'failed' ? 'The landscape could not be completed. Your original photos and other paid results remain private and kept.' : 'Creating your generated landscape. Your source photos and personal words stay private.');
+      text('[data-instant-job-note]', worldReady ? 'Only the generated landscape and title will appear in the public gallery. Open the world and look around.' : finished ? 'No automatic retry is started. Check world status for more information.' : 'Returning to this creator restores the same paid creation. No replacement generation is started.');
+    }
     if (finished || uploadPending) { clearTimeout(pollTimer); pollTimer = undefined; }
     const modelKey = `${job.id}:${job.assets.modelUrl}`;
     if (modelReady && !previewOpen && attemptedModel !== modelKey) { attemptedModel = modelKey; void openModelPreview(); }
@@ -907,7 +924,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
   form.addEventListener('input', event => {
     if (wizardBusy()) return;
     const input = event.target;
-    if (input instanceof HTMLInputElement && input.name === 'consent') { input.setCustomValidity(''); showError(); return; }
+    if (input instanceof HTMLInputElement && ['consent', 'publicGalleryConsent'].includes(input.name)) { input.setCustomValidity(''); showError(); return; }
     if (input instanceof HTMLInputElement && input.name === 'photoAnalysisConsent') { if (!input.checked) cancelAssistant(); assistantAvailability(); return; }
     if (input instanceof HTMLInputElement && input.name === 'assistantPlace') { confirmedPlaceLabel = ''; cancelAssistant(); return; }
     if (input instanceof HTMLTextAreaElement && input.getAttribute('data-assistant-fact-text') !== null) { curiosityEdits.set(input.getAttribute('data-assistant-fact-text')!, input.value); return; }
@@ -927,9 +944,10 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
     if (textIssues.title) { goToStep('story'); host.querySelector<HTMLDetailsElement>('.instant-personal')!.open = true; field('title').reportValidity(); return; }
     for (const name of ['senderName', 'recipientName', 'dedication', 'story']) if (!field(name).checkValidity()) { goToStep('story'); host.querySelector<HTMLDetailsElement>('.instant-personal')!.open = true; field(name).reportValidity(); return; }
     if (!instantWizardCanCreate(step, Boolean(source), (field('consent') as HTMLInputElement).checked)) { showError('Confirm you can use these photos before creating your gift.'); field('consent').reportValidity(); return; }
+    if (status.publicGalleryEnabled === true && !(field('publicGalleryConsent') as HTMLInputElement).checked) { showError('Confirm publication of the generated landscape and title before creating it. Your source photos and personal story stay private.'); field('publicGalleryConsent').reportValidity(); return; }
     if (!form.reportValidity()) return;
     const chosen = source, epoch = sourceEpoch, photoIntent = intent;
-    const snapshot = { title: field('title').value.trim(), worldPrompt: field('worldPrompt').value.trim(), senderName: field('senderName').value.trim(), recipientName: field('recipientName').value.trim(), story: field('story').value.trim(), dedication: field('dedication').value.trim(),curiosityIds:giftCuriosities?.selectedIds()||[] };
+    const snapshot = { title: field('title').value.trim(), worldPrompt: field('worldPrompt').value.trim(), senderName: field('senderName').value.trim(), recipientName: field('recipientName').value.trim(), story: field('story').value.trim(), dedication: field('dedication').value.trim(),curiosityIds:giftCuriosities?.selectedIds()||[], ...(status.publicGalleryEnabled === true ? { publicGalleryConsent: true as const, publicGalleryConsentVersion: PUBLIC_GALLERY_CONSENT_VERSION } : {}) };
     if (!dedupeKey) { dedupeKey = `gift-${crypto.randomUUID()}`; requestToken = newRequestToken(); }
     try { sessionStorage.setItem(pendingStorageKey, JSON.stringify({ dedupeKey, requestToken })); } catch { /* In-place retries retain their key in memory. */ }
     cancelAssistant(); submitting = true; readingSource = true; inputs.disabled = true; storyAudio?.stop(); showError(); availability(); create.innerHTML = `${cameraIcon}Preparing your photo…`;
@@ -968,7 +986,7 @@ export function mountInstantCreator(host: HTMLElement, options: InstantCreatorOp
       finally { if (active()) { submitting = false; readingSource = false; inputs.disabled = Boolean(pendingReference); create.innerHTML = makeGiftLabel; availability(); } }
     })();
   }, { signal: events.signal });
-  on('[data-instant-open]', () => { if (currentJob && instantGiftReady(currentJob)) options.onGiftReady(currentJob); });
+  on('[data-instant-open]', () => { if (currentJob && (instantPublicLandscapeJob(currentJob) ? instantWorldReady(currentJob) : instantGiftReady(currentJob))) options.onGiftReady(currentJob); });
   on('[data-instant-recheck]', () => { host.querySelector<HTMLButtonElement>('[data-instant-recheck]')!.hidden = true; void poll(); });
   on('[data-instant-world-diagnostics]', () => void checkWorldStatus());
   on('[data-instant-world-retry-button]', () => void retryWorld());

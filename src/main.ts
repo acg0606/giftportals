@@ -28,7 +28,7 @@ import { mountRioCreator } from './rio-creator';
 import { decodeRioCreatorDraft, newRioCreatorDraft, type RioCreatorDraft } from './rio-creator-state';
 import { mountInstantCreator, instantCreatorService, type InstantJob } from './instant-creator';
 import { instantWorldRetryStorageKey, readInstantWorldRetryReference } from './instant-wizard';
-import { instantGiftReady, instantWorldReady, readInstantJobReference } from './instant-creator-state';
+import { instantGiftReady, instantPublicLandscapeJob, instantWorldReady, readInstantJobReference } from './instant-creator-state';
 import { mountGeneratedGift, type GeneratedGiftData } from './generated-gift';
 import { giftIcon } from './gift-icon';
 import { createGiftWalkScenes, readGiftWorldSemantics } from './gift-walk-catalog';
@@ -36,11 +36,14 @@ import { collectionIcon } from './collection-icon';
 import { createdSessionKeepsake } from './local-keepsakes';
 import { clearKeepsakeScope, forgetKeepsakeReference, instantJobStorageKey, readKeepsakeJob, rememberCreatedKeepsake, storedKeepsakeReferences, type KeepsakeStorage } from './keepsake-library';
 import type { CollectionRoomItem } from './collection-types';
+import { publicGiftPath, readPublicGallery, readPublicGift } from './public-gallery';
+import { mountPublicLandscapeGallery, publicLandscapeExamples } from './public-landscapes';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let world: WorldDTO | null = null;
 let publicMemories: MemoryDTO[] = fictionalMemories;
 let cloudStatus: StatusDTO | null = null;
+let publicGalleryEnabled = false;
 let staticDemo = false;
 let activePersona: 'sender' | 'recipient' = 'sender';
 let cleanup: (() => void) | null = null;
@@ -146,7 +149,7 @@ function notice() {
 }
 function header(active = '') {
   const href = (path: string) => `#/${scopedPath(path)}`;
-  return `<header class="site-header"><a class="brand" href="#/home" aria-label="GiftPortals home"><img class="brand-image" src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a class="${active === 'gallery' ? 'active' : ''}" href="${href('collection')}">Explore</a><a class="${active === 'world' ? 'active' : ''}" href="${href('world')}">My world</a><a class="${active === 'atlas' ? 'active' : ''}" href="${href('atlas')}">Atlas</a></nav><div class="header-actions">${session() ? `<button class="avatar-button" data-account title="Account and sign out">${esc(session()!.user.displayName.slice(0, 1))}</button>` : `<button class="quiet-button login-trigger" data-auth>Sign in</button>`}<button class="button button-small" data-create>${giftIcon}Make a gift</button></div></header>`;
+  return `<header class="site-header"><a class="brand" href="#/home" aria-label="GiftPortals home"><img class="brand-image" src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a class="${active === 'gallery' ? 'active' : ''}" href="${href('collection')}">Explore</a>${publicGalleryEnabled ? '' : `<a class="${active === 'world' ? 'active' : ''}" href="${href('world')}">My world</a><a class="${active === 'atlas' ? 'active' : ''}" href="${href('atlas')}">Atlas</a>`}</nav><div class="header-actions">${publicGalleryEnabled ? '' : session() ? `<button class="avatar-button" data-account title="Account and sign out">${esc(session()!.user.displayName.slice(0, 1))}</button>` : `<button class="quiet-button login-trigger" data-auth>Sign in</button>`}<button class="button button-small" data-create>${giftIcon}${publicGalleryEnabled ? 'Create a landscape' : 'Make a gift'}</button></div></header>`;
 }
 function footer() { return '<footer class="site-footer"><a class="brand footer-brand" href="#/home">GiftPortals</a><span>People. Places. Stories. Always with you.</span><span>Version 10.3.3 · Tripothon S1</span><a href="#/about">About & credits</a></footer>'; }
 function bindCommon() {
@@ -163,7 +166,7 @@ function memoryCard(memory: MemoryDTO, index = 0) {
   return `<button class="memory-card card-${index % 3}" data-memory="${esc(memory.id)}"><div class="memory-card-art">${photo(memory) ? `<img src="${esc(photo(memory)!.url)}" alt="Original media for ${esc(memory.title)}" loading="lazy" />` : miniArt(index % 3 === 0 ? 'cup' : index % 3 === 1 ? 'shell' : 'bird')}<span class="card-postmark">${sharedPlace ? esc(memory.location.label.split(' · ')[0]) : 'Location not shared'}</span><span class="model-pill">${hasModel ? '3D OBJECT' : 'ILLUSTRATED STORY'}</span></div><div class="memory-card-copy"><span class="eyebrow">${esc(memory.ownerName)} ${sharedPlace ? ' / ' + esc(date(memory.location.experiencedAt)) : ''}</span><h3>${esc(memory.title)}</h3><span class="text-link">Explore memory <span>${icon('arrow')}</span></span></div></button>`;
 }
 function home() {
-  app.innerHTML = `<main class="v10-welcome" aria-labelledby="welcome-title"><img class="v10-welcome-art" src="/assets/v10/hero.jpg" alt="A travel suitcase holding a miniature coastal world, overlooking a quiet bay" fetchpriority="high"/><header class="v10-home-header"><a class="v10-brand" href="#/home" aria-label="GiftPortals home"><img src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a href="#/collection">Explore</a><button type="button" data-create>Create</button>${session() ? '<button type="button" data-account>Account</button>' : '<button type="button" data-auth>Sign in</button>'}</nav></header><div class="v10-welcome-content"><h1 id="welcome-title">Turn your<br/>travels into<br/>living memories.</h1><p>A small gift. A place they can open.</p><button class="v10-primary" type="button" data-create>${giftIcon}<span>Make a gift</span><span aria-hidden="true">→</span></button><a class="v10-explore" href="#/collection">${collectionIcon}<span>Explore keepsakes</span></a></div><p class="v10-home-motto">People&nbsp; Places&nbsp; Stories&nbsp; Always with you</p><a class="v10-home-about" href="#/about">About GiftPortals</a></main>`;
+  app.innerHTML = `<main class="v10-welcome" aria-labelledby="welcome-title"><img class="v10-welcome-art" src="${publicGalleryEnabled ? '/demo/v23/paris-approach-panorama.png' : '/assets/v10/hero.jpg'}" alt="${publicGalleryEnabled ? 'A generated landscape in the Paris tower gardens' : 'A travel suitcase holding a miniature coastal world, overlooking a quiet bay'}" fetchpriority="high"/><header class="v10-home-header"><a class="v10-brand" href="#/home" aria-label="GiftPortals home"><img src="/assets/portal-dusk/brand-mark.png" alt=""/><span>GiftPortals</span></a><nav aria-label="Main navigation"><a href="#/collection">Explore</a><button type="button" data-create>Create</button>${publicGalleryEnabled ? '' : session() ? '<button type="button" data-account>Account</button>' : '<button type="button" data-auth>Sign in</button>'}</nav></header><div class="v10-welcome-content"><h1 id="welcome-title">Turn your<br/>travels into<br/>living memories.</h1><p>${publicGalleryEnabled ? 'A landscape to share. A world to explore.' : 'A small gift. A place they can open.'}</p><button class="v10-primary" type="button" data-create>${giftIcon}<span>${publicGalleryEnabled ? 'Create a landscape' : 'Make a gift'}</span><span aria-hidden="true">→</span></button><a class="v10-explore" href="#/collection">${collectionIcon}<span>${publicGalleryEnabled ? 'Explore landscapes' : 'Explore keepsakes'}</span></a></div><p class="v10-home-motto">People&nbsp; Places&nbsp; Stories&nbsp; Always with you</p><a class="v10-home-about" href="#/about">About GiftPortals</a></main>`;
   app.querySelector<HTMLImageElement>('.v10-welcome-art')?.addEventListener('error', event => {
     (event.currentTarget as HTMLImageElement).src = '/assets/portal-dusk/welcome-bg.webp';
   }, { once: true });
@@ -210,9 +213,9 @@ function instantCreatorPage(epoch: number) {
     onHome: () => navigate('home'),
     onGiftCompleted: job => { if (epoch === renderId && generation === sessionGeneration()) rememberKeepsake(job); },
     onGiftReady: (job: InstantJob) => {
-      if (epoch !== renderId || generation !== sessionGeneration() || !instantGiftReady(job)) return;
+      if (epoch !== renderId || generation !== sessionGeneration() || !(instantPublicLandscapeJob(job) ? instantWorldReady(job) : instantGiftReady(job))) return;
       rememberKeepsake(job);
-      navigate(`generated/${encodeURIComponent(job.id)}?key=${encodeURIComponent(job.token)}`);
+      navigate(`generated/${encodeURIComponent(job.id)}?key=${encodeURIComponent(job.token)}${instantPublicLandscapeJob(job) ? '&landscape=1&view=world' : ''}`);
     },
     onExploreExample: () => navigate('generated/rio-example'),
   });
@@ -272,11 +275,16 @@ async function readGeneratedGift(id: string, signal: AbortSignal): Promise<Gener
   if (Object.hasOwn(examples, id)) {
     const response = await fetch(examples[id], { signal });
     if (!response.ok) throw new Error('This example could not open. Return to your collection and try again.');
-    return await response.json() as GeneratedGiftData;
+    const gift = await response.json() as GeneratedGiftData;
+    if (routeParams().get('landscape') === '1') return { title: gift.title, story: '', senderName: '', worldUrl: gift.worldUrl, panoramaUrl: gift.panoramaUrl, collisionUrl: gift.collisionUrl || gift.colliderUrl, worldSemantics: gift.worldSemantics, initialYaw: gift.initialYaw, initialPitch: gift.initialPitch, photoIntent: 'place', publicLandscape: true };
+    return gift;
   }
+  if (routeParams().get('public') === '1') return readPublicGift(id, signal);
   const job = await readKeepsakeJob({ id, token: routeParams().get('key') || '' }, signal, location.hostname);
-  if (!instantGiftReady(job)) throw new Error('Your gift is still taking shape. Reopen the creator to check its progress.');
   const worldReady = instantWorldReady(job);
+  if (routeParams().get('landscape') === '1' && instantPublicLandscapeJob(job)) return { title: job.title, story: '', senderName: '', publicLandscape: true, photoIntent: 'place', mediaExpiresAt: job.mediaExpiresAt,
+    ...(worldReady ? { worldUrl: job.assets.worldUrl, panoramaUrl: job.assets.panoramaUrl, collisionUrl: job.assets.colliderUrl, worldSemantics: readGiftWorldSemantics(job.generation?.worldlabs?.worldSemantics) } : {}) };
+  if (!instantGiftReady(job)) throw new Error('Your gift is still taking shape. Reopen the creator to check its progress.');
   return {
     title: job.title, senderName: job.senderName, recipientName: job.recipientName,
     dedication: job.dedication, story: job.story || job.worldPrompt, curiosities: job.curiosities,
@@ -289,7 +297,9 @@ async function readGeneratedGift(id: string, signal: AbortSignal): Promise<Gener
   };
 }
 function generatedGiftPath(id: string) {
+  if (routeParams().get('public') === '1') return publicGiftPath(id) + '&from=room';
   const params = new URLSearchParams(); const key = routeParams().get('key'); if (key) params.set('key', key);
+  if (routeParams().get('landscape') === '1') { params.set('landscape', '1'); params.set('view', 'world'); }
   params.set('from', 'room'); return 'generated/' + encodeURIComponent(id) + '?' + params.toString();
 }
 async function mountGiftWalk(id: string, gift: GeneratedGiftData, epoch: number, abort: AbortController) {
@@ -297,7 +307,7 @@ async function mountGiftWalk(id: string, gift: GeneratedGiftData, epoch: number,
   if (!scenes.length) throw new Error('This world does not have a walking path yet. Its keepsake and story remain available.');
   const { mountFirstPersonPlace } = await import('./first-person-place');
   if (epoch !== renderId || abort.signal.aborted) return;
-  const returnPath = generatedGiftPath(id);
+  const returnPath = routeParams().get('public') === '1' || routeParams().get('landscape') === '1' ? 'collection' : generatedGiftPath(id);
   const walk = mountFirstPersonPlace(app, { scenes, giftTitle: gift.title, giftHref: '#/' + returnPath,
     isCurrent: () => epoch === renderId, onExit: () => navigate(returnPath) });
   cleanup = () => { abort.abort(); walk.destroy(); };
@@ -321,6 +331,17 @@ async function generatedGiftPage(id: string, epoch: number) {
     const gift = await readGeneratedGift(id, abort.signal);
     if (epoch !== renderId || generation !== sessionGeneration() || abort.signal.aborted) return;
     const walking = createGiftWalkScenes(id, gift).length > 0;
+    const landscape = routeParams().get('public') === '1' || routeParams().get('landscape') === '1' && gift.publicLandscape === true;
+    if (landscape && !gift.worldUrl) {
+      app.innerHTML = '<main class="generated-loading"><h1>This landscape is unavailable.</h1><p>The generated world could not be completed. Your original photos and other paid results remain private and kept.</p><a class="dusk-start" href="#/collection">Explore landscapes</a><a class="dusk-explore" href="#/make?resume=world-retry">Check your creation</a></main>'; return;
+    }
+    if (landscape && gift.worldUrl) {
+      if (walking) { await mountGiftWalk(id, gift, epoch, abort); return; }
+      const { mountPublicLandscape } = await import('./public-landscape-viewer');
+      if (epoch !== renderId || abort.signal.aborted) return;
+      const viewer = mountPublicLandscape(app, gift, () => epoch === renderId && !abort.signal.aborted);
+      cleanup = () => { abort.abort(); viewer.destroy(); }; return;
+    }
     if (walking && routeParams().get('view') === 'world') { await mountGiftWalk(id, gift, epoch, abort); return; }
     app.innerHTML = '<main id="generated-gift-root"></main>';
     const journeyPath = generatedGiftPath(id).replace(/^generated\//, 'walk/');
@@ -328,7 +349,7 @@ async function generatedGiftPage(id: string, epoch: number) {
       gift, shareScope: ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'local' : 'cloud', initialView: routeParams().get('view') === 'world' && gift.worldUrl ? 'world' : 'object',
       isCurrent: () => epoch === renderId && generation === sessionGeneration(), onExit: () => navigate('collection'),
       onCollection: () => navigate('collection'),
-      ...(instantCreatorService.retryWorld && (gift.worldRetry?.available || retryReference) ? {
+      ...(routeParams().get('public') !== '1' && instantCreatorService.retryWorld && (gift.worldRetry?.available || retryReference) ? {
         worldRetryPending: Boolean(retryReference),
         onRetryWorld: async (signal: AbortSignal) => {
           if (epoch !== renderId || generation !== sessionGeneration() || signal.aborted || abort.signal.aborted) return;
@@ -354,7 +375,7 @@ async function generatedGiftPage(id: string, epoch: number) {
       } : {}),
       ...(walking ? { onJourney: () => navigate(journeyPath), journeyLabel: 'Walk inside' } : {}),
       onShare: async () => {
-        try { await navigator.clipboard.writeText(location.href); toast(['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'Local gift link copied. Opens on this device while the preview is running.' : 'Gift link copied. Anyone with this link can open the gift until it expires.'); }
+        try { const shared = routeParams().get('public') === '1'; const link = shared ? new URL('#/' + publicGiftPath(id), location.href).href : location.href; await navigator.clipboard.writeText(link); toast(shared ? 'Public gift link copied. Anyone can open this gift from the gallery.' : ['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname) ? 'Local gift link copied. Opens on this device while the preview is running.' : 'Gift link copied. Anyone with this link can open the gift until it expires.'); }
         catch { toast('Copy this page address to reopen the gift.'); }
       },
     });
@@ -480,16 +501,24 @@ async function collectionPage(epoch: number) {
   const abort = new AbortController(); cleanup = () => abort.abort();
   app.innerHTML = '<main class="generated-loading" role="status">Bringing your memories around…</main>';
   try {
-    const [{ mountCollectionRoom }, { publicCollectionItems, collectionItemsFromWorld }] = await Promise.all([import('./collection-room'), import('./collection-state')]);
-    if (epoch !== renderId) return;
-    const [current] = await Promise.all([
-      session() && !session()!.user.demo && !demoScope() ? ensureWorld() : Promise.resolve(null),
-      hydrateKeepsakes(epoch, abort.signal),
+    const [gallery, { publicCollectionItems, collectionItemsFromWorld }] = await Promise.all([
+      readPublicGallery(abort.signal).catch(() => ({ enabled: publicGalleryEnabled, items: [] as CollectionRoomItem[] })), import('./collection-state'),
     ]);
-    if (epoch !== renderId) return;
+    if (epoch !== renderId || abort.signal.aborted) return;
+    publicGalleryEnabled = gallery.enabled;
+    if (gallery.enabled) {
+      const page = mountPublicLandscapeGallery(app, gallery, publicLandscapeExamples(publicCollectionItems()), () => epoch === renderId && !abort.signal.aborted);
+      cleanup = () => { abort.abort(); page.destroy(); };
+      return;
+    }
+    const [current, , { mountCollectionRoom }] = await Promise.all([
+      session() && !session()!.user.demo && !demoScope() ? ensureWorld().catch(() => null) : Promise.resolve(null), hydrateKeepsakes(epoch, abort.signal), import('./collection-room'),
+    ]);
+    if (epoch !== renderId || abort.signal.aborted) return;
     const localItems = currentKeepsakes();
     const personal = Boolean(current) || localItems.length > 0;
-    const items = current ? [...localItems, ...collectionItemsFromWorld(current)] : localItems.length ? localItems : publicCollectionItems();
+    const privateItems = current ? [...localItems, ...collectionItemsFromWorld(current)] : localItems;
+    const items = privateItems.length || current ? privateItems : publicCollectionItems();
     app.innerHTML = '<main id="collection-room-root"></main>';
     const room = mountCollectionRoom(app.querySelector<HTMLElement>('#collection-room-root')!, {
       items, title: personal ? 'Your memory desk.' : 'The memory desk.',
@@ -510,9 +539,18 @@ async function collectionPage(epoch: number) {
 
 async function galleryList(epoch: number) {
   const abort = new AbortController(); cleanup = () => abort.abort();
-  let current: WorldDTO;
-  try { [current] = await Promise.all([ensureWorld(), hydrateKeepsakes(epoch, abort.signal)]); } catch (error) { if (epoch === renderId) missing(errorMessage(error)); return; }
-  if (epoch !== renderId) return;
+  const [gallery, state] = await Promise.all([
+    readPublicGallery(abort.signal).catch(() => ({ enabled: publicGalleryEnabled, items: [] as CollectionRoomItem[] })), import('./collection-state'),
+  ]);
+  if (epoch !== renderId || abort.signal.aborted) return;
+  publicGalleryEnabled = gallery.enabled;
+  if (gallery.enabled) {
+    const page = mountPublicLandscapeGallery(app, gallery, publicLandscapeExamples(state.publicCollectionItems()), () => epoch === renderId && !abort.signal.aborted);
+    cleanup = () => { abort.abort(); page.destroy(); };
+    return;
+  }
+  const [current] = await Promise.all([ensureWorld().catch(() => demoWorld([], activePersona)), hydrateKeepsakes(epoch, abort.signal)]);
+  if (epoch !== renderId || abort.signal.aborted) return;
   const localItems = currentKeepsakes();
   const deviceCollection = !session() && !demoScope() && localItems.length > 0;
   app.innerHTML = `${header('gallery')}${notice()}<main class="gallery-page"><div class="world-heading"><div><span class="eyebrow">${current.user.demo || !session() ? 'FICTIONAL DEMONSTRATION COLLECTION' : `${esc(current.user.displayName.toUpperCase())}’S COLLECTION`}</span><h1>Keep the feeling.</h1><p>Every gift has a place. Every place has a story.</p></div><button class="button" data-create>Add a little world ＋</button></div><div class="gallery-filters"><div class="filter-tabs" role="group" aria-label="Memory type"><button class="selected" data-filter="all">All memories</button><button data-filter="received">Received</button><button data-filter="sent">Sent</button><button data-filter="self">My stories</button>${session() && !session()!.user.demo && !current.user.demo ? '<button data-filter="archived">Archived</button>' : ''}</div><label class="search-field"><span>Search person, place, or story</span><input type="search" placeholder="Find a memory…" aria-label="Search memories"/></label><label class="date-filter">Date<input type="month" aria-label="Filter memories by month"/></label></div><div class="memory-grid gallery-grid" id="gallery-grid"></div><p class="fine-print">Only your own memories and gifts you are authorized to read appear here.</p></main>${footer()}`;
@@ -521,11 +559,12 @@ async function galleryList(epoch: number) {
     app.querySelector('.world-heading .eyebrow')!.textContent = 'YOUR CREATIONS ON THIS DEVICE';
     app.querySelector('.service-note')?.remove();
   }
+  const sharedItems = localItems;
   const draw = () => {
     if (epoch !== renderId) return;
     const search = app.querySelector<HTMLInputElement>('input[type="search"]')!.value.toLowerCase(); const month = app.querySelector<HTMLInputElement>('input[type="month"]')!.value;
     const filtered = (filter === 'archived' ? archivedMemories : deviceCollection ? [] : current.memories).filter((memory) => (!search || `${memory.title} ${memory.story} ${memory.ownerName} ${memory.location.label}`.toLowerCase().includes(search)) && (!month || memory.location.experiencedAt.startsWith(month)) && (filter === 'all' || filter === 'archived' || (filter === 'self' && memory.ownerId === current.user.id) || (filter === 'received' && current.received.some((gift) => gift.memoryId === memory.id)) || (filter === 'sent' && current.sent.some((gift) => gift.memoryId === memory.id))));
-    const local = filter === 'all' || filter === 'self' ? localItems.filter(item => (!search || `${item.title} ${item.story} ${item.subtitle}`.toLowerCase().includes(search)) && (!month || item.createdAt?.startsWith(month))) : [];
+    const local = filter === 'all' || filter === 'self' ? (filter === 'self' ? localItems : sharedItems).filter(item => (!search || `${item.title} ${item.story} ${item.subtitle}`.toLowerCase().includes(search)) && (!month || item.createdAt?.startsWith(month))) : [];
     const cards = filter === 'archived' ? filtered.map((memory) => `<div class="archive-card"><span class="eyebrow">ARCHIVED · ORIGINALS RETAINED</span><h3>${esc(memory.title)}</h3><p>${esc(memory.location.label)}</p><button class="button" data-restore="${esc(memory.id)}">Restore this memory ↗</button></div>`).join('') : local.map(keepsakeCard).join('') + filtered.map(memoryCard).join('');
     app.querySelector<HTMLElement>('#gallery-grid')!.innerHTML = cards || '<div class="empty-state"><span>◇</span><h2>A quiet corner, for now.</h2><p>No memories match these filters. Try another person, place, or month.</p></div>'; bindCommon();
     app.querySelectorAll<HTMLButtonElement>('[data-restore]').forEach((button) => button.onclick = async () => { button.disabled = true; try { await api<MemoryDTO>('restore', { memoryId: button.dataset.restore }); world = null; toast('Memory restored. Revoked invitations remain revoked.'); void render(); } catch (error) { toast(errorMessage(error)); button.disabled = false; } });
@@ -988,6 +1027,10 @@ function createPage() {
   review();
 }
 function about() {
+  if (publicGalleryEnabled) {
+    app.innerHTML = `${header()}<main class="narrow about-page"><span class="eyebrow">GIFTPORTALS · PUBLIC LANDSCAPES PREVIEW</span><h1>A place to share and explore.</h1><p class="large-copy">Turn a place you love into a world everyone can step inside.</p><p>Create a landscape from a photo or an original example, approve publication, and let World Labs build the world. Its generated landscape and title appear in the shared gallery. No account is required.</p><h2>Saved beyond your browser.</h2><p>The public gallery stores a separate archive of the generated world, panorama and walking collider when available. Reloading the gallery refreshes its media links. Your original photos, names, personal story and other paid results stay private and follow the original seven-day retention.</p><h2>Generated interpretations.</h2><p>These are actual World Labs 3D worlds, interpreted from their references. They are not exact geographic reconstructions. Walking depends on the generated collision mesh; worlds without one provide look and exploration controls.</p><h2>Built with</h2><p>World Labs, Tripo, Three.js, Spark, Supabase, TypeScript, Vite and Vercel. This preview keeps the existing generation pipeline and presents landscapes only. Rendering and navigation improvements follow validation of the public gallery.</p><button class="button" data-create>Create a landscape ↗</button><a class="text-link" href="#/collection">Explore the public gallery ↗</a></main>${footer()}`;
+    bindCommon(); return;
+  }
   app.innerHTML = `${header()}<main class="narrow about-page"><span class="eyebrow">GIFTPORTALS · VERSION 10.3.3</span><h1>GiftPortals</h1><p class="large-copy">Some gifts fit in your hand. Others take you to an entire world.</p><p>Start with a photo of a place you love. Tripo turns it into a 3D keepsake; World Labs creates the place its story carries. Open the gift, turn it in your hands, then step inside its little world.</p><h2>Make a gift before creating an account.</h2><p>Start with a camera photo, a selected file or an original example. Add an optional place reference and your words. Live availability is shown before creation. Local previews keep jobs on this device; the cloud creator uses private storage and gift links that expire after seven days.</p><h2>What is real, and what is artistic?</h2><p>The generated gift viewer loads actual completed Tripo GLB and World Labs SPZ assets. The Rio example uses fictional people and an artistic interpretation of the bay. Completed gifts with a compatible collision mesh let you walk inside and choose physically supported viewpoints. These worlds are artistic interpretations rather than exact geographic reconstructions. Narrative points contain the sender's words; they are not detected landmarks. The original photo and story remain accessible if 3D cannot load.</p><h2>Private cloud gifting.</h2><p>A cloud gift link acts as a private access key. Anyone holding it can open the gift during its seven-day lifetime. Permanent cross-device collections, authenticated cloud accounts and revocable invitations require separate deployment verification. Opening a gift never records a physical visit. Existing Studio, atlas and earlier illustrated Rio routes remain available.</p><h2>Built with</h2><p>Tripo, World Labs, Three.js, Spark, TypeScript and Vite. The local provider keys stay on the server. Credits, original artwork, earlier work and map sources are documented in the project.</p><button class="button" data-create>Make your little world ↗</button><a class="text-link" href="#/generated/rio-example">Open the Rio example ↗</a></main>${footer()}`; bindCommon();
 }
 
@@ -1032,6 +1075,7 @@ window.addEventListener('giftportals-session-changed', () => { resetKeepsakeSess
 window.addEventListener('pagehide', () => { cleanup?.(); cancelTrain(); });
 window.addEventListener('pageshow', event => { if (event.persisted) void render(); });
 void render();
+void readPublicGallery(new AbortController().signal).then(gallery => { publicGalleryEnabled = gallery.enabled; if (route() === 'home' && !app.querySelector('dialog[open]')) void render(); }).catch(() => { /* Private creation remains unchanged until public publication is enabled. */ });
 void Promise.allSettled([api<StatusDTO>('status'), api<MemoryDTO[]>('demo')]).then((results) => {
   const statusResult = results[0]; if (statusResult.status === 'fulfilled') cloudStatus = statusResult.value; else staticDemo = true;
   const demoResult = results[1]; if (demoResult.status === 'fulfilled' && demoResult.value.length) { publicMemories = orderDemoMemories(demoResult.value.filter(memory => memory.demo)); if (!session()) world = null; }

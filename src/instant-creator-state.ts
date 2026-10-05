@@ -1,5 +1,6 @@
 export type InstantProviderState = 'pending' | 'processing' | 'completed' | 'failed';
 import { INSTANT_EXAMPLES, type InstantExample, type InstantPhotoIntent, type InstantObjectRepresentation } from '../shared/instant-examples';
+import { PUBLIC_GALLERY_CONSENT_VERSION } from '../shared/instant-gallery';
 export { INSTANT_EXAMPLES } from '../shared/instant-examples';
 export type { InstantExample, InstantPhotoIntent } from '../shared/instant-examples';
 export interface InstantStatus {
@@ -7,6 +8,8 @@ export interface InstantStatus {
   localOnly: boolean;
   storage?: 'local' | 'cloud';
   generationEnabled: boolean;
+  /** Publication is available only in an explicitly enabled deployment. */
+  publicGalleryEnabled?: boolean;
   providers: { tripo: boolean; worldlabs: boolean };
   maxImageBytes: number;
   examples: InstantExample[];
@@ -17,6 +20,8 @@ export interface InstantPhotoReport {
  results:{id:'original'|'object'|'world';decision:'allow'|'block'|'review';category:'ordinary'|'sexual'|'adult-product'|'uncertain';objectHint?:string;objectConfidence?:number}[];
 }
 export interface InstantJob {
+  publicGalleryConsent?: true;
+  publicGalleryConsentVersion?: typeof import('../shared/instant-gallery').PUBLIC_GALLERY_CONSENT_VERSION;
   uploadState?: 'pending' | 'finalized';
   /** Pending cloud drafts expose only missing private inputs, never photo bytes. */
   uploads?: import('../shared/cloud-instant').CloudUploadPlan[];
@@ -58,6 +63,8 @@ export interface InstantCreateInput {
   dedupeKey: string;
   requestToken: string;
   consent: true;
+  publicGalleryConsent?: true;
+  publicGalleryConsentVersion?: typeof import('../shared/instant-gallery').PUBLIC_GALLERY_CONSENT_VERSION;
   curiosityIds?:string[];
   exampleId?:string;
 }
@@ -111,6 +118,12 @@ export function instantModelReady(job: InstantJob): boolean {
 
 export function instantWorldReady(job: InstantJob): boolean {
   return job.worldlabs.state === 'completed' && Boolean(job.assets.worldUrl);
+}
+
+/** Publication provenance comes from the saved job, never the current flag or
+ * a restored browser reference. Older private jobs retain their original view. */
+export function instantPublicLandscapeJob(job: InstantJob): boolean {
+  return job.publicGalleryConsent === true && job.publicGalleryConsentVersion === PUBLIC_GALLERY_CONSENT_VERSION;
 }
 
 export function instantJobFinished(job: InstantJob): boolean {

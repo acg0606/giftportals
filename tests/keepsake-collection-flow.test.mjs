@@ -16,26 +16,29 @@ async function moduleUrl(path) {
 const library = await import(await moduleUrl(new URL('../src/keepsake-library.ts', import.meta.url)));
 const state = await import(await moduleUrl(new URL('../src/instant-creator-state.ts', import.meta.url)));
 const projection = await import(await moduleUrl(new URL('../src/local-keepsakes.ts', import.meta.url)));
+const gallery = await import(await moduleUrl(new URL('../src/public-gallery.ts', import.meta.url)));
+const wizard = await import(await moduleUrl(new URL('../src/instant-wizard.ts', import.meta.url)));
 const source = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 const parsed = ts.createSourceFile('main.ts', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
 // Run the actual route/controller functions. Rendering/GPU and network are injected;
 // no user account, private file, browser or generation service is contacted.
-const names = ['errorMessage', 'rememberKeepsake', 'resetKeepsakeSession', 'currentKeepsakes', 'hydrateKeepsakes', 'keepsakeCard', 'instantCreatorPage', 'collectionPage', 'galleryList', 'readGeneratedGift'];
+const names = ['errorMessage', 'rememberKeepsake', 'resetKeepsakeSession', 'currentKeepsakes', 'hydrateKeepsakes', 'keepsakeCard', 'instantCreatorPage', 'collectionPage', 'galleryList', 'readGeneratedGift', 'generatedGiftPath', 'generatedGiftPage'];
 const functions = parsed.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text)).map(node => node.getText(parsed)).join('\n')
-  .replaceAll("import('./collection-room')", 'Promise.resolve(roomModule)').replaceAll("import('./collection-state')", 'Promise.resolve(stateModule)');
+  .replaceAll("import('./collection-room')", 'Promise.resolve(roomModule)').replaceAll("import('./collection-state')", 'Promise.resolve(stateModule)').replaceAll("import('./public-landscape-viewer')", 'Promise.resolve(landscapeViewerModule)');
 const variables = parsed.statements.filter(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => ['esc', 'keepsakeScope', 'keepsakeStorage'].includes(declaration.name.getText(parsed)))).map(node => node.getText(parsed)).join('\n');
 const controller = `export function makeController(deps) {
- const {storage:localStorage,tabStorage:sessionStorage,app,roomModule,stateModule,readKeepsakeJob,mountInstantCreator,ensureWorld,createdSessionKeepsake,instantGiftReady,instantWorldReady,readInstantJobReference,clearKeepsakeScope,forgetKeepsakeReference,instantJobStorageKey,rememberCreatedKeepsake,storedKeepsakeReferences} = deps;
+ const {storage:localStorage,tabStorage:sessionStorage,app,roomModule,stateModule,readKeepsakeJob,mountInstantCreator,ensureWorld,createdSessionKeepsake,instantGiftReady,instantPublicLandscapeJob,instantWorldReady,readInstantJobReference,clearKeepsakeScope,forgetKeepsakeReference,instantJobStorageKey,rememberCreatedKeepsake,storedKeepsakeReferences,readPublicGallery,readPublicGift,publicGiftPath,mountPublicLandscapeGallery,publicLandscapeExamples,landscapeViewerModule,instantWorldRetryStorageKey,readInstantWorldRetryReference} = deps;
  const location = {hostname:deps.hostname || 'giftportals.vercel.app'}, icon = ()=>'→', miniArt = ()=>'<span>Gift</span>', header = ()=>'', footer = ()=>'', notice = ()=>'', memoryCard = ()=>'', scopedPath = path=>path, bindCommon = ()=>{}, toast = ()=>{}, render = ()=>{}, missing = message=>{throw Error(message)};
- let actor = deps.actor || null, generation = 0, renderId = 1, cleanup;
+ let actor = deps.actor || null, generation = 0, renderId = 1, cleanup, publicGalleryEnabled=false;
  const session = ()=>actor, sessionGeneration = ()=>generation, demoScope = ()=>deps.demoScope || null, navigate = deps.navigate;
- const routeParams = ()=>new URLSearchParams({key:deps.routeKey || 'a'.repeat(43)}), readGiftWorldSemantics = value=>value;
+ const routeParams = ()=>new URLSearchParams(deps.routeParams || {key:deps.routeKey || 'a'.repeat(43)}), readGiftWorldSemantics = value=>value;
+ const createGiftWalkScenes = ()=>[], demoWorld = ()=>({user:{demo:true},memories:[],sent:[],received:[],discoveries:[],jobs:[]}), activePersona='sender';
  const sessionKeepsakes = new Map(), keepsakeReadAt = new Map(); let activeKeepsakeScope = actor && !actor.user.demo ? 'owner:'+actor.user.id : 'anonymous'; const setTimeout = deps.setTimeout || globalThis.setTimeout, clearTimeout = deps.clearTimeout || globalThis.clearTimeout;
  ${variables}\n${functions}
- return {instantCreatorPage,collectionPage,galleryList,readGeneratedGift,items:currentKeepsakes,clearMemory(){sessionKeepsakes.clear();keepsakeReadAt.clear()},switchAccount(next){actor=next;generation++;renderId++;resetKeepsakeSession()},destroy(){cleanup?.()}};
+ return {instantCreatorPage,collectionPage,galleryList,readGeneratedGift,generatedGiftPage,generatedGiftPath,items:currentKeepsakes,clearMemory(){sessionKeepsakes.clear();keepsakeReadAt.clear()},switchAccount(next){actor=next;generation++;renderId++;resetKeepsakeSession()},destroy(){cleanup?.()}};
 }`;
 const compiled = ts.transpileModule(controller, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
-const { makeController } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { makeController } = await import(`data:text/javascript;base64,${Buffer.from(compiled + '\n//# sourceURL=keepsake-controller-fixture.js').toString('base64')}`);
 const memoryStorage = () => { const values = new Map(); return { values, getItem: key => values.get(key) ?? null, setItem: (key,value) => values.set(key,value), removeItem: key => values.delete(key) }; };
 const gift = (id = 'synthetic-gift-a', extra = {}) => ({ id, token: 'a'.repeat(43), state: 'completed', tripo: { state:'completed' }, worldlabs: { state:'completed' }, assets: {photoUrl:'/photo.jpg',modelUrl:'/model.glb',worldUrl:'/world.spz'}, title:'Caneco', story:'A day in São Paulo.', worldPrompt:'A quiet memory.', photoIntent:'place', createdAt: '2026-10-04T12:00:00Z', mediaExpiresAt: Date.now()/1000+600, ...extra });
 function harness(extra = {}) {
@@ -43,16 +46,21 @@ function harness(extra = {}) {
   const inputs = { search:{value:''},month:{value:''} }, grid = {innerHTML:''}, label = {textContent:''};
   const buttons = ['all','self','received','sent'].map(filter=>({dataset:{filter},classList:{toggle(){}},onclick:null}));
   const app = { innerHTML:'', querySelector(selector){ if(selector==='#gallery-grid') return grid; if(selector.includes('input[type="search"]')) return inputs.search; if(selector.includes('input[type="month"]')) return inputs.month; if(selector==='.world-heading .eyebrow') return label; if(selector==='.service-note') return {remove(){}}; return {}; }, querySelectorAll(selector){ return selector==='[data-filter]' ? buttons : selector==='.gallery-filters input' ? Object.values(inputs) : []; } };
-  const captures = {creator:null,room:null,navigation:[],reads:[]};
+  const captures = {creator:null,room:null,landscapes:null,publicViewer:null,navigation:[],reads:[],publicReads:[]};
   const publicWorld = {user:{id:'demo',displayName:'Maya',demo:true},memories:[],sent:[],received:[],discoveries:[],jobs:[]};
-  const deps = { ...library, ...state, ...projection, storage,tabStorage,app, actor:extra.actor, demoScope:extra.demoScope, hostname:extra.hostname, routeKey:extra.routeKey, setTimeout:extra.setTimeout, clearTimeout:extra.clearTimeout,
-    navigate:path=>captures.navigation.push(path), ensureWorld:async()=>publicWorld,
+  const deps = { ...library, ...state, ...projection, ...gallery, ...wizard, storage,tabStorage,app, actor:extra.actor, demoScope:extra.demoScope, hostname:extra.hostname, routeKey:extra.routeKey, routeParams:extra.routeParams, setTimeout:extra.setTimeout, clearTimeout:extra.clearTimeout,
+    navigate:path=>captures.navigation.push(path), ensureWorld:extra.ensureWorld || (async()=>publicWorld),
+    readPublicGallery:extra.readPublicGallery || (async()=>({enabled:false,items:[]})),
+    readPublicGift:extra.readPublicGift || (async id=>{captures.publicReads.push(id);return extra.publicGift}),
+    publicLandscapeExamples:items=>items,
+    mountPublicLandscapeGallery(_host,page,examples,isCurrent){ captures.landscapes={items:gallery.mergeGalleryItems(page.items,examples),isCurrent}; return {destroy(){}}; },
+    landscapeViewerModule:{mountPublicLandscape(_host,gift,isCurrent){captures.publicViewer={gift,isCurrent};return {destroy(){}}}},
     readKeepsakeJob:extra.readKeepsakeJob || (async reference=>{ captures.reads.push(reference.id); return (extra.jobs || new Map([[gift().id,gift()],[gift('synthetic-gift-b').id,gift('synthetic-gift-b')]])).get(reference.id); }),
     mountInstantCreator(_host,options){captures.creator=options;return {destroy(){}}},
     roomModule:{mountCollectionRoom(_host,options){captures.room=options;return {destroy(){}}}},
     stateModule:{publicCollectionItems:()=>[{id:'public-demo',demo:true}],collectionItemsFromWorld:()=>[]},
   };
-  return {controller:makeController(deps),storage,tabStorage,captures,inputs,grid,label,buttons};
+  return {controller:makeController(deps),storage,tabStorage,captures,inputs,grid,label,buttons,app};
 }
 
 test('completion saves automatically before Open gift; desk and memories retain two gifts after reload and deduplicate', async () => {
@@ -149,4 +157,45 @@ test('large stalled catalogs stop at a single overall timeout and retain referen
     readKeepsakeJob:async(_reference,signal)=>{count++;if(count===4)ready();return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true}))}});
   const pending=stalled.controller.collectionPage(1); await started; cancel(); await pending;
   assert.equal(count,4); assert.equal(cleared,1); assert.equal(library.storedKeepsakeReferences(storage,'anonymous').length,100); stalled.controller.destroy();
+});
+
+test('a fresh browser opens the shared landscape gallery without login or any local creator reference', async () => {
+  const publicItem={id:'public:12345678-1234-4234-8234-123456789abc',title:'Shared coastline',story:'',openPath:'generated/12345678-1234-4234-8234-123456789abc?public=1&view=world',kind:'generated',demo:false};
+  const fresh=harness({readPublicGallery:async()=>({enabled:true,items:[publicItem,publicItem]})});
+  await fresh.controller.collectionPage(1);assert.equal(fresh.captures.room,null);assert.deepEqual(fresh.captures.landscapes.items.map(item=>item.id),[publicItem.id,'public-demo']);assert.equal(fresh.captures.reads.length,0);assert.equal(fresh.storage.values.size,0);
+  await fresh.controller.galleryList(1);assert.equal(fresh.captures.landscapes.items[0].title,'Shared coastline');fresh.controller.destroy();
+});
+
+test('a public landscape opens directly in the world and never hydrates a private creator capability or enables paid controls', async () => {
+  const id='12345678-1234-4234-8234-123456789abc', opened=harness({routeParams:{public:'1',view:'world',key:'must-not-be-used'},publicGift:{title:'Public world',story:'',senderName:'',worldUrl:'/world.spz',panoramaUrl:'/pano.png'}});
+  await opened.controller.generatedGiftPage(id,1);assert.deepEqual(opened.captures.publicReads,[id]);assert.deepEqual(opened.captures.reads,[]);assert.equal(opened.captures.publicViewer.gift.modelUrl,undefined);assert.equal(opened.captures.publicViewer.gift.worldRetry,undefined);
+  assert.equal(opened.controller.generatedGiftPath(id),`generated/${id}?public=1&from=room`);assert.doesNotMatch(opened.controller.generatedGiftPath(id),/key=/);opened.controller.destroy();
+});
+
+test('late public gallery replies cannot replace a newly selected route or account', async () => {
+  let finish,started;const ready=new Promise(resolve=>started=resolve), delayed=harness({readPublicGallery:async()=>{started();return new Promise(resolve=>finish=resolve)}});
+  const pending=delayed.controller.collectionPage(1);await ready;delayed.controller.switchAccount({user:{id:'new-route',demo:false}});finish({enabled:true,items:[{id:'public:late',title:'Late world'}]});await pending;assert.equal(delayed.captures.landscapes,null);assert.equal(delayed.captures.room,null);delayed.controller.destroy();
+});
+
+test('a public list or private-world outage preserves paid device gifts and their recovery references', async () => {
+  const actor={user:{id:'owner-a',demo:false}}, storage=memoryStorage();library.rememberCreatedKeepsake(storage,'owner:owner-a',gift());
+  const offline=harness({actor,storage,ensureWorld:async()=>{throw Error('offline')},readPublicGallery:async()=>{throw Error('offline')}});
+  await offline.controller.collectionPage(1);assert.equal(offline.captures.room.items[0].title,'Caneco');assert.equal(library.storedKeepsakeReferences(storage,'owner:owner-a').length,1);
+  await offline.controller.galleryList(1);assert.match(offline.grid.innerHTML,/Caneco/);offline.controller.destroy();
+});
+
+test('owner Open follows saved publication consent, while an older private completion keeps its original route', () => {
+  const app=harness();app.controller.instantCreatorPage(1);app.captures.creator.onGiftReady(gift());assert.doesNotMatch(app.captures.navigation.at(-1),/landscape=/);
+  const publicJob=gift('public-consented-world',{publicGalleryConsent:true,publicGalleryConsentVersion:'giftportals-public-gallery-v1',tripo:{state:'failed'},assets:{photoUrl:'/private-photo.jpg',worldUrl:'/paid-world.spz'}});
+  app.captures.creator.onGiftReady(publicJob);assert.match(app.captures.navigation.at(-1),/landscape=1&view=world/);assert.match(app.captures.navigation.at(-1),/key=/);app.controller.destroy();
+});
+
+test('a consented owner landscape never displays a miniature or personal input and failed worlds have no object fallback', async () => {
+  const id='12345678-1234-4234-8234-123456789abc', publicJob=gift(id,{publicGalleryConsent:true,publicGalleryConsentVersion:'giftportals-public-gallery-v1',senderName:'Private sender',story:'Private story',assets:{photoUrl:'/private-source.jpg',modelUrl:'/paid-model.glb'},worldlabs:{state:'failed'},state:'partial'});
+  const owner=harness({routeParams:{key:publicJob.token,landscape:'1',view:'world'},jobs:new Map([[id,publicJob]])});
+  const opened=await owner.controller.readGeneratedGift(id,new AbortController().signal);assert.equal(opened.publicLandscape,true);assert.equal(opened.story,'');assert.equal(opened.senderName,'');assert.equal(opened.modelUrl,undefined);assert.equal(opened.originalUrl,undefined);
+  await owner.controller.generatedGiftPage(id,1);assert.equal(owner.captures.publicViewer,null);assert.match(owner.app.innerHTML,/This landscape is unavailable/);assert.doesNotMatch(owner.app.innerHTML,/paid-model|private-source|Private story|Private sender/);
+  assert.equal(owner.captures.reads.length,2);owner.controller.destroy();
+  const privateOwner=harness({routeParams:{key:publicJob.token,landscape:'1'},jobs:new Map([[id,{...publicJob,publicGalleryConsent:undefined,publicGalleryConsentVersion:undefined}]])});
+  const original=await privateOwner.controller.readGeneratedGift(id,new AbortController().signal);assert.equal(original.modelUrl,'/paid-model.glb');assert.equal(original.originalUrl,'/private-source.jpg');assert.equal(original.story,'Private story');assert.equal(original.publicLandscape,undefined);privateOwner.controller.destroy();
 });
