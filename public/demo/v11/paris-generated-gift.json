@@ -1,0 +1,40 @@
+{
+  "title": "Paris by the Seine",
+  "senderName": "GiftPortals",
+  "recipientName": "You",
+  "dedication": "A little Paris, made for you.",
+  "story": "Imagine a quiet walk along the Seine, with the city and river around you. A little piece of Paris you can keep close and step inside.",
+  "curiosities": [
+    {
+      "id": "paris-seine",
+      "subject": "region",
+      "regionId": "paris",
+      "title": "A river through many chapters",
+      "text": "The banks of the Seine bring together layers of Parisian history, including the Louvre, Notre-Dame and the Eiffel Tower. UNESCO recognizes this riverside ensemble as World Heritage.",
+      "sourceTitle": "UNESCO — Paris, Banks of the Seine",
+      "sourceUrl": "https://whc.unesco.org/en/list/600/"
+    }
+  ],
+  "originalUrl": "/assets/examples/v11/paris-scene.jpg",
+  "keepsakeImageUrl": "/demo/v17/paris-tripo-input.png",
+  "modelUrl": "/demo/v17/paris-model.glb",
+  "worldUrl": "/demo/v11/paris-world-500k.spz",
+  "panoramaUrl": "/demo/v11/paris-panorama.png",
+  "collisionUrl": "/demo/v11/paris-collider.glb",
+  "initialYaw": 0.339,
+  "initialPitch": 0.104,
+  "photoIntent": "place",
+  "objectRepresentation": "souvenir-miniature",
+  "sourcePhotoUrl": "/assets/examples/v11/paris-scene.jpg",
+  "worldSemantics": {
+    "metricScaleFactor": 1.0070722,
+    "groundPlaneOffset": 0.8069917
+  },
+  "sourceAttribution": {
+    "author": "Alex Liivet",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Overview_Seine_River_to_Eiffel_Tower_(37578867564).jpg",
+    "license": "CC0 1.0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "changes": "Original reference photograph; generated three-dimensional world and inferred unseen surroundings."
+  }
+}

@@ -11,8 +11,8 @@ export function instantWizardCanCreate(step: InstantWizardStep, hasPhoto: boolea
 }
 export function instantDefaultWorldPrompt(intent: 'object' | 'place'): string {
   return intent === 'place'
-    ? 'A gentle world inspired by this place photo, warm natural light, and a quiet moment to explore.'
-    : 'A peaceful garden at dusk, warm lanterns, and a little place to keep this memory close.';
+    ? 'A realistic three-dimensional place matching this photo, preserving its buildings, trees, ground, lighting and relative layout.'
+    : 'A realistic scene inspired by this photo and the souvenir, preserving visible materials, surroundings and lighting rather than inventing a fantasy setting.';
 }
 /** Keep a reviewed transcript editable and never silently cut off its ending. */
 export function appendInstantTranscript(story: string, transcript: string): { story: string; error: string } {

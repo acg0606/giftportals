@@ -42,21 +42,24 @@ const stubs = {
 async function moduleUrl(path) {
   if (modules.has(path.href)) return modules.get(path.href);
   let source = compile(await readFile(path, 'utf8'));
+  if (path.pathname.endsWith('/instant-creator.ts')) source = source.replaceAll("await import('./scene')", 'await globalThis.__instantWizard.scene()');
   for (const match of [...source.matchAll(/from\s*(['"])(\.{1,2}\/[^'"]+)\1/g)]) {
     const name = match[2];
-    const url = stubs[name] ? urlOf(stubs[name]) : await moduleUrl(new URL(name.endsWith('.ts') ? name : `${name}.ts`, path));
+    const url = stubs[name] ? urlOf(stubs[name]) : await moduleUrl(new URL(name.endsWith('.ts') ? name : `${name.replace(/\.js$/, '')}.ts`, path));
     source = source.replaceAll(`${match[1]}${name}${match[1]}`, JSON.stringify(url));
   }
   const url = urlOf(source); modules.set(path.href, url); return url;
 }
-const { mountInstantCreator, instantCreatorService } = await import(await moduleUrl(new URL('../src/instant-creator.ts', import.meta.url)));
+const { mountInstantCreator, instantCreatorService, instantModelPreviewIdentity } = await import(await moduleUrl(new URL('../src/instant-creator.ts', import.meta.url)));
+const { PUBLIC_GALLERY_CONSENT_VERSION } = await import(await moduleUrl(new URL('../shared/instant-gallery.ts', import.meta.url)));
+const { createCloudInstantService } = await import(await moduleUrl(new URL('../src/cloud-instant-service.ts', import.meta.url)));
 const keepsakeLibrary = await import(await moduleUrl(new URL('../src/keepsake-library.ts', import.meta.url)));
 const flush = async () => { for (let i = 0; i < 5; i++) await setImmediate(); };
 const missing = () => Object.assign(new Error('No previous job'), { code: 'JOB_UNAVAILABLE' });
 async function fixture(action, settings = {}) {
   const names = ['window', 'document', 'HTMLInputElement', 'HTMLTextAreaElement', 'sessionStorage', 'URL', 'FileReader', 'fetch', 'createImageBitmap', 'matchMedia', 'navigator', '__instantWizard'];
   const previous = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const state = { current: true, creates: [], jobs: [], diagnostics: [], retries: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
+  const state = { current: true, creates: [], jobs: [], diagnostics: [], retries: [], statusCalls: 0, resumes: [], opened: [], completed: [], assists: [], context: { mode: 'off', includeInStory: false }, lookup: undefined, selectedPlaces: [], focus: [], audioStops: 0, audioDestroyed: 0, fetches: 0, fetchUrls: [], storage: new Map(settings.storage || []), revoked: [], locationRequests: 0, transformations: [], modelVisibility: [], modelImports: 0, modelViewers: [], pendingModelImports: [], transformationPulses: 0, transformationDestroyed: 0, scheduled: [] };
   class Element extends EventTarget {
     constructor(tag = 'div', attrs = {}) {
       super(); this.tagName = tag; this.attrs = attrs; this.children = []; this.dataset = {}; this.value = attrs.value || ''; this.name = attrs.name || ''; this.type = attrs.type || ''; this.hidden = 'hidden' in attrs; this.disabled = 'disabled' in attrs; this.checked = 'checked' in attrs; this.open = false; this.isConnected = true; this.scrollLeft = 0; this.scrollWidth = 720; this.clientWidth = 350; this.scrollTop = 0; this.validityMessage = ''; this.style = {};
@@ -115,15 +118,31 @@ async function fixture(action, settings = {}) {
     context: (host, options) => { state.contextOptions = options; return { getContext: () => state.context, getLookupLocation: () => state.lookup, setSuggestedPlace(label) { state.selectedPlaces.push(label); state.context.placeLabel = label; options.onChange(state.context); }, destroy() {} }; },
     curiosities: (host, options) => { state.curioOptions = options; state.ids = []; return { reset() { options.onDecision(undefined); state.ids = []; }, preset(value) { state.seed = value.story; }, refreshRegion() {}, selectedIds: () => state.ids, destroy() {} }; },
     audio: (host, options) => { state.audioHost = host; state.audioOptions = options; return { stop() { state.audioStops++; }, destroy() { state.audioDestroyed++; } }; },
+    scene: () => {
+      state.modelImports++;
+      if (!settings.previewScene) return Promise.reject(new Error('GPU renderer unavailable in this independent fixture'));
+      const module = { mountMemoryScene: (canvas, options) => {
+        const viewer = { canvas, options, destroyCount: 0, resetCount: 0, autoRotate: [], wireframe: [],
+          destroy() { this.destroyCount++; }, reset() { this.resetCount++; },
+          setAutoRotate(value) { this.autoRotate.push(value); }, setWireframe(value) { this.wireframe.push(value); } };
+        state.modelViewers.push(viewer); return viewer;
+      } };
+      return settings.previewScene === 'deferred' ? new Promise(resolve => state.pendingModelImports.push(() => resolve(module))) : Promise.resolve(module);
+    },
     transformation: (host, options) => {
-      let destroyed = false;
+      let destroyed = false, current;
       const modelHost = new Element('div', { class: 'gift-transformation-model', 'data-transform-model': '' });
       modelHost.hidden = false; modelHost.inert = true;
       modelHost.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 350, bottom: 330, width: 350, height: 330 });
       host.append(modelHost); state.modelHost = modelHost;
       return {
         modelHost,
-        update(value) { if (!destroyed && options.isCurrent()) state.transformations.push(structuredClone(value)); },
+        update(value) {
+          if (destroyed || !options.isCurrent()) return;
+          // Match the real presentation controller's changed-model reveal gate.
+          if (current?.jobId !== value.jobId || current?.modelUrl !== value.modelUrl || !value.modelReady) modelHost.inert = true;
+          current = structuredClone(value); state.transformations.push(current);
+        },
         setModelVisible(value) { if (!destroyed && options.isCurrent()) { modelHost.inert = !value; state.modelVisibility.push(value); } },
         pulse() { if (!destroyed && options.isCurrent()) state.transformationPulses++; },
         destroy() { if (destroyed) return; destroyed = true; state.transformationDestroyed++; host.replaceChildren(); },
@@ -149,6 +168,7 @@ async function fixture(action, settings = {}) {
   state.submit = () => state.find('[data-instant-form]').dispatchEvent(new Event('submit', { cancelable: true }));
   state.upload = (file, place = false) => { const input = state.find(place ? '[data-instant-place-file]' : '[data-instant-upload-file]'); input.files = [file]; input.dispatchEvent(new Event('change')); };
   state.consent = () => { const input = state.field('consent'); input.checked = true; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
+  state.publicConsent = (checked = true) => { const input = state.field('publicGalleryConsent'); input.checked = checked; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
   state.photoConsent = (checked = true) => { const input = state.field('photoAnalysisConsent'); input.checked = checked; const event = new Event('input'); Object.defineProperty(event, 'target', { value: input }); state.find('[data-instant-form]').dispatchEvent(event); };
   state.next = () => state.find('[data-instant-continue]').click();
   state.stage = () => state.host.dataset.instantStep;
@@ -179,6 +199,77 @@ test('actual wizard keeps one card active; selecting a photo stays put; Enter re
     assert.equal(state.completed[0].id, state.job.id); assert.equal(state.opened.length, 0);
     assert.equal(state.find('[data-instant-form]').hidden, true); assert.equal(state.find('[data-instant-progress]').hidden, false);
   });
+});
+
+test('v11 public creator starts unchecked and requires separate publication permission before any prepare, preserving reviewed words', async () => {
+  assert.equal(PUBLIC_GALLERY_CONSENT_VERSION, 'giftportals-public-souvenir-v11');
+  await fixture(async state => {
+    const publication = state.field('publicGalleryConsent');
+    assert.equal(publication.checked, false); assert.equal(state.creates.length, 0);
+    state.upload(new File(['pixels'], 'my photo.jpg', { type: 'image/jpeg' }));
+    state.edit('title', 'Our little souvenir'); state.edit('story', 'Nossa memória escrita por nós.');
+    state.edit('senderName', 'André'); state.edit('recipientName', 'Maria'); state.edit('dedication', 'Para você.');
+    state.next(); state.next(); state.next();
+    assert.equal(state.stage(), 'review'); assert.equal(state.find('[data-public-consent]').hidden, false);
+    assert.equal(publication.required, true); assert.equal(publication.checked, false);
+    assert.match(state.host.html, /permission to publish these photos and words/);
+    assert.match(state.find('[data-public-storage-note]').textContent, /Anyone can open their photos, words and generated results without an account/);
+    state.consent(); state.submit(); await flush();
+    assert.equal(state.creates.length, 0); assert.equal(publication.reported, true);
+    assert.match(state.find('[data-instant-error]').textContent, /photos and words.*shared publicly/i);
+    state.publicConsent(); state.submit(); state.submit(); await flush();
+    assert.equal(state.creates.length, 1);
+    const sent = state.creates[0]; assert.equal(sent.consent, true); assert.equal(sent.publicGalleryConsent, true);
+    assert.equal(sent.publicGalleryConsentVersion, PUBLIC_GALLERY_CONSENT_VERSION);
+    assert.equal(sent.title, 'Our little souvenir'); assert.equal(sent.story, 'Nossa memória escrita por nós.');
+    assert.equal(sent.senderName, 'André'); assert.equal(sent.recipientName, 'Maria'); assert.equal(sent.dedication, 'Para você.');
+    assert.equal(state.completed.length, 1);
+  }, { status: { publicGalleryEnabled:true, publicGalleryRequired:true }, language:'pt-BR' });
+});
+
+test('editing reviewed words or replacing the photo revokes v11 publication permission until explicitly checked again', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'], 'first.jpg', { type:'image/jpeg' })); state.next(); state.next(); state.next();
+    state.consent(); state.publicConsent(); assert.equal(state.field('publicGalleryConsent').checked,true);
+    state.edit('dedication','A different public dedication');
+    assert.equal(state.field('publicGalleryConsent').checked,false); assert.equal(state.field('consent').checked,false);
+    state.consent(); state.submit(); await flush(); assert.equal(state.creates.length,0);
+    state.publicConsent(); state.find('[data-instant-edit-step="photo"]').click();
+    state.upload(new File(['new pixels'],'second.jpg',{type:'image/jpeg'}));
+    assert.equal(state.field('publicGalleryConsent').checked,false); assert.equal(state.field('consent').checked,false);
+    state.next(); state.next(); state.next(); state.consent(); state.publicConsent(); state.submit(); await flush();
+    assert.equal(state.creates.length,1); assert.equal(state.creates[0].publicGalleryConsentVersion,PUBLIC_GALLERY_CONSENT_VERSION);
+    assert.equal(state.creates[0].dedication,'A different public dedication');
+  }, { status:{publicGalleryEnabled:true,publicGalleryRequired:true} });
+});
+
+test('disabled public gallery preserves the private creator and omits all publication metadata from the payload', async () => {
+  await fixture(async state => {
+    state.upload(new File(['pixels'],'private.jpg',{type:'image/jpeg'})); state.next(); state.next(); state.next();
+    assert.equal(state.find('[data-public-consent]').hidden,true); assert.equal(state.field('publicGalleryConsent').required,false);
+    assert.equal(state.field('publicGalleryConsent').checked,false); state.consent(); state.submit(); await flush();
+    assert.equal(state.creates.length,1); assert.equal('publicGalleryConsent' in state.creates[0],false);
+    assert.equal('publicGalleryConsentVersion' in state.creates[0],false);
+  }, { status:{publicGalleryEnabled:false,publicGalleryRequired:false} });
+});
+
+test('actual cloud client sends the reviewed v11 permission and words with image declarations, preserving creator capabilities only on private requests', async () => {
+  const id='00000000-0000-4000-8000-000000000010',token='A'.repeat(43),calls=[];
+  const service=createCloudInstantService(async(url,init)=>{
+    const action=new URL(url,'https://gift.example').searchParams.get('action');calls.push({action,url,init});
+    const data=action==='status'?{storage:'cloud',localOnly:false,available:true,publicGalleryEnabled:true,publicGalleryRequired:true}
+      :action==='prepare'?{id,token,deduplicated:true,uploads:[]}
+        :{id,token,storage:'cloud',uploadState:'finalized',state:'completed',publicGalleryConsent:true,publicGalleryConsentVersion:PUBLIC_GALLERY_CONSENT_VERSION,publicGalleryPublished:true,publicGalleryId:id};
+    return new Response(JSON.stringify({ok:true,data}),{headers:{'Content-Type':'application/json'}});
+  });
+  const result=await service.create({title:'Reviewed gift',worldPrompt:'A real place described by me.',story:'My reviewed story.',dedication:'Our dedication.',senderName:'André',recipientName:'Maria',photoIntent:'place',imageDataUrl:'data:image/png;base64,cGl4ZWxz',dedupeKey:'reviewed-v11-01',requestToken:token,consent:true,publicGalleryConsent:true,publicGalleryConsentVersion:PUBLIC_GALLERY_CONSENT_VERSION},new AbortController().signal);
+  assert.deepEqual(calls.map(call=>call.action),['status','prepare','finalize']);
+  const prepare=calls.find(call=>call.action==='prepare'),body=JSON.parse(prepare.init.body);
+  assert.equal(body.publicGalleryConsent,true);assert.equal(body.publicGalleryConsentVersion,PUBLIC_GALLERY_CONSENT_VERSION);
+  assert.equal(body.story,'My reviewed story.');assert.equal(body.senderName,'André');assert.equal(body.dedication,'Our dedication.');
+  assert.equal(body.requestToken,token);assert.equal('imageDataUrl' in body,false);assert.equal(body.images.original.mime,'image/png');assert.equal(body.images.original.bytes,6);assert.match(body.images.original.sha256,/^[a-f0-9]{64}$/);
+  assert.equal(calls[0].init.method,'GET');assert.equal(calls[0].init.headers['X-Instant-Token'],undefined);
+  assert.equal(calls[2].init.headers['X-Instant-Token'],token);assert.equal(result.publicGalleryPublished,true);assert.equal(result.publicGalleryId,id);
 });
 
 test('a fresh Make entry retires only delivered creator recovery and keeps old and new gifts in the library', async () => {
@@ -416,6 +507,94 @@ test('a delivered partial souvenir registers once and opens while its failed wor
   }, {
     storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
     jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: state.jobs.length === 1 ? 'processing' : 'partial', tripo: { state: 'completed' }, worldlabs: { state: state.jobs.length === 1 ? 'processing' : 'failed', errorCode: state.jobs.length === 1 ? undefined : 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo', modelUrl: '/model' } }),
+  });
+});
+
+const previewReference = { id: '00000000-0000-4000-8000-000000000019', token: 'x'.repeat(43) };
+const previewHash = 'a'.repeat(64);
+const previewSigned = (version, hash = previewHash, bucket = 'gp-instant-generated', recordId = previewReference.id) => `https://oqmzwznadfuxybtstzzz.supabase.co/storage/v1/object/sign/${bucket}/${recordId}/${bucket === 'gp-instant-generated' ? `generated/${hash}` : `souvenir/model-${hash}`}.glb?token=fixture.payload.signature${version}`;
+const previewSettings = (extra = {}) => ({
+  previewScene: true, storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(previewReference)]],
+  jobHandler: (_reference, state) => ({ ...state.job, ...previewReference, state: 'processing', tripo: { state: 'completed' }, worldlabs: { state: 'processing' }, assets: { photoUrl: '/photo', modelUrl: previewSigned(state.jobs.length) } }),
+  ...extra,
+});
+
+test('renewing the same canonical model signature preserves a revealed viewer while the world continues processing', async () => {
+  await fixture(async state => {
+    assert.equal(state.modelViewers.length, 1); const viewer = state.modelViewers[0]; viewer.options.onReady();
+    const visibilityBefore = [...state.modelVisibility], rotationBefore = [...viewer.autoRotate];
+    assert.equal(state.modelHost.inert, false); assert.equal(state.find('[data-instant-preview-load]').hidden, true);
+    for (let i = 0; i < 3; i++) { state.scheduled.at(-1).callback(); await flush(); }
+    assert.equal(state.jobs.length, 4); assert.equal(state.modelImports, 1); assert.equal(state.modelViewers.length, 1);
+    assert.equal(viewer.destroyCount, 0); assert.equal(viewer.resetCount, 0); assert.deepEqual(viewer.autoRotate, rotationBefore);
+    assert.deepEqual(state.modelVisibility, visibilityBefore); assert.equal(state.modelHost.inert, false);
+    assert.equal(state.find('[data-instant-preview-load]').hidden, true);
+    assert.ok(state.transformations.every(value => value.modelUrl === previewSigned(1).split('?')[0]));
+    assert.equal(viewer.options.modelUrl, previewSigned(1), 'The GPU receives the actual signed URL, not its presentation identity');
+    assert.equal(state.creates.length, 0); assert.equal(state.retries.length, 0);
+  }, previewSettings());
+});
+
+test('same-model renewal keeps a pending import and its readiness callback current; a real hash change replaces the viewer', async () => {
+  await fixture(async state => {
+    assert.equal(state.pendingModelImports.length, 1); state.scheduled.at(-1).callback(); await flush();
+    assert.equal(state.modelImports, 1); state.pendingModelImports[0](); await flush();
+    assert.equal(state.modelViewers.length, 1); const original = state.modelViewers[0]; original.options.onReady();
+    assert.equal(state.modelHost.inert, false); assert.equal(state.find('[data-instant-preview-load]').hidden, true);
+    state.replaceModel = true; state.scheduled.at(-1).callback(); await flush();
+    assert.equal(original.destroyCount, 1); assert.equal(state.modelImports, 2); assert.equal(state.modelHost.inert, true);
+    original.options.onReady(); assert.equal(state.modelHost.inert, true, 'A stale renderer cannot reveal the replacement asset');
+    state.pendingModelImports[1](); await flush(); state.modelViewers[1].options.onReady();
+    assert.equal(state.modelHost.inert, false); assert.equal(state.modelViewers[1].options.modelUrl, previewSigned(state.jobs.length,'b'.repeat(64)));
+    assert.equal(state.creates.length, 0); assert.equal(state.retries.length, 0);
+  }, previewSettings({ previewScene: 'deferred', jobHandler: (_reference, state) => ({ ...state.job, ...previewReference, state: 'processing', tripo: { state: 'completed' }, worldlabs: { state: 'processing' }, assets: { photoUrl: '/photo', modelUrl: previewSigned(state.jobs.length,state.replaceModel ? 'b'.repeat(64) : previewHash) } }) }));
+});
+
+test('a provider URL query change replaces the revealed model instead of assuming token-independent semantics', async () => {
+  await fixture(async state => {
+    const original = state.modelViewers[0]; original.options.onReady(); assert.equal(state.modelHost.inert, false);
+    state.scheduled.at(-1).callback(); await flush();
+    assert.equal(original.destroyCount, 1); assert.equal(state.modelImports, 2); assert.equal(state.modelHost.inert, true);
+    original.options.onReady(); assert.equal(state.modelHost.inert, true);
+    const replacement = state.modelViewers[1]; assert.equal(replacement.options.modelUrl, 'https://provider.example/model.glb?version=2');
+    replacement.options.onReady(); assert.equal(state.modelHost.inert, false);
+    assert.equal(state.creates.length, 0); assert.equal(state.retries.length, 0);
+  }, previewSettings({ jobHandler: (_reference, state) => ({ ...state.job, ...previewReference, state: 'processing', tripo: { state: 'completed' }, worldlabs: { state: 'processing' }, assets: { photoUrl: '/photo', modelUrl: `https://provider.example/model.glb?version=${state.jobs.length}` } }) }));
+});
+
+test('model preview identity ignores only one signed token on this project canonical model paths, retaining arbitrary URL semantics', () => {
+  const identity = address => instantModelPreviewIdentity({ ...previewReference, assets: { photoUrl: '/photo', modelUrl: address } });
+  assert.equal(identity(previewSigned(1)),identity(previewSigned(2)));
+  assert.equal(identity(previewSigned(1,previewHash,'gp-instant-souvenirs')),identity(previewSigned(2,previewHash,'gp-instant-souvenirs')));
+  assert.notEqual(identity(previewSigned(1)),identity(previewSigned(1,'b'.repeat(64))));
+  assert.notEqual(identity(previewSigned(1)),identity(previewSigned(1,previewHash,'gp-instant-souvenirs')));
+  for (const change of [
+    url => url.replace('oqmzwznadfuxybtstzzz','another-project'), url => url.replace('https:','http:'),
+    url => url.replace('gp-instant-generated','gp-instant-private'), url => url.replace('/generated/','/moderation/'),
+    url => url.replace(previewReference.id,'00000000-0000-4000-8000-000000000020'),
+    url => `${url}&width=500`, url => `${url}&download=alternate.glb`, url => `${url}&token=second.signature.value`, url => `${url}#variant`,
+    url => url.replace('token=fixture.payload.signature','token=opaque'),
+  ]) assert.notEqual(identity(change(previewSigned(1))),identity(change(previewSigned(2))), 'Noncanonical URLs preserve their full changing query');
+  for (const address of ['/model.glb?version=1','https://provider.example/model.glb?version=1',previewSigned(1).replace('.glb?','.png?')])assert.equal(identity(address),address);
+});
+
+test('a partial world registers and opens after model failure while a nonterminal first creation stays pending, without resubmission', async () => {
+  const reference = { id: 'partial-world', token: 'x'.repeat(43) };
+  await fixture(async state => {
+    assert.equal(state.completed.length, 0); assert.equal(state.find('[data-instant-open]').hidden, true);
+    assert.equal(state.scheduled.length, 1); const scheduled = state.scheduled[0]; scheduled.callback(); await flush();
+    assert.equal(state.completed.length, 1); assert.equal(state.completed[0].state, 'partial');
+    assert.equal(state.find('[data-instant-open]').hidden, false); assert.match(state.find('[data-instant-open]').innerHTML, /Open your world/);
+    assert.equal(state.find('#instant-progress-heading').textContent, 'Your world is ready.');
+    assert.match(state.find('[data-instant-job-status]').textContent, /world is ready.*3D keepsake is unavailable/);
+    assert.equal(state.find('[data-instant-job-note]').textContent, 'Step inside your world and read your story.');
+    assert.equal(state.find('[data-instant-model-preview]').hidden, true); assert.equal(state.scheduled.length, 1);
+    state.find('[data-instant-open]').click(); assert.equal(state.opened.length, 1);
+    assert.equal(state.opened[0].assets.worldUrl, '/world'); assert.equal(state.opened[0].assets.modelUrl, undefined);
+    scheduled.callback(); await flush(); assert.equal(state.completed.length, 1); assert.equal(state.creates.length, 0); assert.equal(state.retries.length, 0);
+  }, {
+    language: 'pt-BR', storage: [['giftportals.instant.job.v2:anonymous', JSON.stringify(reference)]],
+    jobHandler: (_reference, state) => ({ ...state.job, ...reference, state: state.jobs.length === 1 ? 'processing' : 'partial', tripo: { state: 'failed', errorCode: 'PROVIDER_GENERATION_FAILED' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo', worldUrl: '/world' } }),
   });
 });
 
@@ -684,14 +863,14 @@ test('a fresh place WebP becomes a metadata-free JPEG original without a fabrica
 test('Paris Review retains its distinct curated miniature reference and submits its PNG bytes without reframing the original', async () => {
   await fixture(async state => {
     state.find('[data-instant-example="paris"]').click(); state.next(); state.next(); state.next();
-    assert.equal(state.find('[data-instant-review-photo]').src, '/assets/examples/v13/paris.jpg');
+    assert.equal(state.find('[data-instant-review-photo]').src, '/assets/examples/v11/paris-scene.jpg');
     assert.equal(state.find('[data-instant-review-miniature]').src, '/assets/examples/v17/paris-souvenir-reference.png'); assert.equal(state.find('[data-instant-review-miniature]').hidden, false);
     assert.match(state.find('[data-instant-review-representation]').textContent, /reference guides/); state.consent(); state.submit(); await flush();
     assert.equal(state.creates.length, 1); const submitted = state.creates[0];
     assert.equal(submitted.objectImageRole, 'miniature-reference'); assert.notEqual(submitted.imageDataUrl, submitted.objectImageDataUrl);
-    assert.equal(Buffer.from(submitted.imageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v13/paris.jpg');
+    assert.equal(Buffer.from(submitted.imageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v11/paris-scene.jpg');
     assert.equal(Buffer.from(submitted.objectImageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v17/paris-souvenir-reference.png');
-    assert.equal(submitted.worldImageDataUrl, undefined); assert.deepEqual(state.fetchUrls, ['/assets/examples/v13/paris.jpg', '/assets/examples/v17/paris-souvenir-reference.png']);
+    assert.equal(submitted.worldImageDataUrl, undefined); assert.deepEqual(state.fetchUrls, ['/assets/examples/v11/paris-scene.jpg', '/assets/examples/v17/paris-souvenir-reference.png']);
   });
 });
 
@@ -704,7 +883,7 @@ test('Kyoto stays selectable and submits only its unchanged original through nor
     state.consent();state.submit();await flush();
     assert.equal(state.creates.length, 1);const submitted = state.creates[0];
     assert.equal(submitted.exampleId, 'kyoto');assert.equal(submitted.photoIntent, 'place');assert.equal(submitted.story, 'My own Kyoto memory.');
-    assert.match(submitted.worldPrompt, /artistic Kyoto garden/);
+    assert.match(submitted.worldPrompt, /photographic Kyoto garden/);
     assert.equal(Buffer.from(submitted.imageDataUrl.split(',')[1], 'base64').toString(), 'example source /assets/examples/v13/kyoto.jpg');
     assert.equal(submitted.objectImageDataUrl, undefined);assert.equal(submitted.objectImageRole, undefined);assert.equal(submitted.worldImageDataUrl, undefined);
     assert.deepEqual(state.fetchUrls, ['/assets/examples/v13/kyoto.jpg']);

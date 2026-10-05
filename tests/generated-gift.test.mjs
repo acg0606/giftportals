@@ -221,6 +221,19 @@ test('room world entry skips the object renderer, and returning to the room disp
   }, { initialView: 'world', onCollection: () => opened++ });
 });
 
+test('a world-only gift opens its actual world by default and has no miniature return, print or VR actions', async () => {
+  await fixture(async state => {
+    assert.equal(state.imports.object.length, 0); assert.equal(state.imports.world.length, 1);
+    assert.equal(state.selector('[data-gg-mode="object"]'), null); assert.equal(state.element('return'), null);
+    assert.equal(state.element('print'), null); assert.equal(state.element('xr'), null);
+    assert.doesNotMatch(state.dialog().innerHTML, /Your 3D souvenir|Open 3D|Tripo keepsake/);
+    await state.resolve('world'); const world = state.viewers[0]; world.callbacks.onReady();
+    assert.equal(world.source, 'http://127.0.0.1:4323/synthetic/world.spz'); assert.equal(world.kind, 'world');
+    state.element('exit').click(); assert.equal(state.exitCount(), 1); assert.equal(world.destroyed, true);
+    assert.equal(state.imports.object.length, 0);
+  }, { initialView: 'object', gift: { modelUrl: undefined, objectRepresentation: 'souvenir-miniature' } });
+});
+
 test('souvenir identity and orientation metadata reach the actual model viewer without changing original-photo provenance', async () => {
   await fixture(async state => {
     assert.ok(state.selector('.gg-object-badge')); assert.match(state.dialog().innerHTML, /Your 3D souvenir/);
@@ -693,13 +706,15 @@ test('a private asset expiring during the lazy import cannot open a print panel 
   }, { gift: { mediaExpiresAt: Math.floor(Date.now() / 1000) + 60 } });
 });
 
-test('share copy distinguishes local preview, online cloud gift and finite private cloud retention', async () => {
+test('share copy distinguishes local preview, online cloud gift, finite private retention and public refreshed media access', async () => {
   for (const [settings, expected] of [
     [{}, /Local preview link · available while this preview is running/],
     [{ shareScope: 'cloud' }, /Gift link · opens this keepsake online/],
     [{ shareScope: 'cloud', gift: { mediaExpiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60 } }, /Private gift link · original photos and generated gifts expire after 7 days/],
+    [{ shareScope: 'public', gift: { mediaExpiresAt: Math.floor(Date.now() / 1000) + 3600 } }, /Shared gift link · media access refreshes when you reopen it/],
   ]) await fixture(async state => {
     assert.match(state.dialog().innerHTML, expected); state.element('share').click(); assert.equal(state.shareCount(), 1);
+    if (settings.shareScope === 'public') assert.doesNotMatch(state.dialog().innerHTML, /Private gift link|expire after 7 days|Local preview link/);
     state.invalidate(); state.element('share').click(); assert.equal(state.shareCount(), 1);
   }, { share: true, ...settings });
 });

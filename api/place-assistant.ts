@@ -6,11 +6,23 @@ type Request=IncomingMessage&{body?:unknown};
 const key=Symbol.for('giftportals.place-assistant.v10.2.unrestricted-suggestions');
 const shared=globalThis as typeof globalThis&{[key]?:ReturnType<typeof createPlaceAssistant>};
 const adapter=shared[key] ||= createPlaceAssistant();
+function assistantHTTPSOrigin(req:Request):URL|undefined{
+ const preview=process.env.VERCEL==='1'&&process.env.VERCEL_ENV==='preview'
+  &&process.env.VERCEL_GIT_COMMIT_REF==='codex/version-11'&&process.env.ENABLE_PUBLIC_GALLERY==='true';
+ if(preview){
+  const platformHost=(value:unknown):value is string=>typeof value==='string'&&value.length<=253&&value.endsWith('.vercel.app')
+   &&value.split('.').every(label=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+  const hosts=[process.env.VERCEL_URL,process.env.VERCEL_BRANCH_URL].filter(platformHost);
+  return typeof req.headers.host==='string'&&hosts.includes(req.headers.host)?new URL(`https://${req.headers.host}`):undefined;
+ }
+ let origin:URL|undefined;try{origin=new URL(process.env.GIFTPORTALS_CLOUD_ORIGIN||'');}catch{return;}
+ return origin.protocol==='https:'&&!origin.username&&!origin.password&&origin.pathname==='/'&&!origin.search&&!origin.hash?origin:undefined;
+}
 /** Vercel injects this header into function requests; callers outside that runtime cannot supply credentials. */
 export function runtimeAssistantToken(req:Request):string|undefined{
  if(process.env.VERCEL!=='1')return;
- let origin:URL;try{origin=new URL(process.env.GIFTPORTALS_CLOUD_ORIGIN||'');}catch{return;}
- if(origin.protocol!=='https:'||req.headers.host!==origin.host)return;
+ const origin=assistantHTTPSOrigin(req);
+ if(!origin||req.headers.host!==origin.host)return;
  const raw=req.headers['x-vercel-oidc-token'];
  if(typeof raw!=='string'||raw.length<24||raw.length>16384||!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(raw))return;
  return raw;
@@ -23,8 +35,8 @@ export function assertAssistantOrigin(req:Request){
   ensure(!req.socket?.remoteAddress||['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress),'ORIGIN_DENIED',403);
   if(req.headers.origin!==undefined)ensure(req.headers.origin===`http://${host}`,'ORIGIN_DENIED',403);
  }else{
-  let origin:URL|undefined;try{origin=new URL(process.env.GIFTPORTALS_CLOUD_ORIGIN||'');}catch{/* Closed. */}
-  ensure(origin?.protocol==='https:'&&!origin.username&&!origin.password&&origin.pathname==='/'&&!origin.search&&!origin.hash&&host===origin.host,'ORIGIN_DENIED',403);
+  const origin=assistantHTTPSOrigin(req);
+  ensure(origin&&host===origin.host,'ORIGIN_DENIED',403);
   if(req.headers.origin!==undefined)ensure(req.headers.origin===origin.origin,'ORIGIN_DENIED',403);
   if(req.method==='POST')ensure(req.headers.origin===origin.origin,'ORIGIN_DENIED',403);
  }

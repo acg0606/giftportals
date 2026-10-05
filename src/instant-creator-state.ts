@@ -6,6 +6,8 @@ export interface InstantStatus {
   available: boolean;
   localOnly: boolean;
   storage?: 'local' | 'cloud';
+  publicGalleryEnabled?: boolean;
+  publicGalleryRequired?: boolean;
   generationEnabled: boolean;
   providers: { tripo: boolean; worldlabs: boolean };
   maxImageBytes: number;
@@ -17,6 +19,10 @@ export interface InstantPhotoReport {
  results:{id:'original'|'object'|'world';decision:'allow'|'block'|'review';category:'ordinary'|'sexual'|'adult-product'|'uncertain';objectHint?:string;objectConfidence?:number}[];
 }
 export interface InstantJob {
+  publicGalleryConsent?: boolean;
+  publicGalleryConsentVersion?: string;
+  publicGalleryPublished?: boolean;
+  publicGalleryId?: string;
   uploadState?: 'pending' | 'finalized';
   /** Pending cloud drafts expose only missing private inputs, never photo bytes. */
   uploads?: import('../shared/cloud-instant').CloudUploadPlan[];
@@ -58,6 +64,8 @@ export interface InstantCreateInput {
   dedupeKey: string;
   requestToken: string;
   consent: true;
+  publicGalleryConsent?: true;
+  publicGalleryConsentVersion?: 'giftportals-public-souvenir-v11';
   curiosityIds?:string[];
   exampleId?:string;
 }
@@ -99,10 +107,11 @@ export function validateInstantPhoto(file: { type: string; size: number }, maxBy
   return null;
 }
 
-/** A terminal gift can open as soon as its real keepsake has been delivered,
- * including a partial creation whose world could not be made. */
+/** A terminal gift preserves either completed output. During an explicit world
+ * retry, its previously delivered model remains available. */
 export function instantGiftReady(job: InstantJob): boolean {
-  return (job.state === 'completed' || job.state === 'partial' || job.state === 'processing' && Boolean(job.worldRetry && job.worldRetry.attempts > 0)) && instantModelReady(job);
+  if (job.state === 'completed' || job.state === 'partial') return instantModelReady(job) || instantWorldReady(job);
+  return job.state === 'processing' && Boolean(job.worldRetry && job.worldRetry.attempts > 0) && instantModelReady(job);
 }
 
 export function instantModelReady(job: InstantJob): boolean {

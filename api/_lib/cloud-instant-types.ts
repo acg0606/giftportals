@@ -9,6 +9,8 @@ export interface CloudJobDocument {
   photoIntent: 'object' | 'place'; objectRepresentation: 'original-object' | 'derived-object' | 'souvenir-miniature';
   images: (CloudImageDeclaration & { id: CloudImageId })[]; needsReference: boolean; curiosityIds?: string[]; exampleId?: string;
   generation: { tripo: Record<string, unknown>; worldlabs: Record<string, unknown>; tripoReference?: Record<string, unknown> };
+  publicGalleryConsent?: true;
+  publicGalleryConsentVersion?: typeof import('../../shared/instant-gallery.js').PUBLIC_GALLERY_CONSENT_VERSION;
   photoSafety?: CloudSafetyReport; objectSafety?: CloudSafetyReport;
   worldSemantics?: { metricScaleFactor: number; groundPlaneOffset: number }; splatQuality?: string; colliderStatus?: string;
   stageFailures?: Partial<Record<CloudStageName,string>>;

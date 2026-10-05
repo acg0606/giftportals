@@ -30,13 +30,15 @@ test('real operator SSR transformation leaves an existing preview dependency cac
 });
 
 test('every operator CLI that creates a Vite server uses the isolated SSR options', async () => {
-  const directory=new URL('../tools/',import.meta.url),names=await readdir(directory);let checked=0;
+  const directory=new URL('../tools/',import.meta.url),names=await readdir(directory),checked=[];
   for(const name of names.filter(name=>name.endsWith('.mjs'))){
     const source=await readFile(new URL(name,directory),'utf8');
     if(!/import\s*\{\s*createServer\s*\}\s*from\s*['"]vite['"]/.test(source))continue;
-    checked++;
+    checked.push(name);
     assert.match(source,/from ['"]\.\/operator-vite-config\.mjs['"]/,`${name} must import isolated operator options`);
     assert.match(source,/createServer\(operatorViteConfig\((?:app|root)\)\)/,`${name} must not instantiate a preview-cache optimizer`);
   }
-  assert.equal(checked,4);
+  for(const name of ['export-v11-world-example.mjs','multiview-keepsake-trial.mjs','quality-trial-balances.mjs','remake-keepsake.mjs','world-quality-trial.mjs']) {
+    assert.ok(checked.includes(name),`${name} must remain covered by operator isolation checks`);
+  }
 });

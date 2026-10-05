@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {setImmediate} from 'node:timers/promises';
+import {setImmediate, setTimeout as wait} from 'node:timers/promises';
 import {webcrypto} from 'node:crypto';
 import test from 'node:test';
 import * as Three from 'three';
@@ -58,12 +58,21 @@ async function fixture(action,{defer=false,current=true,geometry=new Three.BoxGe
   for(const[name,value]of Object.entries(values))Object.defineProperty(globalThis,name,{value,configurable:true,writable:true});
   // Re-import so the actual module binds the fixture loader while all geometry is real.
   const module=await import(data(code)+'#'+Math.random());state.handle=module.mountKeepsakePrint(state.host,{modelUrl:'/approved/model.glb',title:'My <private> little gift',modelYaw:-Math.PI/2,isCurrent:()=>state.current,onClose:()=>state.closes++});state.find=selector=>state.host.children[0].querySelector(selector);state.finish=async()=>{for(let i=0;i<30;i++)await setImmediate();};state.complete=()=>resolveParse?.();
-  try{await state.finish();await action(state);}finally{state.handle.destroy();resolveParse?.();await state.finish();for(const[name,descriptor]of saved)if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}
+  state.waitFor=async(predicate,description)=>{const deadline=Date.now()+5000;while(!predicate()){assert.ok(Date.now()<deadline,`Timed out waiting for ${description}`);await wait(5);}};
+  try{
+    await state.finish();
+    if(current&&defer)await state.waitFor(()=>typeof resolveParse==='function','the real decoded model to reach its deferred return');
+    else if(current)await state.waitFor(()=>!state.find('.kp-prepare').disabled&&!state.find('[data-kp-zip]').hidden&&!state.find('[data-kp-stl]').hidden,'the initial mesh analysis and package');
+    await action(state);
+  }finally{state.handle.destroy();resolveParse?.();await state.finish();for(const[name,descriptor]of saved)if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}
 }
 test('modal prepares original GLB and a four-file ZIP locally, changes scale without refetching and disposes models/download URLs once',async()=>fixture(async state=>{
   assert.equal(state.calls.length,1);assert.equal(state.calls[0].options.credentials,'omit');assert.equal(state.find('[data-kp-title]').textContent,'My <private> little gift');assert.equal(state.find('[data-kp-zip]').hidden,false);assert.equal(state.find('[data-kp-stl]').hidden,false);
   const original=new Uint8Array(await state.urls.get(state.find('[data-kp-glb]').href).arrayBuffer());assert.deepEqual(original,state.sourceBytes);const zip=new Uint8Array(await state.urls.get(state.find('[data-kp-zip]').href).arrayBuffer()),view=new DataView(zip.buffer);assert.equal(view.getUint16(zip.length-12,true),4);
-  state.find('input').value='120';state.find('form').dispatchEvent(new Event('submit',{cancelable:true}));await state.finish();assert.match(state.find('.kp-dimensions').textContent,/120.0/);assert.equal(state.calls.length,1);
+  const previousPackage=state.find('[data-kp-zip]').href;
+  state.find('input').value='120';state.find('form').dispatchEvent(new Event('submit',{cancelable:true}));
+  await state.waitFor(()=>!state.find('.kp-prepare').disabled&&!state.find('[data-kp-zip]').hidden&&!state.find('[data-kp-stl]').hidden&&state.find('[data-kp-zip]').href!==previousPackage,'the replacement mesh analysis and print package');
+  assert.match(state.find('.kp-dimensions').textContent,/120.0/);assert.equal(state.calls.length,1);
   let geometryDisposed=0,materialDisposed=0;const child=state.models[0].children[0];child.geometry.addEventListener('dispose',()=>geometryDisposed++);child.material.addEventListener('dispose',()=>materialDisposed++);state.handle.destroy();state.handle.destroy();assert.equal(geometryDisposed,1);assert.equal(materialDisposed,1);assert.equal(state.revoked.length,state.urls.size);assert.equal(state.timers.size,0);assert.equal(state.calls[0].options.signal.aborted,true);
 }));
 test('print measurements stay in English when the browser number-formatting default is Portuguese',async()=>{
@@ -80,6 +89,6 @@ test('print measurements stay in English when the browser number-formatting defa
 });
 
 test('a late decoded model is disposed after close and a stale route never installs downloads or attaches a package',async()=>{
-  await fixture(async state=>{assert.equal(state.models.length,1);let disposed=0;state.models[0].children[0].geometry.addEventListener('dispose',()=>disposed++);state.handle.destroy();const urls=state.urls.size;state.complete();await state.finish();assert.equal(disposed,1);assert.equal(state.urls.size,urls);assert.equal(state.host.children.length,0);},{defer:true});
+  await fixture(async state=>{assert.equal(state.models.length,1);let disposed=0;state.models[0].children[0].geometry.addEventListener('dispose',()=>disposed++);state.handle.destroy();const urls=state.urls.size;state.complete();await state.waitFor(()=>disposed===1,'disposal of the decoded model returned after close');assert.equal(disposed,1);assert.equal(state.urls.size,urls);assert.equal(state.host.children.length,0);},{defer:true});
   await fixture(async state=>{assert.equal(state.calls.length,0);assert.equal(state.models.length,0);assert.equal(state.urls.size,0);},{current:false});
 });

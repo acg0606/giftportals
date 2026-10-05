@@ -109,3 +109,64 @@ export function sampleWorldFlight(path: readonly WorldFlightPose[], progress: nu
 export function connectWorldFlight(from: WorldFlightPose, to: WorldFlightPose): readonly WorldFlightPose[] {
   return [from, to];
 }
+
+export const WORLD_CINEMATIC_DURATION_MS = 30_000;
+export interface WorldFlightBounds { min: WorldFlightVector; max: WorldFlightVector }
+export interface WorldCinematicState { phase: 'preparing' | 'flying' | 'paused' | 'completed'; progress: number; reason?: 'motion' | 'unavailable' | 'hidden' | 'skip' }
+
+/** The original provider camera is our only known photo viewpoint. Never infer
+ * a detected landmark or use story coordinates as reconstructed geometry. The
+ * short arc stays inside the measured scene and every sampled corridor must
+ * pass the real collider clearance check. A blocked scene has no invented path. */
+export function createBoundedWorldFlight(bounds: WorldFlightBounds, spawn: WorldFlightVector, yaw = 0, clear: (from: WorldFlightVector, to: WorldFlightVector) => boolean = () => false, scale = 1): readonly WorldFlightPose[] | undefined {
+  if (!finiteVector(bounds.min) || !finiteVector(bounds.max) || !finiteVector(spawn) || !Number.isFinite(yaw) || !Number.isFinite(scale) || scale <= 0) return;
+  const inset = Math.min(.18 * scale, .3), margin = bounds.max.map((value, axis) => value - bounds.min[axis]);
+  if (margin.some(value => value <= inset * 2) || spawn.some((value, axis) => value < bounds.min[axis] + inset || value > bounds.max[axis] - inset)) return;
+  const cap = Math.min(4, Math.max(.3, 2.8 * scale)), room = Math.min(cap, spawn[0] - bounds.min[0] - inset, bounds.max[0] - spawn[0] - inset, spawn[2] - bounds.min[2] - inset, bounds.max[2] - spawn[2] - inset);
+  const rise = Math.min(2.4 * scale, bounds.max[1] - spawn[1] - inset);
+  if (rise < .2 * scale || room < .25 * scale) return;
+  const forward: WorldFlightVector = [-Math.sin(yaw), 0, -Math.cos(yaw)], right: WorldFlightVector = [Math.cos(yaw), 0, -Math.sin(yaw)];
+  // Frame scenery along the original photo direction. The flight corridor is
+  // deliberately small, but its look target need not be the nearby floor.
+  // This is a bounded framing direction, never a claimed landmark detection.
+  const forwardRoom = Math.min(...[0, 2].filter(axis => Math.abs(forward[axis]) > 1e-8).map(axis =>
+    (forward[axis] > 0 ? bounds.max[axis] - spawn[axis] - inset : spawn[axis] - bounds.min[axis] - inset) / Math.abs(forward[axis])));
+  const targetDistance = Math.min(forwardRoom * .65, 12 * scale);
+  const target: WorldFlightVector = spawn.map((value, axis) => clamp(value + forward[axis] * targetDistance, bounds.min[axis] + inset, bounds.max[axis] - inset)) as unknown as WorldFlightVector;
+  const end: WorldFlightPose = { position: spawn, target, fov: 70 };
+  for (const fraction of [1, .65, .35, 0]) {
+    const side = room * .48 * fraction, behind = room * .45 * fraction;
+    const pose = (sideways: number, back: number, height: number, fov: number): WorldFlightPose => ({ position: spawn.map((value, axis) => value + right[axis] * sideways - forward[axis] * back + (axis === 1 ? height : 0)) as unknown as WorldFlightVector, target, fov });
+    // A local roof can be much lower than the entire reconstructed scene.
+    // Try lower arcs before dropping lateral travel; every candidate still
+    // requires the same full corridor clearance and measured scene bounds.
+    for (const heightFraction of [1, .65, .35, .25, .15]) {
+      const height = rise * heightFraction; if (height < .2 * scale) continue;
+      const path = [pose(-side, behind, height, 74), pose(-side * .55, behind * .25, height * .8, 72), pose(side * .6, 0, height * .48, 70), pose(side, -behind * .2, height * .22, 68), end];
+      let previous = path[0].position, valid = clear(previous, previous);
+      for (let i = 1; valid && i <= 240; i++) {
+        const current = sampleWorldFlight(path, i / 240).position;
+        valid = current.every((value, axis) => value >= bounds.min[axis] + inset && value <= bounds.max[axis] - inset) && clear(previous, current);
+        previous = current;
+      }
+      if (valid) return path;
+    }
+  }
+}
+
+/** Active foreground time only: returning from another app cannot fast-forward
+ * the experience. Completion is terminal, so its newspaper opens once. */
+export function createWorldCinematicSession(path: readonly WorldFlightPose[], reducedMotion = false, durationMs = WORLD_CINEMATIC_DURATION_MS) {
+  const duration = clamp(Number.isFinite(durationMs) ? durationMs : WORLD_CINEMATIC_DURATION_MS, 25_000, 35_000);
+  let elapsed = 0, phase: WorldCinematicState['phase'] = reducedMotion || !path.length ? 'completed' : 'flying';
+  let reason: WorldCinematicState['reason'] = reducedMotion ? 'motion' : !path.length ? 'unavailable' : undefined;
+  const state = (): WorldCinematicState => ({ phase, progress: phase === 'completed' ? 1 : elapsed / duration, reason });
+  return {
+    state,
+    pose: () => path.length ? sampleWorldFlight(path, reducedMotion ? 1 : elapsed / duration) : undefined,
+    step(deltaMs: number) { if (phase === 'flying') { elapsed = Math.min(duration, elapsed + clamp(Number.isFinite(deltaMs) ? deltaMs : 0, 0, 1000)); if (elapsed >= duration) phase = 'completed'; } return state(); },
+    pause() { if (phase === 'flying') { phase = 'paused'; reason = 'hidden'; } return state(); },
+    resume() { if (phase === 'paused') { phase = 'flying'; reason = undefined; } return state(); },
+    skip(motion = false) { if (phase !== 'completed') { phase = 'completed'; elapsed = duration; reason = motion ? 'motion' : 'skip'; } return state(); },
+  };
+}

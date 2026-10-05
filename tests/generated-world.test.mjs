@@ -21,6 +21,7 @@ const walkingViewpoints = dataUrl(compile(await readFile(new URL('../src/walking
 const walkingTour = dataUrl(compile(await readFile(new URL('../src/walking-tour.ts', import.meta.url), 'utf8')));
 const controller = dataUrl(compile(await readFile(new URL('../src/generated-world.ts', import.meta.url), 'utf8'))
   .replace(/import \* as THREE from 'three';/, 'const THREE = globalThis.__worldFixture.THREE;')
+  .replace(/from 'three-mesh-bvh'/, `from '${import.meta.resolve('three-mesh-bvh')}'`)
   .replace(/import \{ SparkRenderer, SplatMesh \} from '@sparkjsdev\/spark';/, 'const { SparkRenderer, SplatMesh } = globalThis.__worldFixture;')
   .replace(/import \{ GLTFLoader \} from 'three\/addons\/loaders\/GLTFLoader.js';/, 'const { GLTFLoader } = globalThis.__worldFixture;')
   .replace(/from '\.\/world-navigation'/, `from '${navigation}'`)
@@ -37,18 +38,20 @@ const flush = async () => { await setImmediate(); await setImmediate(); };
 let sequence = 0;
 
 async function fixture(action, settings = {}) {
-  const names = ['document', 'window', 'location', 'devicePixelRatio', 'innerWidth', 'innerHeight', 'ResizeObserver', 'IntersectionObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'fetch', 'matchMedia', 'createImageBitmap', '__worldFixture'];
+  const names = ['document', 'window', 'location', 'devicePixelRatio', 'innerWidth', 'innerHeight', 'ResizeObserver', 'IntersectionObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'fetch', 'matchMedia', 'createImageBitmap', '__worldFixture', ...(settings.fakeTimers ? ['setTimeout', 'clearTimeout'] : [])];
   const saved = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
-  const frames = new Map(), renderers = [], meshes = [], sparks = [], requests = [], projections = [], errors = [], walking = [], tours = [], viewpoints = [], cameraPoses = [], firstPersonStates = [], physicsInstances = [], bitmaps = [], gardens = [], gardenStates = [], walkingPointReports = [], lifecycle = [], walkingTours = [];
+  const frames = new Map(), renderers = [], meshes = [], sparks = [], requests = [], projections = [], errors = [], walking = [], tours = [], viewpoints = [], cameraPoses = [], firstPersonStates = [], physicsInstances = [], bitmaps = [], gardens = [], gardenStates = [], walkingPointReports = [], lifecycle = [], walkingTours = [], cinematicStates = [];
   let walkingTourCallback;
   const firstPerson = settings.firstPerson === true ? { spawn: [0, 1.55, .03], eyeHeight: 1.55, metricScale: 1, groundOffset: 0, walkSpeed: 1.15 } : settings.firstPerson;
   let intersection, visibilityDisconnected = 0;
-  let frameId = 0, ready = 0, resizeDisconnected = 0, resolveDecode, resolveCollision, resolvePhysics, resolveCalibration, resolveViewpoints, calibrationLoads = 0, viewpointLoads = 0, collisionParses = 0, collisionGeometryDisposed = 0, collisionMaterialDisposed = 0, pointerLockExits = 0, now=0;
+  let frameId = 0, ready = 0, resizeDisconnected = 0, resolveDecode, resolveCollision, resolveCollisionFetch, resolvePhysics, resolveCalibration, resolveViewpoints, calibrationLoads = 0, viewpointLoads = 0, collisionParses = 0, collisionGeometryDisposed = 0, collisionMaterialDisposed = 0, pointerLockExits = 0, now=0, timerId=0, timerNow=0;
+  const timers = new Map(), collisionFetchReady = settings.deferCollisionFetch ? new Promise(resolve => { resolveCollisionFetch = resolve; }) : Promise.resolve();
   const initialized = new Promise(resolve => { resolveDecode = resolve; });
   const collider = new Three.Group();
   const groundGeometry = new Three.PlaneGeometry(8, 8), groundMaterial = new Three.MeshBasicMaterial({ side: Three.DoubleSide });
   groundGeometry.addEventListener('dispose', () => collisionGeometryDisposed++); groundMaterial.addEventListener('dispose', () => collisionMaterialDisposed++);
   const ground = new Three.Mesh(groundGeometry, groundMaterial); ground.rotation.x = Math.PI / 2; ground.position.y = .6; collider.add(ground);
+  if (settings.blockedRoof) { const roof = new Three.Mesh(new Three.PlaneGeometry(8,8),new Three.MeshBasicMaterial({side:Three.DoubleSide}));roof.rotation.x=Math.PI/2;roof.position.y=-(settings.roofHeight??1.7);collider.add(roof); }
   const collisionParsed = settings.deferCollision ? new Promise(resolve => { resolveCollision = resolve; }) : Promise.resolve({ scene: collider });
   class CollisionLoader { parseAsync() { collisionParses++; return settings.badCollision ? Promise.reject(new Error('Synthetic malformed collider')) : collisionParsed; } }
   class Motion extends EventTarget {
@@ -83,7 +86,7 @@ async function fixture(action, settings = {}) {
     forceContextLoss() { this.lost = true; }
   }
   class Spark extends Three.Object3D { constructor(options) { super(); this.options = options; sparks.push(this); } dispose() { this.disposed = true; } }
-  class Splats extends Three.Object3D { constructor(options) { super(); this.options = options; this.initialized = initialized; meshes.push(this); } dispose() { this.disposed = true; } }
+  class Splats extends Three.Object3D { constructor(options) { super(); this.options = options; this.initialized = initialized; meshes.push(this); } getBoundingBox() { return settings.invalidBounds ? new Three.Box3() : new Three.Box3(new Three.Vector3(-5,-6,-5), new Three.Vector3(5,2,5)); } dispose() { this.disposed = true; } }
   const doc = new EventTarget(); doc.visibilityState = 'visible'; doc.pointerLockElement = null;
   doc.exitPointerLock = () => { pointerLockExits++; doc.pointerLockElement = null; doc.dispatchEvent(new Event('pointerlockchange')); };
   const win = new EventTarget();
@@ -114,16 +117,18 @@ async function fixture(action, settings = {}) {
     ResizeObserver: class { constructor(callback) { this.callback = callback; } observe() { this.callback(); } disconnect() { resizeDisconnected++; } },
     IntersectionObserver: settings.observeVisibility ? class { constructor(callback) { intersection = callback; } observe() {} disconnect() { visibilityDisconnected++; } } : undefined,
     requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; }, cancelAnimationFrame: id => frames.delete(id),
-    fetch: async (url, options) => { requests.push({ url, options }); if (settings.collisionFetchFailure && url.includes('collider.glb')) throw new Error('Synthetic unavailable collider'); return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-length': '3' } }); },
+    fetch: async (url, options) => { requests.push({ url, options }); if (url.includes('collider.glb')) { if (settings.collisionFetchFailure) throw new Error('Synthetic unavailable collider'); await collisionFetchReady; } return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-length': '3' } }); },
     matchMedia: () => motion,
     createImageBitmap: settings.bitmapAvailable ? async () => { const bitmap = { width: 512, height: 256, closes: 0, close() { bitmap.closes++; } }; bitmaps.push(bitmap); return bitmap; } : undefined,
     __worldFixture: { THREE: { ...Three, WebGLRenderer: Renderer }, SparkRenderer: Spark, SplatMesh: Splats, GLTFLoader: CollisionLoader, createFirstPersonPhysics, createLivingGarden, loadWalkCalibration, loadWalkingViewpoints },
+    ...(settings.fakeTimers ? { setTimeout: (callback, delay) => { const id=++timerId; timers.set(id,{callback,at:timerNow+delay}); return id; }, clearTimeout: id => timers.delete(id) } : {}),
   };
   for (const [name, value] of Object.entries(values)) Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
   const host = new Element(); host.setAttribute('tabindex', '7'); let viewer;
   try {
     const { mountGeneratedWorld } = await import(`${controller}#${++sequence}`);
     viewer = mountGeneratedWorld(host, settings.url ?? '/synthetic/world.spz', { points: settings.points || [{ id: 'front', position: [.3, .2, -3] }, { id: 'behind', position: [0, 0, 3] }],
+      cinematicArrival: settings.cinematicArrival, onCinematicState: state => cinematicStates.push(state),
       collisionUrl: settings.collisionUrl, onWalkingChange: state => { walking.push(state); lifecycle.push(['walking', state.available]); },
       initialYaw: settings.initialYaw, initialPitch: settings.initialPitch,
       flightProfile: settings.flightProfile, onViewpointChange: state => viewpoints.push(state),
@@ -137,18 +142,19 @@ async function fixture(action, settings = {}) {
       onCameraPose: settings.captureCamera ? pose => cameraPoses.push(pose) : undefined,
       onReady: () => ready++, onError: message => errors.push(message), onPoints: points => projections.push(points), onTourChange: state => tours.push(state) });
     await flush();
-    await action({ viewer, host, renderers, meshes, sparks, requests, projections, errors, frames, walking, motion, tours, viewpoints, cameraPoses, firstPersonStates, physicsInstances, bitmaps, gardens, gardenStates, walkingPointReports, lifecycle, walkingTours, onWalkingTour: callback => { walkingTourCallback = callback; },
+    await action({ viewer, host, renderers, meshes, sparks, requests, projections, errors, frames, walking, motion, tours, viewpoints, cameraPoses, firstPersonStates, physicsInstances, bitmaps, gardens, gardenStates, walkingPointReports, lifecycle, walkingTours, cinematicStates, onWalkingTour: callback => { walkingTourCallback = callback; },
       ready: () => ready, resizeDisconnected: () => resizeDisconnected, decode: async () => { resolveDecode(); await flush(); },
       collisionParses: () => collisionParses, collisionDisposals: () => ({ geometry: collisionGeometryDisposed, material: collisionMaterialDisposed }),
-      completeCollision: async () => { resolveCollision?.({ scene: collider }); await flush(); },
+      completeCollision: async () => { resolveCollision?.({ scene: collider }); await flush(); }, completeCollisionFetch: async () => { resolveCollisionFetch?.(); await flush(); },
       completePhysics: async () => { resolvePhysics?.(); await flush(); }, pointerLockExits: () => pointerLockExits,
       completeCalibration: async () => { resolveCalibration?.(); await flush(); }, completeViewpoints: async () => { resolveViewpoints?.(); await flush(); },
       calibrationLoads: () => calibrationLoads, viewpointLoads: () => viewpointLoads,
       draw: (elapsed = 60) => { const callbacks = [...frames.values()]; frames.clear(); now+=elapsed;callbacks.forEach(callback => callback(now)); },
       document: doc, window: win,
       visible: value => intersection?.([{ target: host, isIntersecting: value, intersectionRatio: value ? 1 : 0 }]), visibilityDisconnected: () => visibilityDisconnected,
+      timers, advanceTimers: async elapsed => { timerNow+=elapsed; for (const [id,timer] of [...timers]) if (timer.at<=timerNow) { timers.delete(id); timer.callback(); } await flush(); },
     });
-  } finally { viewer?.destroy(); resolveDecode(); resolveCollision?.({ scene: collider }); resolvePhysics?.(); resolveCalibration?.(); resolveViewpoints?.(); await flush(); for (const name of names) { const descriptor = saved.get(name); if (descriptor) Object.defineProperty(globalThis, name, descriptor); else delete globalThis[name]; } }
+  } finally { viewer?.destroy(); resolveDecode(); resolveCollisionFetch?.(); resolveCollision?.({ scene: collider }); resolvePhysics?.(); resolveCalibration?.(); resolveViewpoints?.(); await flush(); for (const name of names) { const descriptor = saved.get(name); if (descriptor) Object.defineProperty(globalThis, name, descriptor); else delete globalThis[name]; } }
 }
 
 const keyboard = (target, type, key, repeat = false) => {
@@ -160,6 +166,85 @@ const pointerEvent = (target, type, values = {}) => {
 };
 
 const gardenSettings = { firstPerson: { spawn: [0, 1.65, 0], eyeHeight: 1.65, metricScale: 1, groundOffset: 0, livingGarden: true }, collisionUrl: '/synthetic/collider.glb' };
+
+test('V11 automatic real-world arrival lasts thirty seconds and blocks manual input until the newspaper closes', async () => {
+  await fixture(async state => {
+    assert.equal(state.cinematicStates.length,0); await state.decode();state.draw();
+    assert.equal(state.cinematicStates.at(-1).phase,'flying');const first=state.renderers[0].frames.at(-1).clone();
+    state.draw(); const elevated=state.renderers[0].frames.at(-1).clone();assert.ok(elevated.y>first.y+1);
+    state.viewer.look(1,1);state.viewer.move(1,1);state.viewer.setMoveInput(1,1);assert.equal(state.viewer.setWalking(true),false);
+    for(let i=0;i<29;i++)state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'flying');state.draw(1000);
+    assert.equal(state.cinematicStates.at(-1).phase,'completed');assert.equal(state.cinematicStates.filter(s=>s.phase==='completed').length,1);
+    assert.ok(state.renderers[0].frames.at(-1).distanceTo(new Three.Vector3(...state.physicsInstances[0].spawn))<1e-6);
+    state.viewer.setInteractionEnabled(true);assert.equal(state.viewer.setWalking(true),true);state.viewer.setMoveInput(0,1);state.draw();state.draw(60);assert.ok(state.physicsInstances[0].advances.length>0);
+    state.viewer.destroy();state.draw(60000);assert.equal(state.frames.size,0);assert.equal(state.physicsInstances[0].destroys,1);
+  },{ firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[] });
+});
+
+test('a stalled collider download has its own deadline after SPZ decode, opens the still arrival and cannot install a late response', async () => {
+  await fixture(async state => {
+    await state.decode(); state.draw();
+    const worldRequest=state.requests.find(request=>request.url.endsWith('world.spz')), collisionRequest=state.requests.find(request=>request.url.endsWith('collider.glb'));
+    assert.notEqual(collisionRequest.options.signal,worldRequest.options.signal);
+    assert.equal(state.ready(),1); assert.equal(state.timers.size,1); assert.equal(state.cinematicStates.length,0);
+    await state.advanceTimers(44_999); assert.equal(state.cinematicStates.length,0); assert.equal(collisionRequest.options.signal.aborted,false);
+    await state.advanceTimers(1); state.draw();
+    assert.equal(collisionRequest.options.signal.aborted,true); assert.equal(worldRequest.options.signal.aborted,false);
+    assert.deepEqual(state.cinematicStates.at(-1),{phase:'completed',progress:1,reason:'unavailable'});
+    assert.deepEqual(state.walking.at(-1),{available:false,enabled:false}); assert.equal(state.viewer.walkingAvailable,false); assert.equal(state.errors.length,0);
+    state.viewer.setInteractionEnabled(true); assert.equal(state.viewer.setWalking(true),false);
+    const callbacks=state.cinematicStates.length; await state.completeCollisionFetch(); state.draw();
+    assert.equal(state.collisionParses(),0); assert.equal(state.physicsInstances.length,0); assert.equal(state.cinematicStates.length,callbacks); assert.equal(state.walking.some(value=>value.available),false);
+    assert.equal(state.renderers[0].disposed,false); assert.equal(state.timers.size,0);
+  },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[],deferCollisionFetch:true,fakeTimers:true});
+});
+
+test('timed-out collider parsing, physics and perspective helpers dispose late results without reviving walking or the cinematic', async () => {
+  for (const pending of ['collision','physics','viewpoints']) await fixture(async state => {
+    await state.decode(); state.draw(); assert.equal(state.cinematicStates.length,0);
+    await state.advanceTimers(45_000); state.draw();
+    assert.equal(state.cinematicStates.at(-1).phase,'completed'); assert.equal(state.cinematicStates.at(-1).reason,'unavailable');
+    const callbacks=state.cinematicStates.length; const walkingCallbacks=state.walking.length;
+    if(pending==='collision')await state.completeCollision(); else if(pending==='physics')await state.completePhysics(); else await state.completeViewpoints();
+    state.draw(); assert.equal(state.cinematicStates.length,callbacks); assert.equal(state.walking.length,walkingCallbacks); assert.equal(state.viewer.walkingAvailable,false);
+    assert.deepEqual(state.collisionDisposals(),{geometry:1,material:1});
+    for(const controller of state.physicsInstances)assert.equal(controller.destroys,1);
+    state.viewer.destroy(); assert.equal(state.timers.size,0); assert.deepEqual(state.collisionDisposals(),{geometry:1,material:1});
+    for(const controller of state.physicsInstances)assert.equal(controller.destroys,1);
+  },{firstPerson:pending==='viewpoints'?{spawn:[0,1.65,0],eyeHeight:1.65,metricScale:1,groundOffset:0,autoCalibrate:true}:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[],fakeTimers:true,
+    deferCollision:pending==='collision',deferPhysics:pending==='physics',deferViewpoints:pending==='viewpoints'});
+});
+
+test('exit cancels both viewer deadlines and the separate pending collider request without a late arrival callback', async () => {
+  await fixture(async state => {
+    await state.decode();state.draw(); const deadline=[...state.timers.values()][0].callback;
+    state.viewer.destroy(); assert.equal(state.timers.size,0); assert.ok(state.requests.every(request=>request.options.signal.aborted));
+    deadline();await state.completeCollisionFetch();await state.advanceTimers(45_000);state.draw();
+    assert.equal(state.cinematicStates.length,0);assert.equal(state.walking.length,0);assert.equal(state.collisionParses(),0);assert.equal(state.frames.size,0);
+  },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[],deferCollisionFetch:true,fakeTimers:true});
+});
+
+test('a real Three ceiling selects a lower lateral arrival without crossing its plane or shortening thirty seconds', async () => {
+  await fixture(async state => {
+    await state.decode();state.draw();state.draw();assert.equal(state.cinematicStates.at(-1).phase,'flying');
+    const first=state.renderers[0].frames.at(-1);assert.ok(first.y>state.physicsInstances[0].spawn[1]+.2);assert.ok(first.y<2.1);assert.ok(Math.abs(first.x)>1);
+    for(let step=0;step<29;step++)state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'flying');state.draw(1000);assert.equal(state.cinematicStates.at(-1).phase,'completed');
+    assert.ok(state.renderers[0].frames.every(position=>position.y<2.1));assert.ok(state.renderers[0].frames.at(-1).distanceTo(new Three.Vector3(...state.physicsInstances[0].spawn))<1e-6);
+    state.viewer.setInteractionEnabled(true);assert.equal(state.viewer.setWalking(true),true);
+  },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[],blockedRoof:true,roofHeight:2.1});
+});
+
+test('hidden V11 flights pause and resume without background catch-up; unsafe bounds and reduced motion use a still arrival', async () => {
+  await fixture(async state => {
+    await state.decode();state.draw();state.draw();state.draw(1000);const prior=state.cinematicStates.at(-1).progress;
+    state.visible(false);assert.equal(state.cinematicStates.at(-1).phase,'paused');state.draw(60000);
+    state.visible(true);state.draw(60000);assert.equal(state.cinematicStates.at(-1).progress,prior);state.draw(1000);assert.ok(state.cinematicStates.at(-1).progress>prior);
+    state.viewer.skipCinematic();assert.equal(state.cinematicStates.at(-1).phase,'completed');assert.equal(state.cinematicStates.at(-1).reason,'skip');
+  },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',observeVisibility:true,points:[]});
+  for(const extra of [{reducedMotion:true},{invalidBounds:true},{badPhysics:true},{blockedRoof:true}])await fixture(async state=>{
+    await state.decode();state.draw();assert.equal(state.cinematicStates.at(-1).phase,'completed');assert.ok(['motion','unavailable'].includes(state.cinematicStates.at(-1).reason));state.draw();assert.equal(state.frames.size,0);
+  },{firstPerson:true,cinematicArrival:true,collisionUrl:'/synthetic/collider.glb',points:[],...extra});
+});
 
 test('guided walking waits for decode, pauses when hidden, resumes Next explicitly and releases navigation on destroy', async () => {
   await fixture(async state => {
@@ -873,6 +958,21 @@ test('first-person splat and collider transformations match and physics failure 
   }, { firstPerson: true, collisionUrl: '/synthetic/collider.glb', badPhysics: true });
 });
 
+test('the source panorama center faces the actual forward camera under Three inverse background rotation', async () => {
+  // Three WebGLBackground transposes the Euler rotation matrix; its common
+  // shader samples equirectangular u=atan(direction.z,direction.x)/(2π)+.5.
+  for(const yaw of [0,.35])await fixture(async state=>{
+    await state.decode();state.draw();
+    const scene=state.renderers[0].scene,camera=state.renderers[0].cameras.at(-1);
+    const inverse=new Three.Matrix3().setFromMatrix4(new Three.Matrix4().makeRotationFromEuler(scene.backgroundRotation)).transpose();
+    const direction=camera.getWorldDirection(new Three.Vector3()).applyMatrix3(inverse).normalize();
+    const u=Math.atan2(direction.z,direction.x)/(2*Math.PI)+.5;
+    assert.ok(Math.abs(u-.5)<1e-12,'Forward must sample the center of the actual source panorama, not its side wall');
+    assert.ok(direction.x>1-1e-12);assert.ok(Math.abs(direction.z)<1e-12);
+    assert.deepEqual(camera.position.toArray(),[0,1.55,.03],'Panorama alignment must not move the real-world camera');
+  },{firstPerson:true,initialYaw:yaw,panoramaYaw:yaw,panoramaUrl:'/synthetic/reference-panorama.png',bitmapAvailable:true});
+});
+
 test('walking uses its exact-world provider panorama instead of an authored sky and releases it once', async () => {
   await fixture(async state => {
     await state.decode(); state.draw();
@@ -898,7 +998,7 @@ test('existing cinematic views retain their exact-world panorama backing and dis
     assert.equal(state.bitmaps.length, 1); const panorama = state.renderers[0].scene.background;
     assert.ok(panorama instanceof Three.Texture && !(panorama instanceof Three.DataTexture));
     assert.equal(panorama.image, state.bitmaps[0]); assert.equal(panorama.mapping, Three.EquirectangularReflectionMapping);
-    assert.equal(state.renderers[0].scene.backgroundRotation.y, .35);
+    assert.equal(state.renderers[0].scene.backgroundRotation.y, Math.PI/2+.35);
     let disposed = 0; panorama.addEventListener('dispose', () => disposed++);
     state.viewer.destroy(); assert.equal(disposed, 1); assert.equal(state.bitmaps[0].closes, 1);
   }, { freeFlight: true, panoramaUrl: '/synthetic/reference-panorama.png', panoramaYaw: .35, bitmapAvailable: true });

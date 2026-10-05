@@ -172,6 +172,42 @@ test('a crash in submitting without a recorded operation is not retryable on res
 });
 
 function asText(input) { const result = { ...input, inputMode: 'text' }; delete result.images; return result; }
+test('explicit standard models reserve1580 for one reference and persist their model and recaption choice through restart', async t => {
+ for (const model of ['marble-1.1','marble-1.0']) {
+  const f = await fixture(t), input = { ...asSingleImage(f.input), model, disableRecaption: true };
+  const first = await f.service.create(input, true);
+  assert.equal(first.model, model); assert.equal(first.maxReservedCredits, 1580);
+  const post = f.calls.find(call => call[0] === 'json' && call[3] === 'POST');
+  assert.equal(post[4].model, model); assert.equal(post[4].world_prompt.disable_recaption, true);
+  assert.deepEqual(f.calls.find(call => call[0] === 'reserve')[1], {trialId: input.trialId, provider:'worldlabs',credits:1580});
+  const restarted = module.createWorldQualityTrial(f.deps);
+  assert.equal((await restarted.create(input,true)).operationId,first.operationId);
+  assert.equal(f.calls.filter(call => call[0] === 'json' && call[3] === 'POST').length,1);
+  await assert.rejects(() => restarted.create({...input,model:model === 'marble-1.1'?'marble-1.0':'marble-1.1'},true),{code:'TRIAL_DEDUPE_MISMATCH'});
+ }
+});
+test('unsupported model, recaption value and insufficient standard balance stop before paid requests',async t=>{
+ const f=await fixture(t),input=asSingleImage(f.input);
+ await assert.rejects(()=>f.service.create({...input,model:'marble-1.0-draft'},true),{code:'WORLD_MODEL_INVALID'});
+ await assert.rejects(()=>f.service.create({...input,disableRecaption:'yes'},true),{code:'WORLD_RECAPTION_INVALID'});
+ assert.equal(f.calls.length,0);
+ const low=await fixture(t,{json:async()=>({remaining_credits:1579})});
+ const result=await low.service.create({...asSingleImage(low.input),model:'marble-1.1'},true);
+ assert.equal(result.state,'failed');assert.equal(result.errorCode,'PROVIDER_INSUFFICIENT_CREDITS');
+ assert.deepEqual(low.calls.map(call=>call[0]),['safety','reserve','release']);
+});
+test('terminal standard model failure never performs automatic fallback or repeats the paid request',async t=>{
+ const f=await fixture(t,{json:async(provider,path,method='GET',body)=>{
+  f.calls.push(['json',provider,path,method,body]);
+  return path==='/credits'?{remaining_credits:4260}:method==='POST'?{operation_id:'world-operation'}:{done:true,error:{code:500,message:'Generation failed'}};
+ }});
+ const input={...asSingleImage(f.input),model:'marble-1.1'};await f.service.create(input,true);
+ assert.equal((await f.service.poll(input.trialId)).state,'failed');
+ assert.equal((await module.createWorldQualityTrial(f.deps).create(input,true)).state,'failed');
+ assert.equal((await f.service.poll(input.trialId)).state,'failed');
+ assert.equal(f.calls.filter(call=>call[0]==='json'&&call[3]==='POST').length,1);
+ assert.equal(f.calls.some(call=>call[0]==='release'),false);
+});
 test('text scenes validate mode, prompt bounds and image absence before any external action', async t => {
  const f = await fixture(t), input = asText(f.input);
  for (const invalid of [{ ...input, textPrompt: 'too short' }, { ...input, textPrompt: 'x'.repeat(2001) }, { ...input, inputMode: 'video' }, { ...input, images: f.input.images }]) {

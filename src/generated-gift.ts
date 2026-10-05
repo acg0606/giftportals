@@ -11,7 +11,8 @@ import type { InstantObjectRepresentation } from '../shared/instant-examples';
 export interface GeneratedGiftTouchpoint extends GeneratedWorldPoint { title: string; text: string; sourceTitle?: string; sourceUrl?: string }
 export interface GeneratedGiftData {
   title: string; senderName: string; recipientName?: string; dedication?: string; story: string;
-  originalUrl?: string; keepsakeImageUrl?: string; modelUrl?: string; panoramaUrl?: string; worldUrl?: string;
+  originalUrl?: string; sourcePhotoUrl?: string; keepsakeImageUrl?: string; modelUrl?: string; panoramaUrl?: string; worldUrl?: string;
+  sourceAttribution?: { author: string; sourceUrl: string; license: string; licenseUrl: string };
   mediaExpiresAt?: number; touchpoints?: readonly GeneratedGiftTouchpoint[];
   initialYaw?: number; initialPitch?: number;
   photoIntent?: 'object' | 'place'; collisionUrl?: string; colliderUrl?: string;
@@ -20,7 +21,7 @@ export interface GeneratedGiftData {
   worldSemantics?: { metricScaleFactor: number; groundPlaneOffset: number };
   worldRetry?: { available: boolean; attempts: number };
 }
-export interface GeneratedGiftOptions { gift: GeneratedGiftData; initialView?: 'object' | 'world'; isCurrent(): boolean; onExit(): void; onShare?(): void; onCollection?(): void; onJourney?(): void; onRetryWorld?(signal: AbortSignal): Promise<void>; worldRetryPending?: boolean; journeyLabel?: string; shareScope?: 'local' | 'cloud' }
+export interface GeneratedGiftOptions { gift: GeneratedGiftData; initialView?: 'object' | 'world'; cinematicWorld?: boolean; isCurrent(): boolean; onExit(): void; onShare?(): void; onCollection?(): void; onJourney?(): void; onRetryWorld?(signal: AbortSignal): Promise<void>; worldRetryPending?: boolean; journeyLabel?: string; shareScope?: 'local' | 'cloud' | 'public' }
 export interface GeneratedGiftHandle { destroy(): void }
 interface ObjectHandle { destroy(): void; reset(): void; rotate(delta: number): void; zoom(delta: number): void }
 type Phase = 'object' | 'world';
@@ -94,11 +95,12 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   const gift = options.gift, instance = ++sequence, points = storyPoints(gift), curiosities = giftCuriosities(gift);
   const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const dialog = document.createElement('dialog'); dialog.className = 'generated-gift'; dialog.setAttribute('aria-labelledby', `generated-gift-title-${instance}`);
-  let dead = false, version = 0, phase: Phase = options.initialView === 'world' && hasWorld() ? 'world' : 'object', viewer: ObjectHandle | GeneratedWorldHandle | undefined;
+  let dead = false, version = 0, phase: Phase = hasWorld() && (options.initialView === 'world' || !hasModel()) ? 'world' : 'object', viewer: ObjectHandle | GeneratedWorldHandle | undefined;
   let selected: string | undefined, hovered: string | undefined, projectedPoints: ProjectedWorldPoint[] = [];
   let pendingFocus: string | undefined;
   let tour: GeneratedWorldTourState | undefined;
   let pointReader: StoryReaderHandle | undefined, tourReader: StoryReaderHandle | undefined;
+  let cinematicViewer: { destroy(): void } | undefined;
   let printPanel: { destroy(): void } | undefined, printPending = false, printEpoch = 0;
   let xrPanel: { destroy(): void } | undefined, xrPending = false, xrEpoch = 0, xrOwnsViewer = false;
   let worldRetryAbort: AbortController | undefined;
@@ -117,6 +119,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   const active = () => !dead && options.isCurrent() && host.isConnected && dialog.isConnected && dialog.open && host.contains(dialog);
   function expired() { return typeof gift.mediaExpiresAt === 'number' && gift.mediaExpiresAt > 0 && gift.mediaExpiresAt <= Date.now() / 1000; }
   function mediaUrl(value?: string) { if (!value || expired()) return ''; try { return viewerAssetUrl(value, location.origin).href; } catch { return ''; } }
+  function hasModel() { return Boolean(mediaUrl(gift.modelUrl)); }
   function hasWorld() { return Boolean(mediaUrl(gift.worldUrl)); }
   function canEnterWorld() { return hasWorld() || Boolean(options.onJourney && !expired()); }
   function destroyXR() { xrEpoch++; xrPending = false; xrOwnsViewer = false; const panel = xrPanel; xrPanel = undefined; panel?.destroy(); }
@@ -126,7 +129,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
     if (status) { status.hidden = false; status.classList.remove('is-fallback'); status.textContent = 'Returning to your keepsake…'; }
     void loadViewer();
   }
-  function destroyViewer() { version++; destroyXR(); printEpoch++; printPending = false; printPanel?.destroy(); printPanel = undefined; pendingFocus = undefined; viewer?.destroy(); viewer = undefined; pointReader?.destroy(); tourReader?.destroy(); pointReader = undefined; tourReader = undefined; }
+  function destroyViewer() { version++; cinematicViewer?.destroy(); cinematicViewer = undefined; destroyXR(); printEpoch++; printPending = false; printPanel?.destroy(); printPanel = undefined; pendingFocus = undefined; viewer?.destroy(); viewer = undefined; pointReader?.destroy(); tourReader?.destroy(); pointReader = undefined; tourReader = undefined; }
   function destroy() {
     if (dead) return; dead = true; worldRetryAbort?.abort(); worldRetryAbort = undefined; destroyViewer(); events.abort(); viewEvents.abort();
     if (dialog.open) dialog.close(); dialog.remove();
@@ -195,9 +198,20 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
   function render() {
     destroyViewer(); viewEvents.abort(); viewEvents = new AbortController(); hovered = undefined; projectedPoints = []; tour = undefined;
     if (!active()) return;
+    if (phase === 'world' && options.cinematicWorld) {
+      const epoch = version;
+      dialog.classList.add('is-world'); dialog.innerHTML = '<p class="gg-loading" role="status">Opening the world inside…</p>';
+      void import('./gift-world-experience').then(module => {
+        if (!active() || version !== epoch || phase !== 'world') return;
+        cinematicViewer = module.mountGiftWorldExperience(dialog, { gift, isCurrent: () => active() && version === epoch && phase === 'world',
+          onExit: () => { if (active() && version === epoch) { if (!hasModel()) { exit(); return; } phase = 'object'; render(); } },
+          onCollection: options.onCollection ? () => { if (active()) { destroy(); options.onCollection?.(); } } : undefined });
+      }).catch(() => { if (active() && version === epoch) { phase = 'object'; render(); text('[data-gg-caption]', hasModel() ? 'The world experience could not open. Your keepsake and story remain here.' : 'The world experience could not open. Your photo and story remain here.'); } });
+      return;
+    }
     const world = phase === 'world', poster = mediaUrl(world ? gift.panoramaUrl || gift.originalUrl : gift.keepsakeImageUrl || gift.originalUrl), original = mediaUrl(gift.originalUrl), keepsake = mediaUrl(gift.keepsakeImageUrl || gift.originalUrl);
     dialog.classList.toggle('is-world', world);
-    const modebar = `<nav class="gg-modebar" aria-label="Gift views"><button type="button" data-gg-mode="object" aria-pressed="${!world}">${icon('gift')}<span>Keepsake</span></button><button type="button" data-gg-mode="world" aria-pressed="${world}" ${canEnterWorld() ? '' : 'disabled aria-disabled="true"'}>${icon('globe')}<span>${canEnterWorld() ? 'World' : 'World unavailable'}</span></button>${world ? `<button type="button" data-gg-show-story aria-expanded="false">${icon('book')}<span>Stories</span></button><button type="button" data-gg-tour-start aria-pressed="false" disabled>${icon('tour')}<span data-gg-tour-start-label>Guided tour</span></button>` : ''}</nav>`;
+    const modebar = `<nav class="gg-modebar" aria-label="Gift views">${!world || hasModel() ? `<button type="button" data-gg-mode="object" aria-pressed="${!world}">${icon('gift')}<span>${hasModel() ? 'Keepsake' : 'Photo & story'}</span></button>` : ''}<button type="button" data-gg-mode="world" aria-pressed="${world}" ${canEnterWorld() ? '' : 'disabled aria-disabled="true"'}>${icon('globe')}<span>${canEnterWorld() ? 'World' : 'World unavailable'}</span></button>${world ? `<button type="button" data-gg-show-story aria-expanded="false">${icon('book')}<span>Stories</span></button><button type="button" data-gg-tour-start aria-pressed="false" disabled>${icon('tour')}<span data-gg-tour-start-label>Guided tour</span></button>` : ''}</nav>`;
     const controls = world
       ? `${iconButton('left', 'lookLeft', 'Look left')}${iconButton('right', 'lookRight', 'Look right')}<span class="gg-control-divider"></span>${iconButton('forward', 'forward', 'Move closer', 'data-gg-offset')}${iconButton('backward', 'backward', 'Move back', 'data-gg-offset')}${iconButton('walk', 'walk', 'Walk in this world', 'data-gg-walk disabled aria-pressed="false"')}<div class="gg-walk-controls" data-gg-walk-controls hidden>${iconButton('move-left', 'left', 'Walk left')}${iconButton('move-forward', 'forward', 'Walk forward')}${iconButton('move-right', 'right', 'Walk right')}${iconButton('move-back', 'backward', 'Walk backward')}</div>`
       : `${iconButton('left', 'rotateLeft', 'Rotate keepsake left')}${iconButton('right', 'rotateRight', 'Rotate keepsake right')}<span class="gg-control-divider"></span>${iconButton('in', 'plus', 'Zoom in')}${iconButton('out', 'minus', 'Zoom out')}`;
@@ -207,16 +221,16 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
     dialog.innerHTML = `<div class="gg-shell">
       <header class="gg-header"><span class="gg-brand"><img src="/assets/portal-dusk/brand-mark.png" alt=""/>GiftPortals</span>${world ? `<span class="gg-header-title" id="generated-gift-title-${instance}" role="heading" aria-level="1">${escape(gift.title)}</span>` : ''}<div class="gg-header-actions">${options.onCollection ? `<button class="gg-quiet gg-room-link" type="button" data-gg-collection aria-label="Open collection" title="Open collection">${collectionIcon}<span>Collection</span></button>` : ''}${options.onShare ? `<button class="gg-quiet" type="button" data-gg-share aria-label="Copy gift link" title="Copy gift link">${icon('gift')}<span>Copy gift link</span></button>` : ''}<button class="gg-quiet" type="button" data-gg-exit aria-label="Close gift">${icon('close')}<span>Close</span></button></div></header>
       <div class="gg-encounter"><div class="gg-visual">
-        ${!world ? `<div class="gg-atmosphere" aria-hidden="true">${original ? `<img src="${escape(original)}" alt="" referrerpolicy="no-referrer"/>` : ''}</div><span class="gg-object-badge">${icon('gift')}${gift.objectRepresentation === 'framed-postcard' ? 'A framed keepsake' : gift.objectRepresentation === 'souvenir-miniature' ? 'Your 3D souvenir' : 'Your keepsake'}</span>` : ''}
+        ${!world ? `<div class="gg-atmosphere" aria-hidden="true">${original ? `<img src="${escape(original)}" alt="" referrerpolicy="no-referrer"/>` : ''}</div><span class="gg-object-badge">${icon('gift')}${!hasModel() ? 'Your original photo' : gift.objectRepresentation === 'framed-postcard' ? 'A framed keepsake' : gift.objectRepresentation === 'souvenir-miniature' ? 'Your 3D souvenir' : 'Your keepsake'}</span>` : ''}
         <div class="gg-poster" data-gg-poster>${poster ? `<img src="${escape(poster)}" referrerpolicy="no-referrer" alt="${world ? 'Artistic panorama attached to this gift' : gift.keepsakeImageUrl ? 'Miniature reference image for this gift' : 'Original photograph for this gift'}"/>${!world ? `<span class="gg-poster-label">${gift.keepsakeImageUrl ? 'Reference image preview' : 'Original photo preview'}</span>` : ''}` : '<div class="gg-no-image">Your story is still here.</div>'}</div>
         <div class="gg-canvas" data-gg-canvas></div>
         <div class="gg-points" data-gg-points hidden>${world ? points.map((point, index) => `<button class="gg-point" type="button" data-gg-point="${escape(point.id)}" aria-label="Read ${escape(point.title)}" aria-pressed="false" hidden><span class="gg-pin-number">${index + 1}</span><span class="gg-pin-label" data-gg-pin-label hidden>${escape(point.title)}</span></button>`).join('') : ''}</div>
-        ${world ? `<button class="gg-keepsake-dock" type="button" data-gg-return data-gg-obstacle aria-label="Return to your keepsake">${keepsake ? `<img src="${escape(keepsake)}" referrerpolicy="no-referrer" alt=""/>` : icon('cube')}<span><span class="gg-gift-identity">${icon('gift')}Your gift</span><small>${icon('cube')}Open 3D</small></span></button><div class="gg-world-hint" data-gg-obstacle>${icon('hand')}<span>Drag to look around · tap a light to read</span></div>` : ''}
+        ${world ? `${hasModel() ? `<button class="gg-keepsake-dock" type="button" data-gg-return data-gg-obstacle aria-label="Return to your keepsake">${keepsake ? `<img src="${escape(keepsake)}" referrerpolicy="no-referrer" alt=""/>` : icon('cube')}<span><span class="gg-gift-identity">${icon('gift')}Your gift</span><small>${icon('cube')}Open 3D</small></span></button>` : ''}<div class="gg-world-hint" data-gg-obstacle>${icon('hand')}<span>Drag to look around · tap a light to read</span></div>` : ''}
         <div class="gg-loading" role="status" data-gg-status>${world ? 'Opening the world inside…' : 'Opening your 3D keepsake…'}</div>
         ${tourPanel}
         ${world ? `<aside class="gg-story" data-gg-story data-gg-obstacle hidden aria-labelledby="gg-point-title-${instance}">${chapters}<div data-gg-point-reader></div></aside><div class="gg-tour-reader" data-gg-tour-reader data-gg-obstacle hidden></div>` : ''}
       </div>${world ? '' : `<section class="gg-copy"><span class="gg-kicker">${gift.recipientName ? `FOR ${escape(gift.recipientName)}` : canEnterWorld() ? 'A LITTLE WORLD FOR YOU' : 'A KEEPSAKE FOR YOU'}</span><h1 id="generated-gift-title-${instance}" tabindex="-1">${escape(gift.title)}</h1><p class="gg-dedication">${escape(gift.dedication || 'A photo. A place. A moment to return to.')}</p>${gift.senderName ? `<span class="gg-signature">From ${escape(gift.senderName)}</span>` : ''}${canEnterWorld() ? options.onJourney ? `<button class="gg-primary" type="button" data-gg-journey>${icon('walk')}<span>${escape(options.journeyLabel || 'Walk inside')}</span>${icon('arrow')}</button>` : `<button class="gg-primary" type="button" data-gg-enter>${icon('globe')}<span>Step inside</span>${icon('arrow')}</button>` : '<p class="gg-world-unavailable" data-gg-world-unavailable>The world is unavailable. Your keepsake and story are here.</p>'}${mediaUrl(gift.modelUrl) ? `<div class="gg-keepsake-actions"><button class="gg-print-link gg-quiet" type="button" data-gg-print>${icon('printer')}<span>Print a keepsake</span></button><button class="gg-print-link gg-quiet" type="button" data-gg-xr>${icon('headset')}<span>View in VR</span></button></div><div class="gg-xr-holder" data-gg-xr-host hidden><button class="gg-quiet gg-xr-close" type="button" data-gg-xr-close>${icon('close')}<span>Close VR panel</span></button></div>` : ''}<details class="gg-original-story"><summary>${icon('book')}Read the story</summary><p>${escape(gift.story || 'No story text is attached to this gift.')}</p></details>${contextCards}</section>`}</div>
-      <footer class="gg-footer"><div class="gg-toolbar">${modebar}<div class="gg-controls" data-gg-controls hidden>${controls}${iconButton('reset', 'reset', world ? 'Return to the starting view' : 'Reset keepsake view')}</div></div><p class="gg-caption" data-gg-caption>${world ? 'World Labs artistic scene · preparing 3D' : 'Tripo keepsake · preparing 3D'}</p>${options.onShare ? `<small class="gg-local-note">${options.shareScope === 'cloud' ? gift.mediaExpiresAt ? 'Private gift link · original photos and generated gifts expire after 7 days.' : 'Gift link · opens this keepsake online.' : 'Local preview link · available while this preview is running.'}</small>` : ''}</footer>
+      <footer class="gg-footer"><div class="gg-toolbar">${modebar}<div class="gg-controls" data-gg-controls hidden>${controls}${iconButton('reset', 'reset', world ? 'Return to the starting view' : 'Reset keepsake view')}</div></div><p class="gg-caption" data-gg-caption>${world ? 'World Labs artistic scene · preparing 3D' : 'Tripo keepsake · preparing 3D'}</p>${options.onShare ? `<small class="gg-local-note">${options.shareScope === 'public' ? 'Shared gift link · media access refreshes when you reopen it.' : options.shareScope === 'cloud' ? gift.mediaExpiresAt ? 'Private gift link · original photos and generated gifts expire after 7 days.' : 'Gift link · opens this keepsake online.' : 'Local preview link · available while this preview is running.'}</small>` : ''}</footer>
     </div>`;
     if (world) {
       const currentPoint = () => Math.max(0, points.findIndex(point => point.id === selected));
@@ -302,7 +316,7 @@ export function mountGeneratedGift(host: HTMLElement, options: GeneratedGiftOpti
       if (restore && phase === 'object') restoreObjectViewer();
     });
     listen('[data-gg-collection]', () => { if (active() && options.onCollection) { destroy(); options.onCollection(); } });
-    const switchView = (next: Phase) => { if (!active() || next === phase || next === 'world' && !canEnterWorld()) return; if (next === 'world' && options.onJourney) { destroy(); options.onJourney(); return; } phase = next; selected = undefined; render(); dialog.querySelector<HTMLElement>(next === 'world' ? '[data-gg-mode="world"]' : '[data-gg-enter]')?.focus({ preventScroll: true }); };
+    const switchView = (next: Phase) => { if (!active() || next === phase || next === 'world' && !canEnterWorld() || next === 'object' && hasWorld() && !hasModel()) return; if (next === 'world' && options.onJourney) { destroy(); options.onJourney(); return; } phase = next; selected = undefined; render(); dialog.querySelector<HTMLElement>(next === 'world' ? '[data-gg-mode="world"]' : '[data-gg-enter]')?.focus({ preventScroll: true }); };
     listen('[data-gg-enter]', () => switchView('world'));
     listen('[data-gg-journey]', () => { if (active() && options.onJourney) { destroy(); options.onJourney(); } });
     listen('[data-gg-return]', () => switchView('object'));

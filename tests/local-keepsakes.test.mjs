@@ -21,8 +21,16 @@ const completed = {
   title: 'A gift', story: 'Our memory.', worldPrompt: 'An imagined place.', photoIntent: 'place',
   assets: { photoUrl: '/photo.jpg', modelUrl: '/model.glb', worldUrl: '/world.spz' },
 };
-test('only a completed 3D model can enter the room; pending or failed sculpting cannot', () => {
-  for (const job of [{ ...completed, state: 'processing' }, { ...completed, token: '' }, { ...completed, tripo: { state: 'processing' } }, { ...completed, state: 'partial', tripo: { state: 'failed' } }, { ...completed, assets: { photoUrl: '/photo.jpg', worldUrl: '/world.spz' } }]) assert.equal(createdSessionKeepsake(job), undefined);
+test('only authorized terminal outputs can enter the room; pending jobs and failed stages with stale URLs cannot', () => {
+  for (const job of [{ ...completed, state: 'processing' }, { ...completed, token: '' }, { ...completed, tripo: { state: 'processing' }, worldlabs: { state: 'processing' } }, { ...completed, state: 'partial', tripo: { state: 'failed' }, worldlabs: { state: 'failed' } }, { ...completed, assets: { photoUrl: '/photo.jpg' } }]) assert.equal(createdSessionKeepsake(job), undefined);
+});
+
+test('a completed world survives model failure with its photo, story and private world route, without a fabricated miniature', () => {
+  const partial = { ...completed, state: 'partial', tripo: { state: 'failed' }, assets: { photoUrl: '/photo.jpg', worldUrl: '/world.spz' } };
+  const item = createdSessionKeepsake(partial);
+  assert.equal(item.modelUrl, undefined); assert.equal(item.imageUrl, '/photo.jpg'); assert.equal(item.story, completed.story);
+  assert.equal(item.worldPath, `${item.openPath}&view=world`);
+  assert.equal(createdSessionKeepsake({ ...partial, state: 'processing' }), undefined);
 });
 test('a completed souvenir survives world failure and has no world action or fabricated world route', () => {
   const partial = { ...completed, state: 'partial', worldlabs: { state: 'failed', errorCode: 'PROVIDER_FAILED' }, assets: { photoUrl: '/photo.jpg', modelUrl: '/model.glb' } };

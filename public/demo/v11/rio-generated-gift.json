@@ -1,0 +1,27 @@
+{
+  "title": "Rio de Janeiro",
+  "senderName": "Clara",
+  "recipientName": "Alex",
+  "dedication": "This little piece of Rio made me think of you.",
+  "story": "Imagine a bright day by Botafogo Bay, with Sugarloaf Mountain, the blue water and the shoreline around you. A little piece of Rio, kept close for someone you love.",
+  "originalUrl": "/assets/examples/v11/rio-scene.jpg",
+  "modelUrl": "/demo/rio-keepsake.glb",
+  "worldUrl": "/demo/v11/rio-world-500k.spz",
+  "panoramaUrl": "/demo/v11/rio-panorama.png",
+  "collisionUrl": "/demo/v11/rio-collider.glb",
+  "photoIntent": "place",
+  "sourcePhotoUrl": "/assets/examples/v11/rio-scene.jpg",
+  "worldSemantics": {
+    "metricScaleFactor": 1.8634413,
+    "groundPlaneOffset": 1.1909301
+  },
+  "objectRepresentation": "souvenir-miniature",
+  "sourceAttribution": {
+    "author": "Donatas Dabravolskas",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Botafogo_Beach_and_the_Sugarloaf_Mountain.jpg",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "changes": "Wikimedia resized reference photograph; generated three-dimensional world and inferred unseen surroundings."
+  },
+  "keepsakeImageUrl": "/assets/portal-dusk/rio-keepsake.png"
+}

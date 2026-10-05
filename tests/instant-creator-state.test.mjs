@@ -10,14 +10,13 @@ const compiled = ts.transpileModule(await readFile(new URL('../src/instant-creat
 const { validateInstantPhoto, instantFailureMessage, instantGiftReady, instantJobFinished, instantModelReady, instantProviderLabel, instantWorldReady, readInstantJobReference, readInstantPendingReference, instantImagePlan, instantIntentExamples, instantPostcardLayout, addInstantSpark, INSTANT_EXAMPLES } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 const complete = { state: 'completed', tripo: { state: 'completed' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb', worldUrl: '/place.spz' } };
 
-test('a usable gift requires a terminal creation and a real completed keepsake; a photo or world cannot substitute for its model', () => {
+test('a usable gift requires a terminal creation and either real completed output; photos and pending stages cannot substitute', () => {
   assert.equal(instantGiftReady(complete), true);
   for (const job of [
     { ...complete, state: 'processing' },
-    { ...complete, tripo: { state: 'processing' } },
+    { ...complete, tripo: { state: 'processing' }, worldlabs: { state: 'processing' } },
     { ...complete, state: 'failed' },
-    { ...complete, assets: { ...complete.assets, modelUrl: undefined } },
-    { ...complete, assets: { photoUrl: '/photo.png', worldUrl: '/place.spz', panoramaUrl: '/panorama.png' } },
+    { ...complete, assets: { photoUrl: '/photo.png', panoramaUrl: '/panorama.png' } },
   ]) assert.equal(instantGiftReady(job), false);
 });
 
@@ -25,13 +24,22 @@ test('a partial keepsake stays usable when the world fails, without making a fai
   const partial = { ...complete, state: 'partial', worldlabs: { state: 'failed', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb' } };
   assert.equal(instantGiftReady(partial), true);assert.equal(instantModelReady(partial), true);assert.equal(instantWorldReady(partial), false);
   assert.equal(instantWorldReady({ ...partial, assets: { ...partial.assets, worldUrl: '/stale-world.spz' } }), false, 'Failed-world stale URLs do not make a world available');
-  assert.equal(instantGiftReady({ ...partial, tripo: { state: 'failed' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo.png', worldUrl: '/place.spz' } }), false);
+  assert.equal(instantGiftReady({ ...partial, tripo: { state: 'failed' }, worldlabs: { state: 'completed' }, assets: { photoUrl: '/photo.png', worldUrl: '/place.spz' } }), true);
   assert.equal(instantGiftReady({ ...partial, assets: { photoUrl: '/photo.png', panoramaUrl: '/panorama.png' } }), false);
   assert.equal(instantWorldReady({ ...complete, assets: { modelUrl: '/gift.glb' } }), false);
   assert.equal(instantGiftReady({ ...complete, assets: { photoUrl: '/photo.png', modelUrl: '/gift.glb' } }), true, 'A delivered souvenir remains usable without a world asset');
 });
 
-test('partial and failed jobs stop polling; only a partial with a delivered keepsake can open', () => {
+test('a partial world stays usable after sculpting failure, but a first nonterminal creation still waits', () => {
+  const worldOnly = { ...complete, state: 'partial', tripo: { state: 'failed', errorCode: 'PROVIDER_GENERATION_FAILED' }, assets: { photoUrl: '/photo.png', worldUrl: '/place.spz' } };
+  assert.equal(instantGiftReady(worldOnly), true); assert.equal(instantWorldReady(worldOnly), true); assert.equal(instantModelReady(worldOnly), false);
+  assert.equal(instantGiftReady({ ...worldOnly, state: 'processing' }), false);
+  assert.equal(instantGiftReady({ ...worldOnly, state: 'processing', worldRetry: { attempts: 1 } }), false, 'A retry exception requires its retained completed model');
+  assert.equal(instantGiftReady({ ...worldOnly, worldlabs: { state: 'failed' } }), false, 'A failed stage cannot make a stale world URL ready');
+  assert.equal(instantGiftReady({ ...worldOnly, assets: { photoUrl: '/photo.png', panoramaUrl: '/panorama.png' } }), false);
+});
+
+test('partial and failed jobs stop polling; a partial with a delivered output can open', () => {
   for (const state of ['partial', 'failed']) {
     const job = { ...complete, state };
     assert.equal(instantJobFinished(job), true);
@@ -116,9 +124,9 @@ test('real provider credit failures explain the unavailable stage without imposi
 test('city and object examples keep distinct references and changing intent never mutates the catalog', () => {
   const before = JSON.stringify(INSTANT_EXAMPLES), places = instantIntentExamples(INSTANT_EXAMPLES, 'place');
   assert.equal(places.length, 5);
-  assert.equal(places[0].imageUrl, '/assets/examples/v13/rio.jpg');
-  assert.equal(places[1].imageUrl, '/assets/examples/v13/paris.jpg');
-  assert.equal(places[0].worldImageUrl, undefined);
+  assert.equal(places[0].imageUrl, '/assets/examples/v11/rio-scene.jpg');
+  assert.equal(places[1].imageUrl, '/assets/examples/v11/paris-scene.jpg');
+  assert.equal(places[0].worldImageUrl, '/assets/examples/v11/rio-scene.jpg');
   assert.equal(instantIntentExamples(INSTANT_EXAMPLES, 'object').length, 5);
   assert.equal(instantIntentExamples(INSTANT_EXAMPLES, 'object')[0].imageUrl, '/assets/examples/v13/antikythera.jpg');
   assert.equal(JSON.stringify(INSTANT_EXAMPLES), before);

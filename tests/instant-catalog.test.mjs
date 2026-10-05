@@ -13,9 +13,17 @@ test('ten selectable inspirations include five iconic cities and five human tech
 });
 test('routing preserves city originals for places and isolated technological objects for Tripo', () => {
   for (const example of INSTANT_EXAMPLES) {
-    assert.equal(example.imageUrl, `/assets/examples/v13/${example.id}.jpg`); assert.match(example.caption, /Artistic.*inspired by/i);
+    const photographicScene = ['rio', 'paris'].includes(example.id);
+    assert.equal(example.imageUrl, photographicScene ? `/assets/examples/v11/${example.id}-scene.jpg` : `/assets/examples/v13/${example.id}.jpg`);
+    assert.match(example.caption, photographicScene ? /photo by.*CC/i : /Artistic.*inspired by/i);
+    if (photographicScene) {
+      assert.equal(new URL(example.sourceAttribution.sourceUrl).hostname, 'commons.wikimedia.org');
+      assert.equal(new URL(example.sourceAttribution.licenseUrl).hostname, 'creativecommons.org');
+      assert.ok(example.sourceAttribution.author.length > 0);
+      assert.match(example.sourceAttribution.changes, /generated three-dimensional world/i);
+    }
     assert.ok(example.worldPrompt.length >= 8 && example.worldPrompt.length <= 1600); assert.ok(example.story.length > 20 && example.story.length <= 1200);
-    assert.equal(example.worldImageUrl, example.id === 'antikythera' ? '/assets/examples/v13/antikythera-world.jpg' : undefined);
+    assert.equal(example.worldImageUrl, photographicScene ? example.imageUrl : example.id === 'antikythera' ? '/assets/examples/v13/antikythera-world.jpg' : undefined);
     if (example.category === 'cities') { assert.equal(example.photoIntent, 'place'); assert.ok(CURIOSITY_REGIONS.some(region => region.id === example.regionId)); }
     else { assert.equal(example.photoIntent, 'object'); assert.match(example.worldPrompt, /imaginative|fictional/i); assert.ok(example.objectHint); }
   }

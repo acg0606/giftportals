@@ -13,6 +13,7 @@ export const PLUS_IMAGE_WORLD_MAX_CREDITS = 3080;
 type ViewLabel = 'front' | 'right' | 'back' | 'left';
 export interface WorldTrialInput {
  trialId: string; title: string; textPrompt: string;
+ model?: 'marble-1.0' | 'marble-1.1' | 'marble-1.1-plus'; disableRecaption?: boolean;
  baseline: { worldId: string; label: string };
  provenance: string;
  inputMode?: 'multi-image' | 'single-image' | 'text';
@@ -87,9 +88,9 @@ async function readImage(path: string) {
 }
 export function worldTrialReceipt(job: StoredTrial) {
  return {
-  version: job.version, trialId: job.id, provider: 'worldlabs', model: PLUS_WORLD_MODEL,
+  version: job.version, trialId: job.id, provider: 'worldlabs', model: job.input.model || PLUS_WORLD_MODEL,
   createdAt: job.createdAt, observedAt: job.updatedAt, state: job.state,
-  evidence: job.input.inputMode === 'text' ? 'Purpose-authored artistic scene generated from text. Independent chapters are not a metrically connected city, a factual scan, or verified landmarks.' : job.input.inputMode === 'single-image' ? 'Artistic world generated from one provenance-recorded reference image. Unseen regions are generated interpretations, not a factual scan or verified reconstruction.' : 'Controlled pipeline comparison: model and input strategy both change; this is not a same-input causal model benchmark or a factual scan.',
+  evidence: job.input.inputMode === 'text' ? 'Purpose-authored spatial scene generated from text. Independent chapters are not a metrically connected city, a factual scan, or verified landmarks.' : job.input.inputMode === 'single-image' ? 'Spatial world generated from one provenance-recorded reference image. Unseen regions are generated interpretations, not a factual scan or verified reconstruction.' : 'Controlled pipeline comparison: model and input strategy both change; this is not a same-input causal model benchmark or a factual scan.',
   title: job.input.title, baseline: job.input.baseline, provenance: job.input.provenance,
   inputMode: job.input.inputMode || 'multi-image', promptSha256: digest(job.input.textPrompt),
   views: job.input.inputMode === 'single-image' ? [] : job.images.map(({ label, azimuth, bytes, mime }) => ({ label, azimuth, bytes, mime })),
@@ -170,6 +171,10 @@ export function createWorldQualityTrial(deps: Dependencies) {
   const id = validId(input.trialId);
   return locked(id, async () => {
    const clean: Omit<WorldTrialInput, 'image' | 'images'> = { trialId: id, title: text(input.title, 64), textPrompt: text(input.textPrompt, input.inputMode === 'text' ? 2000 : 4000, 40), provenance: text(input.provenance, 1000, 30), baseline: { worldId: providerId(input.baseline?.worldId), label: text(input.baseline?.label, 120) } };
+   ensure(input.model === undefined || ['marble-1.0','marble-1.1','marble-1.1-plus'].includes(input.model), 'WORLD_MODEL_INVALID');
+   ensure(input.disableRecaption === undefined || typeof input.disableRecaption === 'boolean', 'WORLD_RECAPTION_INVALID');
+   if (input.model !== undefined) clean.model = input.model;
+   if (input.disableRecaption !== undefined) clean.disableRecaption = input.disableRecaption;
    ensure(input.inputMode === undefined || input.inputMode === 'multi-image' || input.inputMode === 'single-image' || input.inputMode === 'text', 'WORLD_INPUT_MODE_INVALID');
    const textOnly = input.inputMode === 'text', singleImage = input.inputMode === 'single-image';
    let sourceImages: NonNullable<WorldTrialInput['images']> = [];
@@ -195,7 +200,8 @@ export function createWorldQualityTrial(deps: Dependencies) {
     checkedAt = report.checkedAt; modelVersion = report.modelVersion;
    }
    await mkdir(join(directory, id), { recursive: true });
-   const reservation = textOnly ? PLUS_TEXT_WORLD_MAX_CREDITS : singleImage ? PLUS_IMAGE_WORLD_MAX_CREDITS : PLUS_WORLD_MAX_CREDITS;
+   const model = clean.model || PLUS_WORLD_MODEL;
+   const reservation = model === PLUS_WORLD_MODEL ? textOnly ? PLUS_TEXT_WORLD_MAX_CREDITS : singleImage ? PLUS_IMAGE_WORLD_MAX_CREDITS : PLUS_WORLD_MAX_CREDITS : textOnly || singleImage ? 1580 : 1600;
    const job: StoredTrial = { version: 1, id, fingerprint, input: clean, state: 'prepared', createdAt: iso(), updatedAt: iso(), reservation, assets: [], safety: { checkedAt, modelVersion, checkedImages: images.length }, images: images.map(image => ({ label: image.label, azimuth: image.azimuth, file: `${image.label}.${image.mime === 'image/png' ? 'png' : 'jpg'}`, mime: image.mime, bytes: image.bytes.length, sha256: image.sha256 })) };
    await save(job); let paidPostStarted = false, reserved = false;
    try {
@@ -209,8 +215,8 @@ export function createWorldQualityTrial(deps: Dependencies) {
      job.images[index].mediaAssetId = providerId(await upload(images[index].bytes, images[index].mime, images[index].label)); await save(job);
     }
     job.state = 'submitting'; await save(job); paidPostStarted = true;
-    const worldPrompt = textOnly ? { type: 'text', text_prompt: clean.textPrompt } : singleImage ? { type: 'image', image_prompt: { source: 'media_asset', media_asset_id: job.images[0].mediaAssetId }, text_prompt: clean.textPrompt, is_pano: false } : { type: 'multi-image', multi_image_prompt: job.images.map(image => ({ azimuth: image.azimuth, content: { source: 'media_asset', media_asset_id: image.mediaAssetId } })), text_prompt: clean.textPrompt };
-    const result = await json('worldlabs', '/worlds:generate', 'POST', { display_name: clean.title, model: PLUS_WORLD_MODEL, permission: { public: false }, world_prompt: worldPrompt });
+    const worldPrompt = textOnly ? { type: 'text', text_prompt: clean.textPrompt } : singleImage ? { type: 'image', image_prompt: { source: 'media_asset', media_asset_id: job.images[0].mediaAssetId }, text_prompt: clean.textPrompt, is_pano: false, ...(clean.disableRecaption === undefined ? {} : { disable_recaption: clean.disableRecaption }) } : { type: 'multi-image', multi_image_prompt: job.images.map(image => ({ azimuth: image.azimuth, content: { source: 'media_asset', media_asset_id: image.mediaAssetId } })), text_prompt: clean.textPrompt };
+    const result = await json('worldlabs', '/worlds:generate', 'POST', { display_name: clean.title, model, permission: { public: false }, world_prompt: worldPrompt });
     job.operationId = providerId(result.operation_id); job.state = 'processing'; await save(job);
    } catch (error) {
     job.state = paidPostStarted ? 'ambiguous' : 'failed'; job.errorCode = safeCode(error); await save(job);
