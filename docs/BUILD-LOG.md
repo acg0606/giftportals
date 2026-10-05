@@ -170,3 +170,17 @@ Cloud creation and private gifts require the configured Vercel/Supabase runtime;
 environment values, private uploads and operator state are not included in this
 repository. [Architecture](ARCHITECTURE.md), [deployment](DEPLOYMENT.md) and
 [distributed third-party notices](../public/licenses/third-party-notices.txt).
+
+## Published social updates
+
+The following English updates were published on 4 October 2026:
+
+- [X walkthrough video](https://x.com/derivativador/status/2106933778480529805)
+- [X four-image build update](https://x.com/derivativador/status/2106935050348675082)
+- [Instagram narrated and captioned walkthrough Reel](https://www.instagram.com/p/DeGI_1PPtxS/)
+- [Instagram four-image carousel](https://www.instagram.com/p/DeGJbd8jPcD/)
+
+The Reel uses the 80-second English walkthrough. Published captions credit the
+tools and providers, the carousel has four English image descriptions, and the
+posts include AI labels. These publications do not change the hardware and
+third-track limits recorded above or establish a final submission.
