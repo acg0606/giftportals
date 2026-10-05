@@ -70,10 +70,13 @@ creating a gallery record; Rio has not yet been generated.
 
 ## Remaining before the complete preview is ready
 
-The branch-scoped Vercel server connection is awaiting explicit authorization
-to store two newly generated internal keys. Automatic approval review rejected
-the earlier environment write because the existing authorization named Supabase,
-not Vercel. No rejected environment write was completed.
+The user explicitly authorized the branch-scoped Vercel internal keys and
+production public-gallery flag on October 5, 2026. Both settings were saved:
+the preview received two protected internal keys, and production received only
+`ENABLE_PUBLIC_GALLERY=true`, using its existing protected credentials. Provider
+keys remain in Supabase Secrets for the preview; no new provider credential was
+sent to Vercel. Earlier rejected writes made no changes. The new deployment must
+confirm the configured creator before generation starts.
 
 The configured live creator must generate Rio once, then demonstrate committed
 public archival and independent anonymous reading from another browser. That
