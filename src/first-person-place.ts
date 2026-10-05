@@ -82,7 +82,7 @@ export function mountFirstPersonPlace(host: HTMLElement, options: FirstPersonPla
     get('tour').hidden = tourState.phase === 'idle';
     get('tour-count').textContent = tourState.phase === 'completed' ? 'Walk complete' : `Chapter ${tourState.index+1} of ${tourState.count} · about ${Math.max(1,Math.round(tourState.estimatedDurationMs/60000))} min`;
     get('tour-title').textContent = tourState.title || 'Your guided walk';
-    get('tour-note').textContent = tourState.reason === 'blocked' ? 'This part of the path could not continue. Start walking manually or return to the beginning.' : tourState.reducedMotion ? 'Reduced motion is on. Choose Next chapter for a still, supported view.' : tourState.phase === 'paused' ? 'Paused here. Resume when you are ready, or look around.' : tourState.note || '';
+    get('tour-note').textContent = tourState.reason === 'blocked' ? 'This part of the path could not continue. Start walking manually or return to the beginning.' : tourState.reducedMotion ? 'Reduced motion is on. Choose Next chapter for a still, supported view.' : tourState.phase === 'paused' ? 'Paused here. Resume when you are ready, or look around.' : tourState.stage === 'turning' ? 'Taking a moment to turn toward the next part of the path.' : tourState.note || '';
     get('invite').hidden = active || tourState.phase !== 'idle';
     get('pad').hidden = !active;
     get<HTMLButtonElement>('pause').setAttribute('aria-label', strolling ? 'Pause guided walk' : tourState.phase === 'paused' ? tourState.reducedMotion ? 'Next still chapter' : 'Resume guided walk' : active ? 'Pause walking' : 'Resume walking');
